@@ -29,6 +29,22 @@
 
 ---
 
+## Downloads
+
+<p align="center">
+  <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
+    <img alt="GitHub" src="https://img.shields.io/badge/Download-GitHub-black?logo=github&logoColor=white&style=for-the-badge" />
+  </a>
+  <a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion">
+    <img alt="Google Play" src="https://img.shields.io/badge/Download-Play%20Store-green?logo=google-play&logoColor=white&style=for-the-badge" />
+  </a>
+  <a href="https://apps.apple.com/app/id">
+    <img alt="App Store" src="https://img.shields.io/badge/Download-App%20Store-blue?logo=apple&logoColor=white&style=for-the-badge" />
+  </a>
+</p>
+
+---
+
 ## Overview
 
 Track your ranked grind and visualize your RP gains with interactive graphs. Get instant map alerts, compare your stats with friends and rivals, and put all the data that matters at your fingertips with **Unofficial Apex Companion**.
@@ -98,17 +114,6 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **No account required** — Data is fetched using your public in-game name or UID.
 - **Data Backup & Restore** — Export your player profiles, favorites, and tracked data as a backup file. Restore from backup anytime to recover your data or switch devices seamlessly.
 - **Dark theme** — Designed for low-light gaming sessions.
-
----
-
-## Downloads
-
-| Platform | Download |
-|----------|----------|
-| **Android** | [GitHub Releases](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases) \| [Google Play](https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion) |
-| **iOS** | [App Store](https://apps.apple.com/app/id) |
-| **Windows** | [GitHub Releases](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases) |
-| **Linux** | [GitHub Releases](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases) |
 
 ---
 
