@@ -29,16 +29,16 @@
 
 ---
 
-<div align="center">
+<div align="center" style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
 
 <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
-<img src="assets/images/get-it-on-github.png" alt="Get it on GitHub" align="center" height="80" /></a> 
+<img src="assets/images/get-it-on-github.png" alt="Get it on GitHub" height="80" /></a>
 
 <a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion">
-<img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="54" /></a>
+<img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" height="54" /></a>
 
 <a href="https://apps.apple.com/app/id">
-<img src="assets/images/get-it-on-app-store.png" alt="Get it on App Store" align="center" height="54" /></a>
+<img src="assets/images/get-it-on-app-store.png" alt="Get it on App Store" height="54" /></a>
 
 </div>
 
