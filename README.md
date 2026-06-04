@@ -9,10 +9,18 @@
 </p>
 
 <p align="center">
-  <img alt="Release" src="https://img.shields.io/github/v/release/ajwadtahmid/Unofficial-Apex-Companion?color=orange&label=release" />
-  <img alt="Downloads" src="https://img.shields.io/github/downloads/ajwadtahmid/Unofficial-Apex-Companion/total?color=blue" />
-  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.x-blue?logo=flutter&logoColor=white" />
-  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-green" />
+  <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
+    <img alt="Release" src="https://img.shields.io/github/v/release/ajwadtahmid/Unofficial-Apex-Companion?color=orange&label=release" />
+  </a>
+  <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
+    <img alt="Downloads" src="https://img.shields.io/github/downloads/ajwadtahmid/Unofficial-Apex-Companion/total?color=blue" />
+  </a>
+  <a href="https://flutter.dev">
+    <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.x-blue?logo=flutter&logoColor=white" />
+  </a>
+  <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/blob/main/LICENSE">
+    <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-green" />
+  </a>
   <img alt="Android" src="https://img.shields.io/badge/Android-supported-brightgreen?logo=android&logoColor=white" />
   <img alt="iOS" src="https://img.shields.io/badge/iOS-supported-brightgreen?logo=apple&logoColor=white" />
   <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-brightgreen?logo=windows11&logoColor=white" />
@@ -30,11 +38,12 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - [Key Features](#key-features)
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [Installation](#installation)
+- [Downloads](#downloads)
 - [Development](#development)
 - [Data & Privacy](#data--privacy)
-- [Known Limitations](#known-limitations)
+- [Support & Feedback](#support--feedback)
 - [FAQ](#faq)
+- [Known Limitations](#known-limitations)
 - [Credits & Acknowledgments](#credits--acknowledgments)
 - [License](#license)
 
@@ -92,31 +101,14 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 ---
 
-## Installation
+## Downloads
 
-### Android
-
-Download from Google Play (coming soon) or the latest or `.aab` from the [Releases](../../releases) page.
-
-### iOS
-
-Download from the App Store (coming soon).
-
-### Windows
-
-1. Download `unofficial-apex-companion-installer.exe` from [Releases](../../releases)
-2. Run the installer and follow the wizard
-3. Launch from the Start Menu or Desktop shortcut
-
-### Linux
-
-1. Download `unofficial-apex-companion-*.AppImage` from [Releases](../../releases)
-2. Make executable and run:
-
-   ```bash
-   chmod +x unofficial-apex-companion-*.AppImage
-   ./unofficial-apex-companion-*.AppImage
-   ```
+| Platform | Download |
+|----------|----------|
+| **Android** | [GitHub Releases](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases) \| [Google Play](https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion) |
+| **iOS** | [App Store](https://apps.apple.com/app/id) |
+| **Windows** | [GitHub Releases](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases) |
+| **Linux** | [GitHub Releases](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases) |
 
 ---
 
@@ -142,20 +134,22 @@ cd Unofficial-Apex-Companion
 # 2. Install dependencies
 flutter pub get
 
-# 3. Set up environment (see Configuration below)
+# 3. Copy environment file
 cp .env.example .env
-# edit .env with your values
 
-# 4. Generate env code
+# 4. Update .env with your credentials
+# Edit .env and set PROXY_URL and CLIENT_TOKEN (see Configuration below)
+
+# 5. Generate env code
 dart run build_runner build --delete-conflicting-outputs
 
-# 5. Run
+# 6. Run
 flutter run
 ```
 
 ### Configuration
 
-The app proxies all API calls through a private server — it never calls the Apex API directly. Credentials are stored in a `.env` file and compiled into the binary using [envied](https://pub.dev/packages/envied) (XOR-obfuscated at build time, not plain text in the binary).
+The app proxies all API calls through a private server instead of calling APIs directly (keeps credentials and tokens secure on the backend). You'll need to set up a proxy server that implements the endpoints below.
 
 ```env
 # .env
@@ -169,51 +163,18 @@ After editing `.env`, regenerate:
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-> `lib/env/env.g.dart` is generated and gitignored. The app will not compile without it.
+#### Required Endpoints
 
-### Project Structure
+Your proxy server must implement these endpoints:
 
-```
-lib/
-├── constants/         # Shared constants (API keys, pref keys, rank ladder)
-├── env/               # Generated environment variables (gitignored)
-├── models/            # Data models (PlayerStats, MapRotation, ServerStatus…)
-├── providers/         # Riverpod providers and state notifiers
-├── screens/           # One folder per tab (home, stats, search, settings)
-├── services/          # API service, notification service, background service
-├── utils/             # Formatters, cache, storage, theme helpers
-└── widgets/           # Reusable UI components
-```
+- **`GET /maprotation`** — Returns current and next map rotations for Ranked, Pubs, Mixtape, and Wildcards
+- **`GET /player/:platform/:playerName`** — Returns player stats (rank, RP, legend data, trackers)
+- **`GET /predator`** — Returns current Apex Predator RP cutoff per platform
+- **`GET /servers`** — Returns server status (login, EA accounts, crossplay health)
+- **`GET /news`** — Returns official Apex Legends news feed
 
-### Building for Release
+All requests must include the `x-client-token` header with your `CLIENT_TOKEN` value.
 
-```bash
-# Android (App Bundle for Play Store)
-flutter build appbundle --release
-
-# Android (standalone APK)
-flutter build apk --release --split-per-abi
-
-# iOS
-flutter build ios --release
-
-# Windows
-flutter build windows --release
-
-# Linux (AppImage is packaged by CI)
-flutter build linux --release
-```
-
-### CI / GitHub Actions
-
-Pushing a tag matching `v*` triggers the release workflow, which:
-
-1. Builds for Android (AAB), Windows, and Linux in parallel
-2. Packages the Linux build as an AppImage
-3. Builds the Windows NSIS installer
-4. Creates a GitHub Release and attaches all artifacts
-
----
 
 ## Data & Privacy
 
@@ -225,6 +186,15 @@ Data is sourced from [apexlegendsstatus.com](https://apexlegendsstatus.com) and 
 
 ---
 
+## Support & Feedback
+
+Have a question or found a bug? Let us know:
+
+- **Bug reports & features**: [GitHub Issues](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/issues)
+- **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/discussions)
+
+---
+
 ## Credits & Acknowledgments
 
 Special thanks to:
@@ -233,15 +203,6 @@ Special thanks to:
 - **[Apex Legends Status](https://apexlegendsstatus.com/)** — Provides real-time server status, map rotation data, and players stats with comprehensive ranked stats, leaderboard for ranked along with all trackers and so much more
 
 This project would not be possible without these amazing resources and the developer behind them.
-
----
-
-## Known Limitations
-
-- **RP snapshots** — Only tracks if app is open and sync is completed. RP gains when app is closed are not captured.
-- **Legend stats** — Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
-- **Predator cutoff** — Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.
-- **Offline player search** — If a player hasn't been searched before, their data won't be cached and you'll need internet to look them up.
 
 ---
 
@@ -267,6 +228,15 @@ Android, iOS, Windows, and Linux.
 
 **Q: Do I need to create an account?**
 No. Just search for any public player by name or UID.
+
+---
+
+## Known Limitations
+
+- **RP snapshots** — Only tracks if app is open and sync is completed. RP gains when app is closed are not captured.
+- **Legend stats** — Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
+- **Predator cutoff** — Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.
+- **Offline player search** — If a player hasn't been searched before, their data won't be cached and you'll need internet to look them up.
 
 ---
 
