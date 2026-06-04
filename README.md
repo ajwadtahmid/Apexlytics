@@ -32,13 +32,13 @@
 <div align="center">
 
 <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
-<img src="https://img.shields.io/badge/Download-GitHub-black?logo=github&logoColor=white&style=for-the-badge" alt="Get it on GitHub" align="center" height="60" /></a>
+<img src="assets/images/get-it-on-github.png" alt="Get it on GitHub" align="center" height="60" /></a>
 
 <a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion">
-<img src="https://img.shields.io/badge/Download-Play%20Store-green?logo=google-play&logoColor=white&style=for-the-badge" alt="Get it on Google Play" align="center" height="60" /></a>
+<img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="60" /></a>
 
 <a href="https://apps.apple.com/app/id">
-<img src="https://img.shields.io/badge/Download-App%20Store-blue?logo=apple&logoColor=white&style=for-the-badge" alt="Get it on App Store" align="center" height="60" /></a>
+<img src="assets/images/get-it-on-app-store.svg" alt="Get it on App Store" align="center" height="60" /></a>
 
 </div>
 
