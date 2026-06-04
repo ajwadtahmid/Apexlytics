@@ -30,16 +30,25 @@
 ---
 
 <div align="center">
-
-<a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
-<img src="assets/images/get-it-on-github.png" alt="Get it on GitHub" align="center" height="80" /></a> 
-
-<a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion" style="margin-right: 15px;">
-<img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="54" /></a>
-
-<a href="https://apps.apple.com/app/id">
-<img src="assets/images/get-it-on-app-store.png" alt="Get it on App Store" align="center" height="54" /></a>
-
+<table style="border: none; margin: 0 auto;">
+  <tr>
+    <td style="border: none; padding: 5px;">
+      <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
+        <img src="assets/images/get-it-on-github.png" alt="Get it on GitHub" height="80" />
+      </a>
+    </td>
+    <td style="border: none; padding: 5px;">
+      <a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion">
+        <img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" height="54" />
+      </a>
+    </td>
+    <td style="border: none; padding: 5px;">
+      <a href="https://apps.apple.com/app/id">
+        <img src="assets/images/get-it-on-app-store.png" alt="Get it on App Store" height="54" />
+      </a>
+    </td>
+  </tr>
+</table>
 </div>
 
 ---
