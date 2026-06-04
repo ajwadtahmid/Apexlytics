@@ -38,7 +38,7 @@
 <img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="54" /></a>
 
 <a href="https://apps.apple.com/app/id">
-<img src="assets/images/get-it-on-app-store.svg" alt="Get it on App Store" align="center" height="54" /></a>
+<img src="assets/images/get-it-on-app-store.png" alt="Get it on App Store" align="center" height="54" /></a>
 
 </div>
 
