@@ -91,13 +91,13 @@ jobs:
         run: flutter build appbundle --release
 
       - name: Rename AAB artifact
-        run: mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/unofficial-apex-companion-release-v${{ needs.extract-version.outputs.version }}.aab
+        run: mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/apexlytics-release-v${{ needs.extract-version.outputs.version }}.aab
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: unofficial-apex-companion-android
-          path: build/app/outputs/bundle/release/unofficial-apex-companion-release-v${{ needs.extract-version.outputs.version }}.aab
+          name: apexlytics-android
+          path: build/app/outputs/bundle/release/apexlytics-release-v${{ needs.extract-version.outputs.version }}.aab
 
   build-windows:
     needs: [test, extract-version]
@@ -130,16 +130,16 @@ jobs:
       - name: Build Windows Installer
         run: |
           $env:GITHUB_WORKSPACE = "${{ github.workspace }}"
-          & 'C:\Program Files (x86)\NSIS\makensis.exe' "${{ github.workspace }}\windows\installer\unofficial_apex_companion.nsi"
+          & 'C:\Program Files (x86)\NSIS\makensis.exe' "${{ github.workspace }}\windows\installer\apexlytics.nsi"
 
       - name: Rename Windows installer
-        run: mv unofficial-apex-companion-installer.exe "unofficial-apex-companion-installer-v${{ needs.extract-version.outputs.version }}.exe"
+        run: mv apexlytics-installer.exe "apexlytics-installer-v${{ needs.extract-version.outputs.version }}.exe"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: unofficial-apex-companion-windows
-          path: unofficial-apex-companion-installer-v${{ needs.extract-version.outputs.version }}.exe
+          name: apexlytics-windows
+          path: apexlytics-installer-v${{ needs.extract-version.outputs.version }}.exe
 
   build-linux:
     needs: [test, extract-version]
@@ -202,7 +202,7 @@ jobs:
           BUNDLE=build/linux/x64/release/bundle
           mkdir -p AppDir/usr/bin
           cp -r $BUNDLE/* AppDir/usr/bin/
-          chmod +x AppDir/usr/bin/unofficial_apex_companion
+          chmod +x AppDir/usr/bin/apexlytics
 
           mkdir -p AppDir
           printf '%s\n' \
@@ -210,21 +210,21 @@ jobs:
             'APPDIR="$(cd "$(dirname "$0")" && pwd)"' \
             'export LD_LIBRARY_PATH="$APPDIR/usr/bin/lib:$LD_LIBRARY_PATH"' \
             'cd "$APPDIR/usr/bin"' \
-            'exec "$APPDIR/usr/bin/unofficial_apex_companion" "$@"' \
+            'exec "$APPDIR/usr/bin/apexlytics" "$@"' \
             > AppDir/AppRun
           chmod +x AppDir/AppRun
 
           mkdir -p AppDir/usr/share/applications
-          printf '[Desktop Entry]\nType=Application\nName=Unofficial Apex Companion\nComment=Offline-first stats tracker for Apex Legends players\nExec=unofficial_apex_companion\nIcon=com.ajwadtahmid.unofficialapexcompanion\nCategories=Utility;Game;\nTerminal=false\n' \
-            > AppDir/usr/share/applications/com.ajwadtahmid.unofficialapexcompanion.desktop
+          printf '[Desktop Entry]\nType=Application\nName=Apexlytics\nComment=Offline-first stats tracker for Apex Legends players\nExec=apexlytics\nIcon=com.ajwadtahmid.apexlytics\nCategories=Utility;Game;\nTerminal=false\n' \
+            > AppDir/usr/share/applications/com.ajwadtahmid.apexlytics.desktop
 
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           cp assets/logos/flathub/icon_256.png \
-            AppDir/usr/share/icons/hicolor/256x256/apps/com.ajwadtahmid.unofficialapexcompanion.png
+            AppDir/usr/share/icons/hicolor/256x256/apps/com.ajwadtahmid.apexlytics.png
 
           mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
           cp assets/logos/flathub/icon_512.png \
-            AppDir/usr/share/icons/hicolor/512x512/apps/com.ajwadtahmid.unofficialapexcompanion.png
+            AppDir/usr/share/icons/hicolor/512x512/apps/com.ajwadtahmid.apexlytics.png
 
           export VERSION="${GITHUB_REF#refs/tags/v}"
           ./linuxdeploy/linuxdeploy-x86_64.AppImage \
@@ -232,13 +232,13 @@ jobs:
             --output appimage
 
       - name: Rename Linux AppImage
-        run: mv Unofficial_Apex_Companion-${{ needs.extract-version.outputs.version }}-x86_64.AppImage unofficial-apex-companion-v${{ needs.extract-version.outputs.version }}.AppImage
+        run: mv Apexlytics-${{ needs.extract-version.outputs.version }}-x86_64.AppImage apexlytics-v${{ needs.extract-version.outputs.version }}.AppImage
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: unofficial-apex-companion-linux
-          path: unofficial-apex-companion-v${{ needs.extract-version.outputs.version }}.AppImage
+          name: apexlytics-linux
+          path: apexlytics-v${{ needs.extract-version.outputs.version }}.AppImage
 
   create-release:
     needs: [extract-version, build-windows, build-linux, build-android]
@@ -251,27 +251,27 @@ jobs:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: unofficial-apex-companion-windows
+          name: apexlytics-windows
           path: windows-build/
 
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          name: unofficial-apex-companion-linux
+          name: apexlytics-linux
           path: linux-build/
 
       - name: Download Android artifact
         uses: actions/download-artifact@v4
         with:
-          name: unofficial-apex-companion-android
+          name: apexlytics-android
           path: android-build/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            windows-build/unofficial-apex-companion-installer-v${{ needs.extract-version.outputs.version }}.exe
-            linux-build/unofficial-apex-companion-v${{ needs.extract-version.outputs.version }}.AppImage
-            android-build/unofficial-apex-companion-release-v${{ needs.extract-version.outputs.version }}.aab
+            windows-build/apexlytics-installer-v${{ needs.extract-version.outputs.version }}.exe
+            linux-build/apexlytics-v${{ needs.extract-version.outputs.version }}.AppImage
+            android-build/apexlytics-release-v${{ needs.extract-version.outputs.version }}.aab
           draft: true
           generate_release_notes: true

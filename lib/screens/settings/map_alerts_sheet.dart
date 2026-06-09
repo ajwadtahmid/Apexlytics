@@ -220,7 +220,7 @@ class _MapAlertsSheetContentState
                 'Notifications will only fire while the app is open.\n\n'
                 'To get alerts when the app is closed, enable Background App '
                 'Refresh in:\niOS Settings → General → Background App Refresh '
-                '→ Unofficial Apex Companion',
+                '→ Apexlytics',
                 style: TextStyle(color: AppTheme.muted, height: 1.5),
               ),
               actions: [

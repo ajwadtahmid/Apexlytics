@@ -1,6 +1,5 @@
 import Flutter
 import UIKit
-import background_fetch
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -13,16 +12,5 @@ import background_fetch
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-  }
-
-  // Required for background_fetch on iOS
-  override func application(
-    _ application: UIApplication,
-    performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
-  ) {
-    BackgroundFetch.sharedInstance().performFetchWithCompletionHandler(
-      completionHandler,
-      applicationState: application.applicationState
-    )
   }
 }

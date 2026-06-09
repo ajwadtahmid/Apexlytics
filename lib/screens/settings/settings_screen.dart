@@ -132,7 +132,7 @@ class SettingsScreen extends ConsumerWidget {
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: AppTheme.lg),
                   child: Text(
-                    'Unofficial Apex Companion is an unofficial companion app. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment.',
+                    'Apexlytics is an unofficial companion app. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
                   ),

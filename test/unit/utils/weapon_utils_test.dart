@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:unofficial_apex_companion/models/player_stats.dart';
-import 'package:unofficial_apex_companion/utils/formatting/weapon_utils.dart';
+import 'package:apexlytics/models/player_stats.dart';
+import 'package:apexlytics/utils/formatting/weapon_utils.dart';
 
 void main() {
   group('findWeaponFromTracker', () {

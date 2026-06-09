@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:unofficial_apex_companion/services/api_service.dart';
-import 'package:unofficial_apex_companion/services/player_service.dart';
-import 'package:unofficial_apex_companion/utils/error_messages.dart';
+import 'package:apexlytics/services/api_service.dart';
+import 'package:apexlytics/services/player_service.dart';
+import 'package:apexlytics/utils/error_messages.dart';
 
 class MockApiService extends Mock implements ApiService {}
 

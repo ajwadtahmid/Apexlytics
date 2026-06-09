@@ -1,4 +1,4 @@
-package com.ajwadtahmid.unofficialapexcompanion
+package com.ajwadtahmid.apexlytics
 
 import io.flutter.embedding.android.FlutterActivity
 

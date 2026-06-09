@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:unofficial_apex_companion/constants/rank_constants.dart';
-import 'package:unofficial_apex_companion/models/player_stats.dart';
-import 'package:unofficial_apex_companion/utils/formatting/rank_utils.dart';
+import 'package:apexlytics/constants/rank_constants.dart';
+import 'package:apexlytics/models/player_stats.dart';
+import 'package:apexlytics/utils/formatting/rank_utils.dart';
 
 PlayerStats _stubStats({required String rank, required int rankScore}) =>
     PlayerStats(

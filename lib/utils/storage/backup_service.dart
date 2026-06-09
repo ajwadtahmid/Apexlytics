@@ -79,7 +79,7 @@ Future<String?> exportBackup(SharedPreferences prefs) async {
 
   final json = const JsonEncoder.withIndent('  ').convert(envelope);
   final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-  final defaultFilename = 'unofficial_apex_companion_$stamp.json';
+  final defaultFilename = 'apexlytics_$stamp.json';
 
   final dirPath = await file_selector.getDirectoryPath();
 

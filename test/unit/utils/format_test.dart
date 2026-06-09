@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:unofficial_apex_companion/utils/formatting/format.dart';
+import 'package:apexlytics/utils/formatting/format.dart';
 
 void main() {
   group('formatNumber', () {

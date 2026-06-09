@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:unofficial_apex_companion/app.dart';
-import 'package:unofficial_apex_companion/providers/api_provider.dart';
-import 'package:unofficial_apex_companion/providers/settings_provider.dart';
-import 'package:unofficial_apex_companion/screens/search/search_screen.dart';
-import 'package:unofficial_apex_companion/services/api_service.dart';
-import 'package:unofficial_apex_companion/widgets/player_lookup_form.dart';
+import 'package:apexlytics/app.dart';
+import 'package:apexlytics/providers/api_provider.dart';
+import 'package:apexlytics/providers/settings_provider.dart';
+import 'package:apexlytics/screens/search/search_screen.dart';
+import 'package:apexlytics/services/api_service.dart';
+import 'package:apexlytics/widgets/player_lookup_form.dart';
 
 /// Wraps [widget] in the minimal scaffolding needed for Riverpod + Material.
 Widget _wrap(Widget widget, SharedPreferences prefs) {

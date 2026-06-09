@@ -20,7 +20,7 @@ class ApexLegendsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Unofficial Apex Companion',
+      title: 'Apexlytics',
       theme: AppTheme.materialTheme,
       home: const _AppShell(),
       debugShowCheckedModeBanner: false,

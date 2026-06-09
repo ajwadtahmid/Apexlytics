@@ -34,7 +34,7 @@ class NotificationService {
       requestSoundPermission: false,
     );
     await _plugin.initialize(
-      const InitializationSettings(
+      settings: const InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
       ),
@@ -98,10 +98,10 @@ class NotificationService {
     // Cancel only the known map-rotation IDs so other notification channels
     // (e.g. future RP-milestone alerts) are not silently wiped.
     await Future.wait([
-      _plugin.cancel(_notifIdRanked),
-      _plugin.cancel(_notifIdPubs),
-      _plugin.cancel(_notifIdLtm),
-      _plugin.cancel(_notifIdWildcard),
+      _plugin.cancel(id: _notifIdRanked),
+      _plugin.cancel(id: _notifIdPubs),
+      _plugin.cancel(id: _notifIdLtm),
+      _plugin.cancel(id: _notifIdWildcard),
     ]);
 
     if (notifyRanked && rankedMinutesBefore > 0) {
@@ -174,14 +174,12 @@ class NotificationService {
 
     log.d('$modeLabel notification scheduled in ${minutesBefore}min');
     await _plugin.zonedSchedule(
-      id,
-      '$modeLabel · Map Rotation',
-      '${nextMap.map} starts in $minutesBefore min',
-      notifyAt,
-      _details,
+      id: id,
+      title: '$modeLabel · Map Rotation',
+      body: '${nextMap.map} starts in $minutesBefore min',
+      scheduledDate: notifyAt,
+      notificationDetails: _details,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 

@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace = "com.ajwadtahmid.unofficialapexcompanion"
+    namespace = "com.ajwadtahmid.apexlytics"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -40,7 +40,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.ajwadtahmid.unofficialapexcompanion"
+        applicationId = "com.ajwadtahmid.apexlytics"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

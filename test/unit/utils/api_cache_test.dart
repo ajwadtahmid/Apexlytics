@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:unofficial_apex_companion/utils/api_cache.dart';
+import 'package:apexlytics/utils/api_cache.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));

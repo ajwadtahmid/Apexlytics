@@ -1,6 +1,6 @@
 {
-    "name": "Unofficial Apex Companion",
-    "short_name": "Apex Companion",
+    "name": "Apexlytics",
+    "short_name": "Apexlytics",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

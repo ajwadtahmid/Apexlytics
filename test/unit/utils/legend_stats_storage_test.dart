@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:unofficial_apex_companion/models/player_stats.dart';
-import 'package:unofficial_apex_companion/utils/storage/legend_stats_storage.dart';
+import 'package:apexlytics/models/player_stats.dart';
+import 'package:apexlytics/utils/storage/legend_stats_storage.dart';
 
 import '../../helpers.dart';
 

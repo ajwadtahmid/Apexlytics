@@ -1,7 +1,7 @@
-# Unofficial Apex Companion
+# Apexlytics
 
 <p align="center">
-  <img src="assets/logos/icon_1024.png" alt="Unofficial Apex Companion" width="96" />
+  <img src="assets/logos/icon_1024.png" alt="Apexlytics" width="96" />
 </p>
 
 <p align="center">
@@ -9,16 +9,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
-    <img alt="Release" src="https://img.shields.io/github/v/release/ajwadtahmid/Unofficial-Apex-Companion?color=orange&label=release" />
+  <a href="https://github.com/ajwadtahmid/Apexlytics/releases">
+    <img alt="Release" src="https://img.shields.io/github/v/release/ajwadtahmid/Apexlytics?color=orange&label=release" />
   </a>
-  <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
-    <img alt="Downloads" src="https://img.shields.io/github/downloads/ajwadtahmid/Unofficial-Apex-Companion/total?color=blue" />
+  <a href="https://github.com/ajwadtahmid/Apexlytics/releases">
+    <img alt="Downloads" src="https://img.shields.io/github/downloads/ajwadtahmid/Apexlytics/total?color=blue" />
   </a>
   <a href="https://flutter.dev">
     <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.x-blue?logo=flutter&logoColor=white" />
   </a>
-  <a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/blob/main/LICENSE">
+  <a href="https://github.com/ajwadtahmid/Apexlytics/blob/main/LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-green" />
   </a>
   <img alt="Android" src="https://img.shields.io/badge/Android-supported-brightgreen?logo=android&logoColor=white" />
@@ -31,10 +31,10 @@
 
 <div align="center">
 
-<a href="https://github.com/ajwadtahmid/Unofficial-Apex-Companion/releases">
+<a href="https://github.com/ajwadtahmid/Apexlytics/releases">
 <img src="assets/images/get-it-on-github.png" alt="Get it on GitHub" align="center" height="80" /></a> 
 
-<a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.unofficialapexcompanion">
+<a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.apexlytics">
 <img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="54" /></a>
 
 <a href="https://apps.apple.com/app/id">
@@ -46,7 +46,7 @@
 
 ## Overview
 
-Track your ranked grind and visualize your RP gains with interactive graphs. Get instant map alerts, compare your stats with friends and rivals, and put all the data that matters at your fingertips with **Unofficial Apex Companion**.
+Track your ranked grind and visualize your RP gains with interactive graphs. Get instant map alerts, compare your stats with friends and rivals, and put all the data that matters at your fingertips with **Apexlytics**.
 
 ## Table of Contents
 
@@ -132,8 +132,8 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 ```bash
 # 1. Clone
-git clone https://github.com/ajwadtahmid/Unofficial-Apex-Companion.git
-cd Unofficial-Apex-Companion
+git clone https://github.com/ajwadtahmid/Apexlytics.git
+cd Apexlytics
 
 # 2. Install dependencies
 flutter pub get
@@ -194,8 +194,8 @@ Data is sourced from [apexlegendsstatus.com](https://apexlegendsstatus.com) and 
 
 Have a question or found a bug? Let us know:
 
-- **Bug reports & features**: [GitHub Issues](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/issues)
-- **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/Unofficial-Apex-Companion/discussions)
+- **Bug reports & features**: [GitHub Issues](https://github.com/ajwadtahmid/Apexlytics/issues)
+- **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/Apexlytics/discussions)
 
 ---
 

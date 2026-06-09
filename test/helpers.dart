@@ -1,4 +1,4 @@
-import 'package:unofficial_apex_companion/models/player_stats.dart';
+import 'package:apexlytics/models/player_stats.dart';
 
 /// Builds a minimal [PlayerStats] for use in tests. Override only the fields
 /// you care about; everything else gets a sensible default.

@@ -1,11 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.ajwadtahmid.unofficialapexcompanion">
+    package="com.ajwadtahmid.apexlytics">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <application
-        android:label="Unofficial Apex Companion"
+        android:label="Apex Companion"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
