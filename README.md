@@ -74,11 +74,9 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Detailed Legend Stats** — Deep-dive into legend performance with advanced metrics including damage per kill, win rate, revive rate, and more custom stats. Analyze what's working and optimize your legend pool.
 
-- **Get Alerts** — Receive instant notifications for map rotations so you never miss your favorite map.
-
 - **Server Status** — Check latency across regions at a glance.
 
-- **Fast & Simple** — No sign-ups, no waiting. Just instant access to the competitive data you need.
+- **Fast & Simple** — Instant access to the competitive data you need. No waiting, no friction.
 
 
 > **Disclaimer:** Unofficial fan project. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment. Apex Legends is a trademark of Electronic Arts Inc.
