@@ -81,7 +81,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **Fast & Simple** — No sign-ups, no waiting. Just instant access to the competitive data you need.
 
 
-> **Disclaimer:** Unofficial fan project. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment. Apex Legends is a trademark of Electronic Arts Inc.
+> **Disclaimer:** This is a fan project. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment. Apex Legends is a trademark of Electronic Arts Inc.
 
 ---
 
