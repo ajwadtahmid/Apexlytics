@@ -31,7 +31,7 @@ class SettingsScreen extends ConsumerWidget {
       '**Additional context**\n'
       '<!-- Screenshots, logs, etc. -->',
     );
-    return 'https://github.com/ajwadtahmid/Unofficial-Apex-Companion/issues/new?body=$body';
+    return 'https://github.com/ajwadtahmid/Apexlytics/issues/new?body=$body';
   }
 
   static String _buildBugReportEmailUrl(String version) {
@@ -47,7 +47,7 @@ class SettingsScreen extends ConsumerWidget {
       'Additional context:\n'
       '(Screenshots, logs, etc.)',
     );
-    return 'mailto:aj22@duck.com?subject=Unofficial+Apex+Companion+Bug+Report&body=$body';
+    return 'mailto:support@ajwadtahmid.com?subject=Apexlytics+Bug+Report&body=$body';
   }
 
   @override

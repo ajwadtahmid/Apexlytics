@@ -192,6 +192,7 @@ Data is sourced from [apexlegendsstatus.com](https://apexlegendsstatus.com) and 
 
 Have a question or found a bug? Let us know:
 
+- **Email**: [support@ajwadtahmid.com](mailto:support@ajwadtahmid.com)
 - **Bug reports & features**: [GitHub Issues](https://github.com/ajwadtahmid/Apexlytics/issues)
 - **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/Apexlytics/discussions)
 
