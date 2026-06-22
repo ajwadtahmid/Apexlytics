@@ -179,7 +179,7 @@ class NotificationService {
       body: '${nextMap.map} starts in $minutesBefore min',
       scheduledDate: notifyAt,
       notificationDetails: _details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
   }
 

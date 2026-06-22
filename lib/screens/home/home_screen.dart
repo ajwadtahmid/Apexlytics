@@ -40,6 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _modeIndex = 0;
   ProviderSubscription? _mapSub;
   ProviderSubscription? _settingsSub;
+  Timer? _rotationRefreshTimer;
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _mapSub = ref.listenManual(mapRotationProvider, (_, next) {
       if (next case AsyncData<ApiResult<MapRotation>>(:final value)) {
         MapNotificationService.schedule(ref, value.data);
+        _scheduleRotationRefresh(value.data);
       }
     });
     _settingsSub = ref.listenManual(playerSettingsProvider, (prev, next) {
@@ -81,8 +83,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
+  /// Re-fetches map rotation data shortly after the soonest active rotation
+  /// ends so notifications for the following rotation are scheduled promptly.
+  void _scheduleRotationRefresh(MapRotation rotation) {
+    _rotationRefreshTimer?.cancel();
+
+    final s = ref.read(playerSettingsProvider);
+    final anyNotif =
+        (s.notifyRankedMapRotation && s.rankedNotifyMinutesBefore > 0) ||
+        (s.notifyPubsMapRotation && s.pubsNotifyMinutesBefore > 0) ||
+        (s.notifyMixtapeMapRotation && s.mixtapeNotifyMinutesBefore > 0) ||
+        (s.notifyWildcardMapRotation && s.wildcardNotifyMinutesBefore > 0);
+    if (!anyNotif) return;
+
+    final candidates = <int>[
+      if (s.notifyRankedMapRotation) rotation.rankedCurrent.remainingSecs,
+      if (s.notifyPubsMapRotation) rotation.battleRoyaleCurrent.remainingSecs,
+      if (s.notifyMixtapeMapRotation && rotation.ltmCurrent != null)
+        rotation.ltmCurrent!.remainingSecs,
+      if (s.notifyWildcardMapRotation && rotation.wildcardCurrent != null)
+        rotation.wildcardCurrent!.remainingSecs,
+    ];
+    if (candidates.isEmpty) return;
+
+    final soonestSecs = candidates.reduce((a, b) => a < b ? a : b);
+    if (soonestSecs <= 0) {
+      ref.invalidate(mapRotationProvider);
+      return;
+    }
+
+    _rotationRefreshTimer = Timer(
+      Duration(seconds: soonestSecs + 15),
+      () => ref.invalidate(mapRotationProvider),
+    );
+  }
+
   @override
   void dispose() {
+    _rotationRefreshTimer?.cancel();
     _mapSub?.close();
     _settingsSub?.close();
     super.dispose();

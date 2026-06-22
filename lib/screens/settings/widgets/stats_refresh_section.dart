@@ -8,15 +8,15 @@ class StatsRefreshSection extends ConsumerWidget {
   const StatsRefreshSection({super.key});
 
   static const _tabOptions = [(0, 'Home'), (1, 'My Stats'), (2, 'Search'), (3, 'Settings')];
-  static const _refreshOptions = [0, 5, 15, 30];
+  static const _refreshOptions = [0, 10, 20, 30];
 
   static String _tabLabel(int tab) =>
       _tabOptions.firstWhere((t) => t.$1 == tab, orElse: () => (0, 'Home')).$2;
 
   static String _refreshLabel(int minutes) => switch (minutes) {
     0 => 'Manual',
-    5 => 'Every 5 min',
-    15 => 'Every 15 min',
+    10 => 'Every 10 min',
+    20 => 'Every 20 min',
     30 => 'Every 30 min',
     _ => 'Every $minutes min',
   };

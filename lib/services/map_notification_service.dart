@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/map_rotation.dart';
 import '../providers/settings_provider.dart';
+import '../utils/app_logger.dart';
 import 'notification_service.dart';
 
 class MapNotificationService {
@@ -27,7 +28,9 @@ class MapNotificationService {
         wildcardMinutesBefore: s.wildcardNotifyMinutesBefore,
         favoriteRankedMapNames: s.favoriteRankedMapNames,
         favoritePubsMapNames: s.favoritePubsMapNames,
-      ));
+      ).catchError((Object e) {
+        log.e('Notification scheduling failed', error: e);
+      }));
     } else {
       unawaited(NotificationService.cancelAll());
     }

@@ -54,7 +54,7 @@ class _PlayerSetupView extends StatelessWidget {
             ),
             SizedBox(height: AppTheme.md),
             Text(
-              'Set Up Your Player',
+              'Get Started',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: AppTheme.sm),

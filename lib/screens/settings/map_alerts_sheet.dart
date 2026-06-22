@@ -41,7 +41,8 @@ class _MapAlertsSheetContentState
   bool _showAllRanked = false;
   bool _showAllPubs = false;
 
-  static const _notifyOptions = [0, 5, 10, 15];
+  static const _battleRoyaleOptions = [0, 5, 15, 30];
+  static const _otherModesOptions = [0, 5, 10, 15];
   static const _kDefaultNotifyMinutes = 10;
 
   @override
@@ -107,7 +108,13 @@ class _MapAlertsSheetContentState
       _NotifMode.wildcard => settings.wildcardNotifyMinutesBefore,
       _NotifMode.mixtape => settings.mixtapeNotifyMinutesBefore,
     };
-    final currentIndex = _notifyOptions.indexOf(current);
+
+    final options = switch (mode) {
+      _NotifMode.ranked || _NotifMode.pubs => _battleRoyaleOptions,
+      _NotifMode.wildcard || _NotifMode.mixtape => _otherModesOptions,
+    };
+
+    final currentIndex = options.indexOf(current);
     final effectiveIndex = currentIndex < 0 ? 0 : currentIndex;
 
     await showDialog<void>(
@@ -115,7 +122,7 @@ class _MapAlertsSheetContentState
       builder: (ctx) => SimpleDialog(
         backgroundColor: AppTheme.surface,
         title: const Text('Alert timing'),
-        children: _notifyOptions.asMap().entries.map((entry) {
+        children: options.asMap().entries.map((entry) {
           final i = entry.key;
           final minutes = entry.value;
           final selected = i == effectiveIndex;

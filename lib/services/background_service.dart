@@ -15,6 +15,7 @@ import '../utils/app_logger.dart';
 import 'notification_service.dart';
 
 const int _backgroundFetchIntervalMinutes = 30;
+const String _kLastFetchResultKey = 'bg_fetch_last_result';
 
 // Runs when the app is fully terminated (headless). Must be top-level.
 @pragma('vm:entry-point')
@@ -33,12 +34,13 @@ void backgroundFetchHeadlessTask(HeadlessEvent event) async {
 }
 
 Future<void> _backgroundFetchAndSchedule() async {
+  SharedPreferences? prefs;
   try {
     debugPrint('[BackgroundService] Fetch started');
     tz.initializeTimeZones();
     await NotificationService.init();
 
-    final prefs = await SharedPreferences.getInstance();
+    prefs = await SharedPreferences.getInstance();
     final settings = BackgroundFetchSettings.fromPrefs(prefs);
     if (settings == null) return;
 
@@ -77,11 +79,15 @@ Future<void> _backgroundFetchAndSchedule() async {
       favoritePubsMapNames: settings.favoritePubsMapNames,
     );
     debugPrint('[BackgroundService] Notifications scheduled successfully');
+    await prefs.setString(
+        _kLastFetchResultKey, 'ok:${DateTime.now().toIso8601String()}');
   } catch (e) {
-    // Headless isolate — Sentry is never initialised here (no runApp/main path),
-    // so debugPrint is the only available output. Release builds suppress it;
-    // this is acceptable since the worst outcome is a missed notification.
     debugPrint('[BackgroundService] Fetch failed: $e');
+    try {
+      prefs ??= await SharedPreferences.getInstance();
+      await prefs.setString(
+          _kLastFetchResultKey, 'error:${DateTime.now().toIso8601String()}:$e');
+    } catch (_) {}
   }
 }
 
