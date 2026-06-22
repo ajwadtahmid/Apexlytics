@@ -142,13 +142,17 @@ class PlayerInfoCard extends StatelessWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          t.name,
-                          style: const TextStyle(
-                            color: AppTheme.muted,
-                            fontSize: 13,
+                        Expanded(
+                          child: Text(
+                            t.name,
+                            style: const TextStyle(
+                              color: AppTheme.muted,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           formatNumber(t.value),
                           style: const TextStyle(fontWeight: FontWeight.bold),

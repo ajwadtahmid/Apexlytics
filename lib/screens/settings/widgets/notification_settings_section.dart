@@ -29,7 +29,10 @@ class NotificationSettingsSection extends ConsumerWidget {
                 ),
                 Text(
                   _notifSummary(settings),
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 14),
+                  style: TextStyle(
+                    color: _anyActive(settings) ? AppTheme.accent : AppTheme.muted,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(width: AppTheme.xs),
                 const Icon(Icons.chevron_right, color: AppTheme.muted, size: 18),
@@ -40,6 +43,12 @@ class NotificationSettingsSection extends ConsumerWidget {
       ],
     );
   }
+
+  static bool _anyActive(PlayerSettings settings) =>
+      (settings.notifyRankedMapRotation && settings.rankedNotifyMinutesBefore > 0) ||
+      (settings.notifyPubsMapRotation && settings.pubsNotifyMinutesBefore > 0) ||
+      (settings.notifyWildcardMapRotation && settings.wildcardNotifyMinutesBefore > 0) ||
+      (settings.notifyMixtapeMapRotation && settings.mixtapeNotifyMinutesBefore > 0);
 
   static String _notifSummary(PlayerSettings settings) {
     final count = [

@@ -9,7 +9,6 @@ import '../../providers/player_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
-import '../../utils/formatting/format.dart' show formatNumber;
 import '../../utils/formatting/search_utils.dart';
 import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/notifications.dart';
@@ -123,11 +122,10 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
         title: Text(stats?.name ?? widget.query),
         actions: [
           if (canCompare)
-            TextButton.icon(
+            IconButton(
+              icon: const Icon(Icons.compare_arrows),
+              tooltip: 'Compare Stats',
               onPressed: () => _showComparePicker(context, myStats, stats),
-              icon: const Icon(Icons.compare_arrows, size: 16),
-              label: const Text('Compare'),
-              style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
             ),
           if (stats != null) ...[
             IconButton(
@@ -257,15 +255,6 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
                         color: AppTheme.muted,
                       ),
                       title: Text(legend.name),
-                      subtitle: legend.killCount > 0
-                          ? Text(
-                              '${formatNumber(legend.killCount)} kills',
-                              style: const TextStyle(
-                                color: AppTheme.muted,
-                                fontSize: 12,
-                              ),
-                            )
-                          : null,
                       onTap: () {
                         Navigator.pop(sheetCtx);
                         showDialog(
