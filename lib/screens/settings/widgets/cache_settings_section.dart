@@ -34,17 +34,6 @@ class CacheSettingsSection extends ConsumerWidget {
               ),
               const Divider(color: AppTheme.surface2, height: 24),
               ActionRow(
-                icon: Icons.star_border,
-                label: 'Clear favorites',
-                onTap: () => _confirm(
-                  context,
-                  title: 'Clear favorites?',
-                  body: 'Your saved favorite players will be removed.',
-                  onConfirm: () => ref.read(searchStateProvider.notifier).clearFavorites(),
-                ),
-              ),
-              const Divider(color: AppTheme.surface2, height: 24),
-              ActionRow(
                 icon: Icons.delete_outline,
                 label: 'Clear all data',
                 color: AppTheme.red,

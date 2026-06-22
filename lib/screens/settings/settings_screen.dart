@@ -18,9 +18,9 @@ import 'widgets/stats_refresh_section.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  static String _buildBugReportUrl(String version) {
+  static String _buildBugReportUrl(String version, String buildNumber) {
     final body = Uri.encodeComponent(
-      '**App version:** $version\n'
+      '**App version:** $version ($buildNumber)\n'
       '**Platform:** ${Platform.operatingSystem}\n'
       '**OS version:** ${Platform.operatingSystemVersion}\n\n'
       '**Describe the bug**\n'
@@ -34,9 +34,9 @@ class SettingsScreen extends ConsumerWidget {
     return 'https://github.com/ajwadtahmid/Apexlytics/issues/new?body=$body';
   }
 
-  static String _buildBugReportEmailUrl(String version) {
+  static String _buildBugReportEmailUrl(String version, String buildNumber) {
     final body = Uri.encodeComponent(
-      'App version: $version\n'
+      'App version: $version ($buildNumber)\n'
       'Platform: ${Platform.operatingSystem}\n'
       'OS version: ${Platform.operatingSystemVersion}\n\n'
       'Describe the bug:\n'
@@ -72,21 +72,26 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SupportRow(
-                  icon: Icons.bug_report_outlined,
-                  label: 'Report a bug (GitHub)',
-                  url: _buildBugReportUrl(
-                    ref.watch(packageInfoProvider).whenOrNull(data: (info) => info.version) ?? '—',
-                  ),
-                ),
-                const Divider(color: AppTheme.surface2, height: 24),
-                _SupportRow(
-                  icon: Icons.mail_outline,
-                  label: 'Report a bug (Email)',
-                  url: _buildBugReportEmailUrl(
-                    ref.watch(packageInfoProvider).whenOrNull(data: (info) => info.version) ?? '—',
-                  ),
-                ),
+                Builder(builder: (context) {
+                  final info = ref.watch(packageInfoProvider).whenOrNull(data: (info) => info);
+                  final version = info?.version ?? '—';
+                  final build = info?.buildNumber ?? '—';
+                  return Column(
+                    children: [
+                      _SupportRow(
+                        icon: Icons.bug_report_outlined,
+                        label: 'Report a bug (GitHub)',
+                        url: _buildBugReportUrl(version, build),
+                      ),
+                      const Divider(color: AppTheme.surface2, height: 24),
+                      _SupportRow(
+                        icon: Icons.mail_outline,
+                        label: 'Report a bug (Email)',
+                        url: _buildBugReportEmailUrl(version, build),
+                      ),
+                    ],
+                  );
+                }),
               ],
             ),
           ),

@@ -8,6 +8,7 @@ import '../../providers/search_provider.dart';
 import '../../utils/formatting/format.dart' show formatNumber;
 import '../../utils/formatting/rank_utils.dart' show rankAssetPath, rankLabel;
 import '../../utils/formatting/search_utils.dart';
+import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
 
@@ -16,6 +17,34 @@ class FavoritesPane extends ConsumerWidget {
   const FavoritesPane({super.key, required this.onPick});
 
   static const _kRefreshConcurrency = 5;
+
+  Future<void> _confirmClear(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Clear favorites?'),
+        content: const Text(
+          'Your saved favorite players will be removed.',
+          style: TextStyle(color: AppTheme.muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.muted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear', style: TextStyle(color: AppTheme.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(searchStateProvider.notifier).clearFavorites();
+      if (context.mounted) context.showMessage('Favorites cleared');
+    }
+  }
 
   Future<void> _refreshAll(WidgetRef ref, List<PlayerRef> favorites) async {
     final service = ref.read(playerServiceProvider);
@@ -51,7 +80,9 @@ class FavoritesPane extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
-          const _ListHeader(title: 'Favorites'),
+          _FavoritesHeader(
+            onClear: () => _confirmClear(context, ref),
+          ),
           ...favorites.map(
             (r) => _FavoriteTile(playerRef: r, onTap: () => onPick(r)),
           ),
@@ -61,22 +92,47 @@ class FavoritesPane extends ConsumerWidget {
   }
 }
 
-class _ListHeader extends StatelessWidget {
-  final String title;
-  const _ListHeader({required this.title});
+class _FavoritesHeader extends StatelessWidget {
+  final VoidCallback onClear;
+  const _FavoritesHeader({required this.onClear});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppTheme.sm),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: AppTheme.muted,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.8,
-        ),
+      padding: const EdgeInsets.only(bottom: AppTheme.sm, left: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.star, size: 14, color: AppTheme.accent),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              'Favorites',
+              style: TextStyle(
+                color: AppTheme.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onClear,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.red.withAlpha(25),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              ),
+              child: const Text(
+                'Clear All',
+                style: TextStyle(
+                  color: AppTheme.red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
