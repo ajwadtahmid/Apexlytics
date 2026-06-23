@@ -26,7 +26,7 @@ class NotificationService {
     if (_initialized) return;
     if (!_supportsScheduled) return;
     const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
+      '@drawable/ic_launcher_foreground',
     );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
@@ -172,11 +172,15 @@ class NotificationService {
       return;
     }
 
+    final mapName = nextMap.eventName != null && nextMap.eventName!.isNotEmpty
+        ? '${nextMap.map} (${nextMap.eventName})'
+        : nextMap.map;
+
     log.d('$modeLabel notification scheduled in ${minutesBefore}min');
     await _plugin.zonedSchedule(
       id: id,
-      title: '$modeLabel · Map Rotation',
-      body: '${nextMap.map} starts in $minutesBefore min',
+      title: 'Apexlytics',
+      body: '$modeLabel: $mapName starts in $minutesBefore minutes',
       scheduledDate: notifyAt,
       notificationDetails: _details,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

@@ -450,7 +450,7 @@ class _MapCardState extends State<_MapCard> {
 
   static String _formatMapDisplay(String mapName, String? eventName, bool isMixtape) {
     if (isMixtape && eventName != null && eventName.isNotEmpty) {
-      return '$mapName - $eventName';
+      return '$mapName ($eventName)';
     }
     return mapName;
   }
