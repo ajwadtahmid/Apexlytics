@@ -36,7 +36,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   int _modeIndex = 0;
   ProviderSubscription? _mapSub;
   ProviderSubscription? _settingsSub;
@@ -45,10 +46,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _mapSub = ref.listenManual(mapRotationProvider, (_, next) {
-      if (next case AsyncData<ApiResult<MapRotation>>(:final value)) {
-        MapNotificationService.schedule(ref, value.data);
-        _scheduleRotationRefresh(value.data);
+      switch (next) {
+        case AsyncData<ApiResult<MapRotation>>(:final value):
+          MapNotificationService.schedule(ref, value.data);
+          _scheduleRotationRefresh(value.data);
+        case AsyncError():
+          // A refetch failed (map rotation uses noCache, so errors don't fall
+          // back to cache). Re-arm a short retry so the rescheduling loop heals
+          // itself instead of dying permanently on a transient network blip.
+          _rotationRefreshTimer?.cancel();
+          _rotationRefreshTimer = Timer(
+            const Duration(minutes: 1),
+            () => ref.invalidate(mapRotationProvider),
+          );
+        default:
+          break;
       }
     });
     _settingsSub = ref.listenManual(playerSettingsProvider, (prev, next) {
@@ -119,7 +133,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // The foreground refresh timer is frozen while the app is backgrounded,
+      // so refetch on resume to top up the notification queue immediately.
+      ref.invalidate(mapRotationProvider);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _rotationRefreshTimer?.cancel();
     _mapSub?.close();
     _settingsSub?.close();
