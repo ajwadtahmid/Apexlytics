@@ -458,9 +458,13 @@ class _MapCardState extends State<_MapCard> {
   static final _endTimeFormat = DateFormat('h:mm a');
 
   static String _formatCountdown(int secs) {
-    final h = secs ~/ 3600;
+    final d = secs ~/ 86400;
+    final h = (secs % 86400) ~/ 3600;
     final m = (secs % 3600) ~/ 60;
     final s = secs % 60;
+    if (d > 0) {
+      return '${d}d ${h}h';
+    }
     if (h > 0) {
       return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     }
