@@ -223,6 +223,8 @@ class _GraphCardState extends State<GraphCard> {
           ),
 
           const SizedBox(height: AppTheme.md),
+          const Divider(color: AppTheme.surface2, height: 1),
+          const SizedBox(height: AppTheme.md),
 
           // ── Week tab strip ────────────────────────────────────────────────
           _WeekTabStrip(
