@@ -1,7 +1,7 @@
 # Apexlytics
 
 <p align="center">
-  <img src="assets/logos/icon_1024.svg" alt="Apexlytics" width="96" />
+  <img src="assets/logos/logo.svg" alt="Apexlytics" width="96" />
 </p>
 
 <p align="center">

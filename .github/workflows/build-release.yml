@@ -114,9 +114,10 @@ jobs:
         run: flutter pub get
 
       - name: Create .env from secrets
+        shell: bash
         run: |
-          "PROXY_URL=${{ secrets.PROXY_URL }}" | Out-File -FilePath .env -Encoding utf8
-          "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" | Add-Content -Path .env -Encoding utf8
+          echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
+          echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
 
       - name: Generate env code
         run: dart run build_runner build --delete-conflicting-outputs

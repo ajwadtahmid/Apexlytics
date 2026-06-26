@@ -76,21 +76,21 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/logos/icon_1024.png"
+  image_path: "assets/logos/logo.png"
   min_sdk_android: 21
   remove_alpha_ios: false
   adaptive_icon_background: "#0D0D1A"
-  adaptive_icon_foreground: "assets/logos/icon_1024.png"
+  adaptive_icon_foreground: "assets/logos/logo.png"
   web:
     generate: false
   windows:
-    generate: false
+    generate: true
   macos:
     generate: true
 
 flutter_native_splash:
   color: "#0D0D1A"
-  image: "assets/logos/icon_1024.png"
+  image: "assets/logos/logo.png"
   ios_content_mode: scaleAspectFit
   android_gravity: center
 
