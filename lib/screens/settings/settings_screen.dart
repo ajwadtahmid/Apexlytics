@@ -20,32 +20,34 @@ class SettingsScreen extends ConsumerWidget {
 
   static String _buildBugReportUrl(String version, String buildNumber) {
     final body = Uri.encodeComponent(
-      '**App version:** $version ($buildNumber)\n'
-      '**Platform:** ${Platform.operatingSystem}\n'
-      '**OS version:** ${Platform.operatingSystemVersion}\n\n'
       '**Describe the bug**\n'
       '<!-- What happened? What did you expect? -->\n\n'
       '**Steps to reproduce**\n'
       '1. \n'
       '2. \n\n'
       '**Additional context**\n'
-      '<!-- Screenshots, logs, etc. -->',
+      '<!-- Screenshots, logs, etc. -->\n\n'
+      '---\n\n'
+      '**App version:** $version ($buildNumber)\n'
+      '**Platform:** ${Platform.operatingSystem}\n'
+      '**OS version:** ${Platform.operatingSystemVersion}',
     );
     return 'https://github.com/ajwadtahmid/Apexlytics/issues/new?body=$body';
   }
 
   static String _buildBugReportEmailUrl(String version, String buildNumber) {
     final body = Uri.encodeComponent(
-      'App version: $version ($buildNumber)\n'
-      'Platform: ${Platform.operatingSystem}\n'
-      'OS version: ${Platform.operatingSystemVersion}\n\n'
       'Describe the bug:\n'
       '(What happened? What did you expect?)\n\n'
       'Steps to reproduce:\n'
       '1. \n'
       '2. \n\n'
       'Additional context:\n'
-      '(Screenshots, logs, etc.)',
+      '(Screenshots, logs, etc.)\n\n'
+      '---\n\n'
+      'App version: $version ($buildNumber)\n'
+      'Platform: ${Platform.operatingSystem}\n'
+      'OS version: ${Platform.operatingSystemVersion}',
     );
     return 'mailto:support@ajwadtahmid.com?subject=Apexlytics+Bug+Report&body=$body';
   }
