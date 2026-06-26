@@ -167,7 +167,10 @@ class _StatsViewState extends ConsumerState<_StatsView> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(playerSettingsProvider);
+    final name = ref.watch(playerSettingsProvider.select((s) => s.name));
+    final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
+    final platform = ref.watch(playerSettingsProvider.select((s) => s.platform));
+    final compactLegendCards = ref.watch(playerSettingsProvider.select((s) => s.compactLegendCards));
     final statsAsync = ref.watch(myPlayerStatsProvider);
 
     return Scaffold(
@@ -178,7 +181,7 @@ class _StatsViewState extends ConsumerState<_StatsView> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(settings.name),
+              Text(name),
               const SizedBox(width: AppTheme.xs),
               const Icon(
                 Icons.keyboard_arrow_down,
@@ -197,7 +200,7 @@ class _StatsViewState extends ConsumerState<_StatsView> {
           IconButton(
             icon: const Icon(Icons.public),
             tooltip: 'Open on ALS',
-            onPressed: () => _openOnALS(context, settings.uid, settings.platform),
+            onPressed: () => _openOnALS(context, uid, platform),
           ),
           statsAsync.isLoading
               ? const Padding(
@@ -226,7 +229,7 @@ class _StatsViewState extends ConsumerState<_StatsView> {
               child: Text('No data.', style: TextStyle(color: AppTheme.muted)),
             );
           }
-          return _StatsBody(stats: stats, staleAt: result.staleAt, settings: settings);
+          return _StatsBody(stats: stats, staleAt: result.staleAt, platform: platform, compactLegendCards: compactLegendCards);
         },
         loading: () => const _StatsSkeleton(),
         error: (e, _) => ErrorView(
@@ -241,9 +244,10 @@ class _StatsViewState extends ConsumerState<_StatsView> {
 class _StatsBody extends ConsumerStatefulWidget {
   final PlayerStats stats;
   final DateTime? staleAt;
-  final PlayerSettings settings;
+  final String platform;
+  final bool compactLegendCards;
 
-  const _StatsBody({required this.stats, required this.settings, this.staleAt});
+  const _StatsBody({required this.stats, required this.platform, required this.compactLegendCards, this.staleAt});
 
   @override
   ConsumerState<_StatsBody> createState() => _StatsBodyState();
@@ -336,7 +340,7 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           const SizedBox(height: AppTheme.md),
           RankedInfoCard(
             myRp: stats.rankScore,
-            platform: widget.settings.platform,
+            platform: widget.platform,
           ),
           const SizedBox(height: AppTheme.md),
           GraphCard(
@@ -348,7 +352,7 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           const SizedBox(height: AppTheme.md),
           PlayerStatsTabs(
             legendStats: _mergedLegends,
-            compact: widget.settings.compactLegendCards,
+            compact: widget.compactLegendCards,
             legendStack: _legendStack,
           ),
           const SizedBox(height: AppTheme.xl),

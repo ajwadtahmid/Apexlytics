@@ -5,10 +5,10 @@ class AppTheme {
   static const bg = Color(0xFF0d1117);
   static const surface = Color(0xFF161b22);
   static const surface2 = Color(0xFF1c2330);
-  static const accent = Color(0xFFcf6728);
+  static const accent = Color(0xFFd4722f);
   static const accent2 = Color(0xFFe8943a);
   static const textPrimary = Color(0xFFe6edf3);
-  static const muted = Color(0xFF7d8590);
+  static const muted = Color(0xFF8b929c);
   static const green = Color(0xFF56d364);
   static const red = Color(0xFFe06c75);
   static const blue = Color(0xFF79c0ff);

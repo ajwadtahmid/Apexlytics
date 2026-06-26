@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0D0D1A"/>
+      <stop offset="100%" style="stop-color:#1A1A2E"/>
+    </linearGradient>
+    <linearGradient id="orange1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35"/>
+      <stop offset="100%" style="stop-color:#FF2200"/>
+    </linearGradient>
+    <filter id="glow1">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="200" fill="url(#bg1)"/>
+
+  <!-- Outer hex ring -->
+  <polygon points="512,80 860,272 860,752 512,944 164,752 164,272"
+    fill="none" stroke="#FF4500" stroke-width="18" stroke-opacity="0.25"/>
+
+  <!-- Inner hex -->
+  <polygon points="512,200 776,344 776,680 512,824 248,680 248,344"
+    fill="none" stroke="#FF4500" stroke-width="6" stroke-opacity="0.15"/>
+
+  <!-- Connecting lines (nexus spokes) -->
+  <line x1="512" y1="80"  x2="512" y2="200" stroke="#FF4500" stroke-width="6" stroke-opacity="0.4"/>
+  <line x1="860" y1="272" x2="776" y2="344" stroke="#FF4500" stroke-width="6" stroke-opacity="0.4"/>
+  <line x1="860" y1="752" x2="776" y2="680" stroke="#FF4500" stroke-width="6" stroke-opacity="0.4"/>
+  <line x1="512" y1="944" x2="512" y2="824" stroke="#FF4500" stroke-width="6" stroke-opacity="0.4"/>
+  <line x1="164" y1="752" x2="248" y2="680" stroke="#FF4500" stroke-width="6" stroke-opacity="0.4"/>
+  <line x1="164" y1="272" x2="248" y2="344" stroke="#FF4500" stroke-width="6" stroke-opacity="0.4"/>
+
+  <!-- Center triangle (apex symbol) -->
+  <polygon points="512,290 690,590 334,590"
+    fill="none" stroke="url(#orange1)" stroke-width="28" stroke-linejoin="round"
+    filter="url(#glow1)"/>
+
+  <!-- Inner triangle fill -->
+  <polygon points="512,340 655,570 369,570" fill="#FF4500" fill-opacity="0.12"/>
+
+  <!-- Center dot -->
+  <circle cx="512" cy="480" r="36" fill="url(#orange1)" filter="url(#glow1)"/>
+  <circle cx="512" cy="480" r="18" fill="#FFFFFF" fill-opacity="0.9"/>
+
+  <!-- Corner nodes -->
+  <circle cx="512" cy="290" r="14" fill="url(#orange1)" filter="url(#glow1)"/>
+  <circle cx="690" cy="590" r="14" fill="url(#orange1)" filter="url(#glow1)"/>
+  <circle cx="334" cy="590" r="14" fill="url(#orange1)" filter="url(#glow1)"/>
+
+  <!-- Outer corner nodes -->
+  <circle cx="512"  cy="80"  r="10" fill="#FF4500" fill-opacity="0.7"/>
+  <circle cx="860"  cy="272" r="10" fill="#FF4500" fill-opacity="0.7"/>
+  <circle cx="860"  cy="752" r="10" fill="#FF4500" fill-opacity="0.7"/>
+  <circle cx="512"  cy="944" r="10" fill="#FF4500" fill-opacity="0.7"/>
+  <circle cx="164"  cy="272" r="10" fill="#FF4500" fill-opacity="0.7"/>
+  <circle cx="164"  cy="752" r="10" fill="#FF4500" fill-opacity="0.7"/>
+</svg>

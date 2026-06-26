@@ -30,6 +30,11 @@ class PrefsKeys {
   static const searchFavorites = 'search_favorites';
   static const uidSearchWarningShown = 'uid_search_warning_shown';
 
+  /// Cached `/approved-uids` allowlist (JSON list of UID strings). Read
+  /// synchronously on launch so the gated Ranked tab appears without a network
+  /// round-trip; refreshed in the background.
+  static const approvedUidsCache = 'approved_uids_cache';
+
   static const legendStats = 'legend_stats';
   static const legendVisitStack = 'legend_visit_stack';
   static const seasonHistory = 'season_history';

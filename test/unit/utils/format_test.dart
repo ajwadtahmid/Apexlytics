@@ -33,4 +33,20 @@ void main() {
       expect(timeAgo(ts), contains('d ago'));
     });
   });
+
+  group('formatDuration', () {
+    test('minutes only under an hour', () {
+      expect(formatDuration(510), '8m'); // 8m 30s → 8m
+      expect(formatDuration(0), '0m');
+    });
+
+    test('hours and minutes under a day', () {
+      expect(formatDuration(30600), '8h 30m');
+    });
+
+    test('days and hours over 24h', () {
+      expect(formatDuration(90061), '1d 1h');
+      expect(formatDuration(8 * 3600), '8h 0m');
+    });
+  });
 }

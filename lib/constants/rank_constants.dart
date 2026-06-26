@@ -11,7 +11,7 @@ class RankDivision {
   String get label => division != null ? '$tier $division' : tier;
 
   String get assetPath =>
-      'assets/ranks/${tier.toLowerCase().replaceAll(' ', '_')}.png';
+      'assets/ranks/${tier.toLowerCase().replaceAll(' ', '_')}.webp';
 }
 
 const kRookieColor = Color(0xFF616161);
