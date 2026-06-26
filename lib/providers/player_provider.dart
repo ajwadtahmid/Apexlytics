@@ -77,21 +77,21 @@ class MyPlayerStatsNotifier extends AsyncNotifier<ApiResult<PlayerStats?>> {
   Future<ApiResult<PlayerStats?>> build() async {
     final generation = ++_buildGeneration;
 
-    final settings = ref.watch(playerSettingsProvider);
-    if (!settings.isPlayerSet) return const ApiResult(null);
+    final isSet = ref.watch(playerSettingsProvider.select((s) => s.isPlayerSet));
+    if (!isSet) return const ApiResult(null);
 
+    final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
+    final platform = ref.watch(playerSettingsProvider.select((s) => s.platform));
     final service = ref.watch(playerServiceProvider);
-    final cached = service.getCachedStats(settings.uid, settings.platform, searchByUid: true);
+    final cached = service.getCachedStats(uid, platform, searchByUid: true);
 
     if (cached != null) {
-      // Return cached immediately (no shimmer). Background refresh updates state
-      // when it completes; if it fails the stale banner remains.
-      _refreshSilent(service, settings.uid, settings.platform, generation);
+      _refreshSilent(service, uid, platform, generation);
       return ApiResult<PlayerStats?>(cached.data, staleAt: cached.staleAt);
     }
 
     return service
-        .getPlayerStatsByUid(settings.uid, settings.platform)
+        .getPlayerStatsByUid(uid, platform)
         .then((r) => ApiResult<PlayerStats?>(r.data, staleAt: r.staleAt));
   }
 

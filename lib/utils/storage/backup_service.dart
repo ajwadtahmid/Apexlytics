@@ -6,11 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../constants/prefs_keys.dart';
+import '../../services/ranked_history_store.dart';
 import '../app_logger.dart';
 import 'legend_stats_storage.dart';
 import 'rp_snapshot_storage.dart';
 
-const int _kBackupVersion = 1;
+// v2 adds the `ranked_history` section. v1 backups (prefs only) still import.
+const int _kBackupVersion = 2;
 
 const _excludedKeys = {PrefsKeys.uidSearchWarningShown};
 
@@ -69,12 +71,22 @@ Map<String, dynamic> _collect(SharedPreferences prefs) {
 
 /// Shows a save dialog and writes backup JSON to the user's selected location.
 /// Returns the file path on success, null if user cancelled.
-Future<String?> exportBackup(SharedPreferences prefs) async {
+///
+/// [rankedStore], when provided, embeds the full ranked match history in the
+/// same file so device migration stays a single-file operation.
+Future<String?> exportBackup(
+  SharedPreferences prefs, {
+  RankedHistoryStore? rankedStore,
+}) async {
   final payload = _collect(prefs);
+  final rankedHistory = rankedStore == null
+      ? const <Map<String, Object?>>[]
+      : await rankedStore.exportRows();
   final envelope = {
     'version': _kBackupVersion,
     'exported_at': DateTime.now().toIso8601String(),
     'prefs': payload,
+    'ranked_history': rankedHistory,
   };
 
   final json = const JsonEncoder.withIndent('  ').convert(envelope);
@@ -89,7 +101,8 @@ Future<String?> exportBackup(SharedPreferences prefs) async {
   final file = File(filePath);
   await file.writeAsString(json);
 
-  log.i('Backup exported: ${payload.length} keys → $filePath');
+  log.i('Backup exported: ${payload.length} keys, '
+      '${rankedHistory.length} ranked matches → $filePath');
   return filePath;
 }
 
@@ -108,8 +121,12 @@ class ImportError extends ImportResult {
 }
 
 /// Shows a file picker dialog, reads backup JSON, and restores all keys to [prefs].
-/// Returns an [ImportResult] describing the outcome.
-Future<ImportResult> importBackup(SharedPreferences prefs) async {
+/// Returns an [ImportResult] describing the outcome. [rankedStore], when
+/// provided, restores any embedded ranked match history.
+Future<ImportResult> importBackup(
+  SharedPreferences prefs, {
+  RankedHistoryStore? rankedStore,
+}) async {
   final pickedFile = await file_selector.openFile(
     acceptedTypeGroups: [
       const file_selector.XTypeGroup(
@@ -147,6 +164,13 @@ Future<ImportResult> importBackup(SharedPreferences prefs) async {
       } else {
         log.w('Backup import: skipping unsupported type for "${entry.key}": ${v.runtimeType}');
       }
+    }
+
+    // Restore embedded ranked history (absent in v1 backups).
+    final rankedHistory = envelope['ranked_history'];
+    if (rankedHistory is List && rankedStore != null) {
+      await rankedStore.importRows(rankedHistory);
+      log.i('Backup restored ${rankedHistory.length} ranked matches');
     }
 
     log.i('Backup restored: ${prefsData.length} keys from v$version backup');

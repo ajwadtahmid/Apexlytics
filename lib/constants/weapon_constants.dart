@@ -33,7 +33,7 @@ class Weapon {
     String? assetFileName,
   }) : _assetFileOverride = assetFileName;
 
-  String get assetPath => 'assets/weapons/${_assetFileOverride ?? _assetName()}.png';
+  String get assetPath => 'assets/weapons/${_assetFileOverride ?? _assetName()}.webp';
 
   String _assetName() => name
       .toLowerCase()

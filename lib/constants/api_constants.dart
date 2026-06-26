@@ -13,6 +13,12 @@ class ApiConstants {
   static const String mapRotationPath = '/maprotation';
   static const String mapRotationVersion = '2';
 
+  static const String gamesPath = '/games';
+  static const String approvedUidsPath = '/approved-uids';
+
+  /// Rolling match-history window the `/games` endpoint serves per UID.
+  static const int gamesHistoryLimit = 100;
+
   static const Map<String, String> platformLabels = {
     'PC': 'PC',
     'PS4': 'PlayStation',

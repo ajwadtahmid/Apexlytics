@@ -23,9 +23,9 @@ class GeneralSettingsSection extends ConsumerWidget {
           child: settings.isPlayerSet
               ? _PlayerInfoContent(
                   settings: settings,
-                  onChangeTap: () => ref.read(currentTabProvider.notifier).setTab(1),
+                  onChangeTap: () => ref.read(currentTabProvider.notifier).setTab(AppTab.stats),
                 )
-              : _NoPlayerContent(onTap: () => ref.read(currentTabProvider.notifier).setTab(1)),
+              : _NoPlayerContent(onTap: () => ref.read(currentTabProvider.notifier).setTab(AppTab.stats)),
         ),
       ],
     );

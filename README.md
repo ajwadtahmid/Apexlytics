@@ -1,7 +1,7 @@
 # Apexlytics
 
 <p align="center">
-  <img src="assets/logos/icon_1024.svg" alt="Apexlytics" width="96" />
+  <img src="assets/logos/logo.svg" alt="Apexlytics" width="96" />
 </p>
 
 <p align="center">
@@ -32,13 +32,13 @@
 <div align="center">
 
 <a href="https://github.com/ajwadtahmid/Apexlytics/releases">
-<img src="assets/images/get-it-on-github.png" alt="Get it on GitHub" align="center" height="80" /></a> 
+<img src=".github/assets/images/get-it-on-github.png" alt="Get it on GitHub" align="center" height="80" /></a> 
 
 <a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.apexlytics">
-<img src="assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="54" /></a>
+<img src=".github/assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="54" /></a>
 
-<a href="https://apps.apple.com/app/id6778521764`">
-<img src="assets/images/get-it-on-app-store.png" alt="Get it on App Store" align="center" height="54" /></a>
+<a href="https://apps.apple.com/app/id6778521764">
+<img src=".github/assets/images/get-it-on-app-store.png" alt="Get it on App Store" align="center" height="54" /></a>
 
 </div>
 
@@ -87,7 +87,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 | Home | Stats | Search | Settings |
 |------|-------|--------|----------|
-| ![Home](assets/screenshots/desktop/desktop_home.png) | ![Stats](assets/screenshots/desktop/desktop_stats.png) | ![Search](assets/screenshots/desktop/desktop_search.png) | ![Settings](assets/screenshots/desktop/desktop_settings.png) |
+| ![Home](.github/assets/screenshots/desktop/desktop_home.png) | ![Stats](.github/assets/screenshots/desktop/desktop_stats.png) | ![Search](.github/assets/screenshots/desktop/desktop_search.png) | ![Settings](.github/assets/screenshots/desktop/desktop_settings.png) |
 
 ---
 

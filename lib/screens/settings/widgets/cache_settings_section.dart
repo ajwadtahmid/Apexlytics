@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../providers/ranked_provider.dart';
 import '../../../providers/search_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/error_messages.dart';
@@ -57,7 +58,10 @@ class CacheSettingsSection extends ConsumerWidget {
   Future<void> _exportData(BuildContext context, WidgetRef ref) async {
     try {
       final prefs = ref.read(sharedPreferencesProvider);
-      final filePath = await exportBackup(prefs);
+      final filePath = await exportBackup(
+        prefs,
+        rankedStore: ref.read(rankedHistoryStoreProvider),
+      );
       if (filePath == null) return;
 
       if (context.mounted) {
@@ -99,7 +103,10 @@ class CacheSettingsSection extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     final prefs = ref.read(sharedPreferencesProvider);
-    final importResult = await importBackup(prefs);
+    final importResult = await importBackup(
+      prefs,
+      rankedStore: ref.read(rankedHistoryStoreProvider),
+    );
 
     if (!context.mounted) return;
 

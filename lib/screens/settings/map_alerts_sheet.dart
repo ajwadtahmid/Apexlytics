@@ -6,6 +6,7 @@ import '../../providers/settings_provider.dart';
 import '../../services/background_service.dart';
 import '../../services/notification_service.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/setting_row.dart';
 import 'widgets/map_mode_list.dart';
@@ -43,7 +44,8 @@ class _MapAlertsSheetContentState
 
   static const _battleRoyaleOptions = [0, 5, 15, 30];
   static const _otherModesOptions = [0, 5, 10, 15];
-  static const _kDefaultNotifyMinutes = 10;
+  static const _kDefaultBattleRoyaleMinutes = 15;
+  static const _kDefaultOtherModesMinutes = 10;
 
   @override
   void initState() {
@@ -179,6 +181,42 @@ class _MapAlertsSheetContentState
     };
 
     final notifier = ref.read(playerSettingsProvider.notifier);
+
+    if (enabled && !previouslyEnabled) {
+      // Set default timing BEFORE toggling the mode so the settings listener
+      // never sees mode=ON with timing=0 (which would trigger cancelAll).
+      final currentTiming = switch (mode) {
+        _NotifMode.ranked => settings.rankedNotifyMinutesBefore,
+        _NotifMode.pubs => settings.pubsNotifyMinutesBefore,
+        _NotifMode.wildcard => settings.wildcardNotifyMinutesBefore,
+        _NotifMode.mixtape => settings.mixtapeNotifyMinutesBefore,
+      };
+      if (currentTiming == 0) {
+        final defaultMinutes = switch (mode) {
+          _NotifMode.ranked || _NotifMode.pubs => _kDefaultBattleRoyaleMinutes,
+          _NotifMode.wildcard || _NotifMode.mixtape => _kDefaultOtherModesMinutes,
+        };
+        switch (mode) {
+          case _NotifMode.ranked:
+            await notifier.setRankedNotifyMinutesBefore(defaultMinutes);
+          case _NotifMode.pubs:
+            await notifier.setPubsNotifyMinutesBefore(defaultMinutes);
+          case _NotifMode.wildcard:
+            await notifier.setWildcardNotifyMinutesBefore(defaultMinutes);
+          case _NotifMode.mixtape:
+            await notifier.setMixtapeNotifyMinutesBefore(defaultMinutes);
+        }
+      }
+
+      final granted = await NotificationService.requestPermissions();
+      if (!context.mounted) return;
+      if (!granted) {
+        context.showMessage(
+          'Enable notifications in system settings to receive alerts',
+        );
+      }
+    }
+
     switch (mode) {
       case _NotifMode.pubs:
         await notifier.setNotifyPubsMapRotation(enabled);
@@ -191,28 +229,6 @@ class _MapAlertsSheetContentState
     }
 
     if (enabled && !previouslyEnabled) {
-      await NotificationService.requestPermissions();
-      if (!context.mounted) return;
-      // Set a default timing if none is configured for this mode.
-      final s = ref.read(playerSettingsProvider);
-      final currentTiming = switch (mode) {
-        _NotifMode.ranked => s.rankedNotifyMinutesBefore,
-        _NotifMode.pubs => s.pubsNotifyMinutesBefore,
-        _NotifMode.wildcard => s.wildcardNotifyMinutesBefore,
-        _NotifMode.mixtape => s.mixtapeNotifyMinutesBefore,
-      };
-      if (currentTiming == 0) {
-        switch (mode) {
-          case _NotifMode.ranked:
-            await notifier.setRankedNotifyMinutesBefore(_kDefaultNotifyMinutes);
-          case _NotifMode.pubs:
-            await notifier.setPubsNotifyMinutesBefore(_kDefaultNotifyMinutes);
-          case _NotifMode.wildcard:
-            await notifier.setWildcardNotifyMinutesBefore(_kDefaultNotifyMinutes);
-          case _NotifMode.mixtape:
-            await notifier.setMixtapeNotifyMinutesBefore(_kDefaultNotifyMinutes);
-        }
-      }
       await _reschedule();
       if (!context.mounted) return;
       if (Theme.of(context).platform == TargetPlatform.iOS) {
@@ -240,7 +256,7 @@ class _MapAlertsSheetContentState
           );
         }
       }
-    } else {
+    } else if (!enabled) {
       await _cancelIfAllOff(disabledMode: mode);
     }
   }

@@ -223,6 +223,8 @@ class _GraphCardState extends State<GraphCard> {
           ),
 
           const SizedBox(height: AppTheme.md),
+          const Divider(color: AppTheme.surface2, height: 1),
+          const SizedBox(height: AppTheme.md),
 
           // ── Week tab strip ────────────────────────────────────────────────
           _WeekTabStrip(
@@ -486,46 +488,50 @@ class _WeekTabStripState extends State<_WeekTabStrip> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    return SingleChildScrollView(
-      controller: _scroll,
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(widget.weeks.length, (i) {
-          final week = widget.weeks[i];
-          final isFuture =
-              widget.isCurrentSeason && now.isBefore(week.start);
-          final isSelected = i == widget.selectedIndex;
+    return Center(
+      child: SingleChildScrollView(
+        controller: _scroll,
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(widget.weeks.length, (i) {
+            final week = widget.weeks[i];
+            final isFuture =
+                widget.isCurrentSeason && now.isBefore(week.start);
+            final isSelected = i == widget.selectedIndex;
 
-          return GestureDetector(
-            onTap: isFuture ? null : () => widget.onSelected(i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppTheme.accent
-                    : isFuture
-                        ? AppTheme.surface2.withAlpha(80)
-                        : AppTheme.surface2,
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: Text(
-                'W${i + 1}',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.normal,
+            return GestureDetector(
+              onTap: isFuture ? null : () => widget.onSelected(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.white
+                      ? AppTheme.accent
                       : isFuture
-                          ? AppTheme.muted.withAlpha(80)
-                          : AppTheme.muted,
+                          ? AppTheme.surface2.withAlpha(80)
+                          : AppTheme.surface2,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  'W${i + 1}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected
+                        ? Colors.white
+                        : isFuture
+                            ? AppTheme.muted.withAlpha(80)
+                            : AppTheme.muted,
+                  ),
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }

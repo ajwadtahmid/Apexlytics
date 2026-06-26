@@ -11,10 +11,10 @@ class SeasonMeta {
     required this.end,
   });
 
-  // "br_ranked_s29_s1" → "S29 Split 1"
+  // "br_ranked_s29_s1" → "Season 29 (Split 1)"
   static String _parseDisplayName(String id) {
     final match = RegExp(r's(\d+)_s(\d+)$').firstMatch(id);
-    if (match != null) return 'S${match.group(1)} Split ${match.group(2)}';
+    if (match != null) return 'Season ${match.group(1)} (Split ${match.group(2)})';
     return id;
   }
 

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../utils/theme.dart';
 
 /// Renders a legend portrait from assets with a two-level fallback:
-///   1. assets/legends/{imageKey}.png
-///   2. assets/legends/placeholder.png
+///   1. assets/legends/{imageKey}.webp
+///   2. assets/legends/placeholder.webp
 ///   3. Coloured box showing the first letter of [displayName]
 class LegendAssetImage extends StatelessWidget {
   final String imageKey;
@@ -24,11 +24,11 @@ class LegendAssetImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/legends/$imageKey.png',
+      'assets/legends/$imageKey.webp',
       fit: fit,
       alignment: alignment,
       errorBuilder: (ctx, err, trace) => Image.asset(
-        'assets/legends/placeholder.png',
+        'assets/legends/placeholder.webp',
         fit: fit,
         errorBuilder: (ctx, err, trace) => Container(
           color: AppTheme.surface2,

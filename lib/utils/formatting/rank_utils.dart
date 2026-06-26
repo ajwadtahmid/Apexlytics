@@ -25,12 +25,12 @@ Color rankColor(PlayerStats stats) {
 
 /// Returns the asset path for the rank icon associated with [stats.rank].
 String rankAssetPath(PlayerStats stats) {
-  if (stats.rank == kApexPredatorRank) return 'assets/ranks/apex_predator.png';
+  if (stats.rank == kApexPredatorRank) return 'assets/ranks/apex_predator.webp';
   return kRankLadder[rankIndex(stats.rankScore)].assetPath;
 }
 
 /// Returns the asset path for a rank tier given predator status and rank index.
 String rankAssetPathByTier(bool isPredator, int tierIndex) {
-  if (isPredator) return 'assets/ranks/apex_predator.png';
+  if (isPredator) return 'assets/ranks/apex_predator.webp';
   return kRankLadder[tierIndex].assetPath;
 }

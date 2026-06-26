@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- V5: Bold orange gradient field with a crisp negative-space apex 'A'.
+       On-theme: accent2 #e8943a -> accent #cf6728. Robinhood/fintech polish.
+       The 'A' and trend bars are knocked out to dark surface. -->
+  <defs>
+    <linearGradient id="v5bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0a14a"/>
+      <stop offset="45%" stop-color="#e8943a"/>
+      <stop offset="100%" stop-color="#c85f24"/>
+    </linearGradient>
+    <radialGradient id="v5glow" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#ffc585" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ffc585" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="v5sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.14"/>
+      <stop offset="35%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#v5bg)"/>
+  <rect width="1024" height="1024" fill="url(#v5glow)"/>
+  <rect width="1024" height="1024" fill="url(#v5sheen)"/>
+
+  <!-- Negative-space apex 'A' knocked out to the app's dark bg -->
+  <g fill="#0d1117">
+    <path d="M 512 248 L 300 776 L 398 776 L 512 478 L 626 776 L 724 776 Z"/>
+    <!-- crossbar with rounded caps -->
+    <rect x="408" y="612" width="208" height="56" rx="28"/>
+  </g>
+  <!-- apex highlight dot in light text color -->
+  <circle cx="512" cy="262" r="22" fill="#e6edf3"/>
+</svg>
