@@ -123,6 +123,11 @@ jobs:
           echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
 
       - name: Generate env code
+        shell: bash
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          CLIENT_TOKEN: ${{ secrets.CLIENT_TOKEN }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: dart run build_runner build
 
       - name: Build Windows
