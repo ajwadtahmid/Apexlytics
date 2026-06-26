@@ -35,9 +35,10 @@ jobs:
         run: |
           echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
           echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
 
       - name: Generate env code
-        run: dart run build_runner build --delete-conflicting-outputs
+        run: dart run build_runner build
 
       - name: Analyze
         run: flutter analyze
@@ -68,9 +69,10 @@ jobs:
         run: |
           echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
           echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
 
       - name: Generate env code
-        run: dart run build_runner build --delete-conflicting-outputs
+        run: dart run build_runner build
 
       - name: Set up Android signing
         env:
@@ -118,9 +120,10 @@ jobs:
         run: |
           echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
           echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
 
       - name: Generate env code
-        run: dart run build_runner build --delete-conflicting-outputs
+        run: dart run build_runner build
 
       - name: Build Windows
         run: flutter build windows --release -v
@@ -181,9 +184,10 @@ jobs:
         run: |
           echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
           echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
 
       - name: Generate env code
-        run: dart run build_runner build --delete-conflicting-outputs
+        run: dart run build_runner build
 
       - name: Build Linux
         run: flutter build linux --release -v
