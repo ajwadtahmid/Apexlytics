@@ -80,10 +80,6 @@ class NotificationService {
   static const _ltmIdBase = 140; // 140–151
   static const _wildcardIdBase = 160; // 160–171
 
-  // Legacy single-notification IDs (pre-batch). Cancelled on every schedule so
-  // they don't linger after an app update.
-  static const _legacyIds = [11, 12, 13, 14];
-
   // iOS keeps only the 64 soonest-firing pending notifications and silently
   // drops the rest, so cap the total well under that. 4 modes × 12 = 48 worst
   // case, but enforce defensively in case modes/horizon grow.
@@ -113,22 +109,9 @@ class NotificationService {
     List<String> favoriteRankedMapNames = const [],
     List<String> favoritePubsMapNames = const [],
   }) async {
-    if (!_supportsScheduled) return;
+    if (!_supportsScheduled || !_initialized) return;
 
-    // Cancel legacy IDs and every per-mode block so stale alerts don't linger.
-    // Other notification channels (IDs 1–10) are left untouched.
-    final idsToCancel = <int>[..._legacyIds];
-    for (final base in [
-      _rankedIdBase,
-      _pubsIdBase,
-      _ltmIdBase,
-      _wildcardIdBase,
-    ]) {
-      for (var i = 0; i < _maxPerMode; i++) {
-        idsToCancel.add(base + i);
-      }
-    }
-    await Future.wait(idsToCancel.map((id) => _plugin.cancel(id: id)));
+    await _plugin.cancelAll();
 
     var budget = _maxTotalScheduled;
 
@@ -250,5 +233,8 @@ class NotificationService {
       ? '${m.map} (${m.eventName})'
       : m.map;
 
-  static Future<void> cancelAll() async => _plugin.cancelAll();
+  static Future<void> cancelAll() async {
+    if (!_initialized) return;
+    await _plugin.cancelAll();
+  }
 }

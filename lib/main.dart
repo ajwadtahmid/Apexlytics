@@ -31,16 +31,8 @@ void main() async {
   tz.initializeTimeZones();
 
   final prefs = await SharedPreferences.getInstance();
-  try {
-    await NotificationService.init();
-  } catch (e) {
-    log.e('NotificationService.init failed', error: e);
-  }
-  try {
-    await BackgroundService.init();
-  } catch (e) {
-    log.e('BackgroundService.init failed', error: e);
-  }
+  // Binder IPC in these plugins blocks the main thread; deferring prevents ANR.
+  unawaited(_initServices());
 
   final apiService = ApiService(prefs);
   unawaited(apiService.warmup());
@@ -80,6 +72,19 @@ void main() async {
       runApp(app);
     },
   );
+}
+
+Future<void> _initServices() async {
+  try {
+    await NotificationService.init();
+  } catch (e) {
+    log.e('NotificationService.init failed', error: e);
+  }
+  try {
+    await BackgroundService.init();
+  } catch (e) {
+    log.e('BackgroundService.init failed', error: e);
+  }
 }
 
 /// Wires [FlutterError.onError] and [PlatformDispatcher.instance.onError]
