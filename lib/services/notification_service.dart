@@ -26,7 +26,7 @@ class NotificationService {
     if (_initialized) return;
     if (!_supportsScheduled) return;
     const androidSettings = AndroidInitializationSettings(
-      '@drawable/ic_launcher_foreground',
+      '@drawable/ic_notification',
     );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,

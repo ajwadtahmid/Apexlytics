@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,7 +18,8 @@ import 'services/notification_service.dart';
 import 'utils/app_logger.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   // Desktop (Linux/Windows/macOS) has no native sqflite binding — use the FFI
   // factory. iOS/Android keep sqflite's native factory.
@@ -49,6 +51,7 @@ void main() async {
     // No DSN configured, or not a supported mobile platform — Sentry's Crashpad
     // backend cannot reliably spawn its handler subprocess on desktop targets.
     _hookFlutterErrors(sentryFlutterHandler: null);
+    FlutterNativeSplash.remove();
     runApp(app);
     return;
   }
@@ -65,6 +68,7 @@ void main() async {
     appRunner: () {
       // Chain our logger after Sentry sets its own FlutterError handler.
       _hookFlutterErrors(sentryFlutterHandler: FlutterError.onError);
+      FlutterNativeSplash.remove();
       runApp(app);
     },
   );

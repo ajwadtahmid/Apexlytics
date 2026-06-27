@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../constants/prefs_keys.dart';
@@ -93,13 +95,24 @@ Future<String?> exportBackup(
   final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
   final defaultFilename = 'apexlytics_$stamp.json';
 
-  final dirPath = await file_selector.getDirectoryPath();
+  if (Platform.isIOS) {
+    // iOS doesn't support folder pickers — write to a temp file and share.
+    final dir = await getTemporaryDirectory();
+    final filePath = '${dir.path}/$defaultFilename';
+    await File(filePath).writeAsString(json);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(filePath, mimeType: 'application/json')]),
+    );
+    log.i('Backup shared: ${payload.length} keys, '
+        '${rankedHistory.length} ranked matches → $filePath');
+    return filePath;
+  }
 
+  final dirPath = await file_selector.getDirectoryPath();
   if (dirPath == null) return null;
 
   final filePath = [dirPath, defaultFilename].join(Platform.pathSeparator);
-  final file = File(filePath);
-  await file.writeAsString(json);
+  await File(filePath).writeAsString(json);
 
   log.i('Backup exported: ${payload.length} keys, '
       '${rankedHistory.length} ranked matches → $filePath');
@@ -132,6 +145,7 @@ Future<ImportResult> importBackup(
       const file_selector.XTypeGroup(
         label: 'JSON files',
         extensions: ['json'],
+        uniformTypeIdentifiers: ['public.json'],
       ),
     ],
   );

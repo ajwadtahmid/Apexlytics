@@ -59,6 +59,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - [Support & Feedback](#support--feedback)
 - [FAQ](#faq)
 - [Known Limitations](#known-limitations)
+- [Changelog](#changelog)
 - [Credits & Acknowledgments](#credits--acknowledgments)
 - [License](#license)
 
@@ -69,6 +70,8 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **Know the Map** — See which map is active now and preview upcoming rotations. Get instant notifications before the map changes so you're never caught off-guard mid-game.
 
 - **Track Your Grind** — Look up any player's rank and legend statistics. Visualize your weekly RP gains with interactive graphs and compare head-to-head performance with other players across ranked seasons and splits.
+
+- **Ranked Breakdown** *(limited availability)* — A full deep-dive into your ranked performance: match history, RP chart, per-map and per-legend breakdown tables, time-of-day performance, and highlight cards for your best and worst maps. Currently available to a small number of users.
 
 - **Favorite Players & Compare** — Add players to your favorites and track their RP progression in real-time. Compare your stats side-by-side with favorited players to monitor competition and benchmark your climb.
 
@@ -94,7 +97,8 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 ## Features
 
 - **Player Stats** — Rank, RP, current legend, equipped trackers, and weekly RP gain tracking. Supports search by name or numeric UID.
-- **Weekly Ranked History** — Interactive graph showing RP gains per week with season/split selector dropdown and week-by-week navigation (W1, W2, W3...). Tracks unlimited snapshots for power users playing 10+ matches daily.
+- **Weekly Ranked History** — Interactive graph showing RP gains per week with season/split selector and week-by-week navigation. Tracks unlimited snapshots for power users playing 10+ matches daily.
+- **Ranked Breakdown** *(requires active player profile)* — Full ranked deep-dive: match list, RP chart, per-map and per-legend breakdown tables, time-of-day performance chart, sessions summary, and highlight cards for best/worst map. Auto-refreshes every 10 minutes while the app is open.
 - **Legend Stats** — Kill counts and tracker values per legend, merged across sessions and sorted by most-played.
 - **Gun Stats** — Detailed weapon performance including kills, damage, and damage per kill.
 - **Map Rotations** — Live countdown for Ranked, Pubs, and Mixtape. Shows current map, time remaining, and what loads next. Switches automatically when the rotation changes.
@@ -104,9 +108,9 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **Player Compare** — Side-by-side comparison of ranked stats or per-legend trackers with any searched player.
 - **Favorites** — Star players to pin them to the search screen for one-tap access.
 - **Multiple Player Profiles** — Manage and quickly switch between different player profiles. Perfect for tracking friends, alternate accounts, or monitoring competition.
-- **Map Rotation Alerts** — Get notified 5, 10, or 15 minutes before the map changes in-game. Choose which maps to be notified about (ranked, pubs, mixtape).
+- **Map Rotation Alerts** — Get notified 5, 10, or 15 minutes before the map changes in-game. Choose which maps to be notified about (ranked, pubs, mixtape). Notifications include the exact map change time and date.
 - **Selective Mode Tracking** — Choose which modes to monitor: Ranked, Pubs, Mixtape.
-- **Background Notifications** — Alerts fire even when the app is closed (via background fetch on iOS/Android).
+- **Background Notifications** — Alerts are batch-scheduled ahead of time and fire even when the app is closed (via background fetch on iOS/Android).
 - **View Cached Stats Offline** — All player stats are cached locally on your device. Search for a player online, and their stats remain accessible even without internet—perfect for checking during downtime.
 - **No account required** — Data is fetched using your public in-game name or UID.
 - **Data Backup & Restore** — Export your player profiles, favorites, and tracked data as a backup file. Restore from backup anytime to recover your data or switch devices seamlessly.
@@ -195,6 +199,12 @@ Have a question or found a bug? Let us know:
 - **Email**: [support@ajwadtahmid.com](mailto:support@ajwadtahmid.com)
 - **Bug reports & features**: [GitHub Issues](https://github.com/ajwadtahmid/Apexlytics/issues)
 - **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/Apexlytics/discussions)
+
+---
+
+## Changelog
+
+Full release history and notes are available on the [GitHub Releases](https://github.com/ajwadtahmid/Apexlytics/releases) page.
 
 ---
 
