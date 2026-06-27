@@ -31,8 +31,16 @@ void main() async {
   tz.initializeTimeZones();
 
   final prefs = await SharedPreferences.getInstance();
-  await NotificationService.init();
-  await BackgroundService.init();
+  try {
+    await NotificationService.init();
+  } catch (e) {
+    log.e('NotificationService.init failed', error: e);
+  }
+  try {
+    await BackgroundService.init();
+  } catch (e) {
+    log.e('BackgroundService.init failed', error: e);
+  }
 
   final apiService = ApiService(prefs);
   unawaited(apiService.warmup());
