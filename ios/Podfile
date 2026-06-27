@@ -42,6 +42,9 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['COPY_PHASE_STRIP'] = 'NO'
       config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
+      if config.name == 'Release' || config.name == 'Profile'
+        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+      end
     end
   end
 end
