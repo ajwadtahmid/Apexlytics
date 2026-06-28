@@ -10,6 +10,7 @@ class SurfaceCard extends StatelessWidget {
     this.radius,
     this.border,
     this.clip = Clip.none,
+    this.onTap,
   });
 
   final Widget child;
@@ -18,19 +19,23 @@ class SurfaceCard extends StatelessWidget {
   final double? radius;
   final BoxBorder? border;
   final Clip clip;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final br = BorderRadius.circular(radius ?? AppTheme.radiusMd);
+    final card = Container(
       padding: padding,
       margin: margin,
       clipBehavior: clip,
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(radius ?? AppTheme.radiusMd),
+        borderRadius: br,
         border: border ?? Border.all(color: AppTheme.surface2, width: 1),
       ),
       child: child,
     );
+    if (onTap == null) return card;
+    return InkWell(onTap: onTap, borderRadius: br, child: card);
   }
 }

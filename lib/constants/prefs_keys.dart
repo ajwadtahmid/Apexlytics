@@ -52,4 +52,9 @@ class PrefsKeys {
   /// Builds UID-scoped key for legend stats: `legend_stats_<uid>` or `legend_stats` (legacy).
   static String legendStatsKeyFor(String? uid) =>
       uid?.isNotEmpty == true ? 'legend_stats_$uid' : 'legend_stats';
+
+  /// Builds UID-scoped key for the ranked goal (a [kRankLadder] index the player
+  /// is climbing toward). Absent = no goal set; the card falls back to tracking
+  /// the next division automatically.
+  static String rankGoalKeyFor(String uid) => 'rank_goal_$uid';
 }

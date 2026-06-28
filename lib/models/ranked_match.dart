@@ -7,6 +7,11 @@ library;
 
 import 'dart:convert';
 
+/// RP swings at or beyond this magnitude are rank-reset artifacts
+/// (end-of-split/season placement drops), not real per-game RP. The match still
+/// counts as a played game; only its RP value is neutralized in RP aggregates.
+const int kRankedOutlierThreshold = 1000;
+
 /// One entry from a match's `gameData` array.
 ///
 /// The `key` is unstable — the same stat shows up under different keys across
@@ -71,6 +76,16 @@ class RankedMatch {
   /// genuine ranked game that nets exactly 0 RP — unavoidable, no API signal)
   /// have `rpChange == 0` and are excluded from ranked aggregates.
   bool get isRanked => isBattleRoyale && rpChange != 0;
+
+  /// True when this match's [rpChange] is a rank-reset artifact rather than a
+  /// real per-game swing. The game itself still counts (kills, damage, etc.).
+  bool get isRankedOutlier =>
+      isRanked && rpChange.abs() >= kRankedOutlierThreshold;
+
+  /// [rpChange] with reset artifacts zeroed out. Used in every RP aggregate
+  /// (Overview, Legends, Maps, Sessions, Time of Day). The raw [rpChange] is
+  /// only shown in the History tab and the RP progression graph.
+  int get effectiveRpChange => isRankedOutlier ? 0 : rpChange;
 
   /// Looks up a tracker value by its stable human [name] (case-insensitive).
   /// Returns null when the match didn't carry that tracker.

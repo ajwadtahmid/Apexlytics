@@ -29,7 +29,9 @@ class RankedMatchList extends StatefulWidget {
 enum _Filter { all, ranked, casual }
 
 class _RankedMatchListState extends State<RankedMatchList> {
-  _Filter _filter = _Filter.all;
+  // Default to Ranked — it's the headline view; All/Casual are one tap away.
+  _Filter _filter = _Filter.ranked;
+  _HistorySort _sort = _HistorySort.date;
 
   List<RankedMatch> get _visible => switch (_filter) {
         _Filter.all => widget.matches,
@@ -37,31 +39,93 @@ class _RankedMatchListState extends State<RankedMatchList> {
         _Filter.casual => widget.matches.where((m) => !m.isRanked).toList(),
       };
 
+  MatchGrouping? get _grouping => switch (_sort) {
+        _HistorySort.date => null,
+        _HistorySort.legend => MatchGrouping(
+            keyOf: (m) => m.legend,
+            nameOf: (m) => m.legend,
+          ),
+        _HistorySort.map => MatchGrouping(
+            keyOf: (m) => m.mapKey,
+            nameOf: (m) => rankedMapName(m.mapKey),
+          ),
+      };
+
   @override
   Widget build(BuildContext context) {
-    final items = _buildItems(_visible);
+    return MatchHistoryList(
+      matches: _visible,
+      onRefresh: widget.onRefresh,
+      emptyLabel: 'No games in this filter',
+      grouping: _grouping,
+      header: _HistoryControls(
+        filter: _filter,
+        sort: _sort,
+        onFilterTap: () => setState(() => _filter = _nextFilter(_filter)),
+        onSortTap: () => setState(() => _sort = _nextSort(_sort)),
+      ),
+    );
+  }
+}
+
+/// How to bucket matches when not grouping by day. [keyOf] decides which
+/// section a match belongs to; [nameOf] is that section's display title.
+class MatchGrouping {
+  final String Function(RankedMatch) keyOf;
+  final String Function(RankedMatch) nameOf;
+  const MatchGrouping({required this.keyOf, required this.nameOf});
+}
+
+/// Day-grouped match list with session breaks and tap-through detail sheets.
+/// Reused by the History tab (with a filter bar header) and the legend/map
+/// drill-down screens (no header, pre-filtered list).
+///
+/// When [grouping] is supplied, matches are instead sectioned by that entity
+/// (e.g. map within a legend), each section headed by its games/net-RP/avg-RP
+/// summary and ordered by net RP descending. Day grouping is the default.
+class MatchHistoryList extends StatelessWidget {
+  final List<RankedMatch> matches; // newest first
+  final Future<void> Function() onRefresh;
+
+  /// Optional widget pinned above the scrolling list (e.g. the filter bar).
+  final Widget? header;
+  final String emptyLabel;
+
+  /// Null → group by day (default). Set → group into entity sections.
+  final MatchGrouping? grouping;
+
+  const MatchHistoryList({
+    super.key,
+    required this.matches,
+    required this.onRefresh,
+    this.header,
+    this.emptyLabel = 'No games yet',
+    this.grouping,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final g = grouping;
+    final items = g == null ? _buildItems(matches) : _buildGrouped(matches, g);
 
     return Column(
       children: [
-        _FilterBar(
-          selected: _filter,
-          onTap: () => setState(() => _filter = _nextFilter(_filter)),
-        ),
+        ?header,
         Expanded(
           child: RefreshIndicator(
             color: AppTheme.accent,
-            onRefresh: widget.onRefresh,
+            onRefresh: onRefresh,
             child: items.isEmpty
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    children: const [
+                    children: [
                       Padding(
-                        padding: EdgeInsets.all(AppTheme.xl),
+                        padding: const EdgeInsets.all(AppTheme.xl),
                         child: Center(
                           child: Text(
-                            'No games in this filter',
-                            style:
-                                TextStyle(color: AppTheme.muted, fontSize: 13),
+                            emptyLabel,
+                            style: const TextStyle(
+                                color: AppTheme.muted, fontSize: 13),
                           ),
                         ),
                       ),
@@ -73,6 +137,7 @@ class _RankedMatchListState extends State<RankedMatchList> {
                     itemCount: items.length,
                     itemBuilder: (_, i) => switch (items[i]) {
                       final _DayHeaderItem h => _DayHeader(item: h),
+                      final _GroupHeaderItem h => _GroupHeader(item: h),
                       final _SessionBreakItem s => _SessionBreak(gapSecs: s.gapSecs),
                       final _MatchItem m => _MatchRow(match: m.match),
                     },
@@ -99,7 +164,7 @@ class _RankedMatchListState extends State<RankedMatchList> {
     }
 
     for (final bucket in dayBuckets) {
-      final netRp = bucket.fold<int>(0, (a, m) => a + m.rpChange);
+      final netRp = bucket.fold<int>(0, (a, m) => a + m.effectiveRpChange);
       final hasRanked = bucket.any((m) => m.isRanked);
       final day = bucket.first.endTime.toLocal();
       items.add(_DayHeaderItem(
@@ -122,6 +187,37 @@ class _RankedMatchListState extends State<RankedMatchList> {
     }
     return items;
   }
+
+  /// Sections matches by [g], ordered by net (effective) RP descending, with
+  /// matches newest-first inside each section. No session breaks in this mode.
+  List<_HistoryItem> _buildGrouped(List<RankedMatch> matches, MatchGrouping g) {
+    final byKey = <String, List<RankedMatch>>{};
+    for (final m in matches) {
+      byKey.putIfAbsent(g.keyOf(m), () => []).add(m);
+    }
+
+    final groups = byKey.values.map((ms) {
+      final sorted = ms.toList()
+        ..sort((a, b) => b.endTime.compareTo(a.endTime));
+      final netRp = sorted.fold<int>(0, (a, m) => a + m.effectiveRpChange);
+      return (name: g.nameOf(sorted.first), matches: sorted, netRp: netRp);
+    }).toList()
+      ..sort((a, b) => b.netRp.compareTo(a.netRp));
+
+    final items = <_HistoryItem>[];
+    for (final grp in groups) {
+      items.add(_GroupHeaderItem(
+        name: grp.name,
+        games: grp.matches.length,
+        netRp: grp.netRp,
+        isFirst: identical(grp, groups.first),
+      ));
+      for (final m in grp.matches) {
+        items.add(_MatchItem(m));
+      }
+    }
+    return items;
+  }
 }
 
 // ── Item model ──────────────────────────────────────────────────────────────
@@ -139,6 +235,18 @@ class _DayHeaderItem extends _HistoryItem {
       required this.netRp,
       required this.hasRanked,
       required this.games,
+      required this.isFirst});
+}
+
+class _GroupHeaderItem extends _HistoryItem {
+  final String name;
+  final int games;
+  final int netRp;
+  final bool isFirst;
+  _GroupHeaderItem(
+      {required this.name,
+      required this.games,
+      required this.netRp,
       required this.isFirst});
 }
 
@@ -166,18 +274,47 @@ const _filterIcons = {
   _Filter.casual: Icons.sports_esports,
 };
 
+// Cycle starts on Ranked (the default), then All, then Casual.
 _Filter _nextFilter(_Filter f) => switch (f) {
-  _Filter.all => _Filter.ranked,
-  _Filter.ranked => _Filter.casual,
-  _Filter.casual => _Filter.all,
+  _Filter.ranked => _Filter.all,
+  _Filter.all => _Filter.casual,
+  _Filter.casual => _Filter.ranked,
 };
 
-/// Cycling "Filter:" pill, matching the Legends/Maps sort control for a
-/// cohesive look across the ranked tabs.
-class _FilterBar extends StatelessWidget {
-  final _Filter selected;
-  final VoidCallback onTap;
-  const _FilterBar({required this.selected, required this.onTap});
+enum _HistorySort { date, legend, map }
+
+const _sortLabels = {
+  _HistorySort.date: 'Date',
+  _HistorySort.legend: 'Legend',
+  _HistorySort.map: 'Map',
+};
+
+const _sortIcons = {
+  _HistorySort.date: Icons.calendar_today,
+  _HistorySort.legend: Icons.person_outline,
+  _HistorySort.map: Icons.map_outlined,
+};
+
+_HistorySort _nextSort(_HistorySort s) => switch (s) {
+  _HistorySort.date => _HistorySort.legend,
+  _HistorySort.legend => _HistorySort.map,
+  _HistorySort.map => _HistorySort.date,
+};
+
+/// History control strip: filter pill pinned left, sort pill pinned right.
+/// Both cycle on tap, mirroring the Legends/Maps sort control's pill styling.
+class _HistoryControls extends StatelessWidget {
+  final _Filter filter;
+  final _HistorySort sort;
+  final VoidCallback onFilterTap;
+  final VoidCallback onSortTap;
+
+  const _HistoryControls({
+    required this.filter,
+    required this.sort,
+    required this.onFilterTap,
+    required this.onSortTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -188,38 +325,73 @@ class _FilterBar extends StatelessWidget {
         border: Border(bottom: BorderSide(color: AppTheme.surface2)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          const Text('Filter:',
-              style: TextStyle(color: AppTheme.muted, fontSize: 12)),
-          const SizedBox(width: 4),
-          GestureDetector(
-            onTap: onTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.surface2,
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(_filterIcons[selected], size: 13, color: AppTheme.accent),
-                  const SizedBox(width: 4),
-                  Text(
-                    _filterLabels[selected]!,
-                    style: const TextStyle(
-                      color: AppTheme.accent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          _ControlPill(
+            prefix: 'Filter:',
+            icon: _filterIcons[filter]!,
+            label: _filterLabels[filter]!,
+            onTap: onFilterTap,
+          ),
+          const Spacer(),
+          _ControlPill(
+            prefix: 'Sort:',
+            icon: _sortIcons[sort]!,
+            label: _sortLabels[sort]!,
+            onTap: onSortTap,
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A labelled, cycling pill: `prefix [icon value]`.
+class _ControlPill extends StatelessWidget {
+  final String prefix;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ControlPill({
+    required this.prefix,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(prefix, style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+        const SizedBox(width: 4),
+        GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.surface2,
+              borderRadius: BorderRadius.circular(100),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 13, color: AppTheme.accent),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppTheme.accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -292,6 +464,74 @@ class _DayHeader extends StatelessWidget {
                   ),
                 ),
               ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Group header (legend/map drill-down sections) ───────────────────────────
+
+class _GroupHeader extends StatelessWidget {
+  final _GroupHeaderItem item;
+  const _GroupHeader({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final positive = item.netRp >= 0;
+    final color = positive ? AppTheme.green : AppTheme.red;
+    final avg = item.games == 0 ? 0.0 : item.netRp / item.games;
+    return Column(
+      children: [
+        if (!item.isFirst)
+          const Padding(
+            padding: EdgeInsets.only(top: AppTheme.sm),
+            child: Divider(color: AppTheme.surface2, height: 1, thickness: 1),
+          ),
+        Padding(
+          padding: EdgeInsets.only(
+              top: item.isFirst ? AppTheme.sm : AppTheme.md, bottom: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      '${item.games} games · ${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(1)} avg',
+                      style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(30),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                ),
+                child: Text(
+                  '${positive ? '+' : ''}${formatNumber(item.netRp)} RP',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -385,21 +625,30 @@ class _MatchRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 if (ranked)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: rpColor.withAlpha(30),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                    child: Text(
-                      '${up ? '+' : ''}${match.rpChange} RP',
-                      style: TextStyle(
-                        color: rpColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (match.isRankedOutlier) ...[
+                        const _OutlierTag(),
+                        const SizedBox(width: 4),
+                      ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: rpColor.withAlpha(30),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        ),
+                        child: Text(
+                          '${up ? '+' : ''}${match.rpChange} RP',
+                          style: TextStyle(
+                            color: rpColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   )
                 else
                   const _CasualTag(),
@@ -447,6 +696,31 @@ class _CasualTag extends StatelessWidget {
           color: AppTheme.muted,
           fontSize: 11,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Muted pill flagging a rank-reset RP swing. Matches the RP pill's shape but
+/// stays neutral, signalling the value is excluded from every RP aggregate.
+class _OutlierTag extends StatelessWidget {
+  const _OutlierTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: const Text(
+        'Outlier',
+        style: TextStyle(
+          color: AppTheme.muted,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
@@ -530,6 +804,21 @@ class _MatchDetailSheet extends StatelessWidget {
                   ),
                 ],
               ),
+              if (match.isRankedOutlier) ...[
+                const SizedBox(height: 6),
+                const Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 13, color: AppTheme.muted),
+                    SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Outlier Ranked Points: excluded from all calculation',
+                        style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: AppTheme.sm),
             ],
             // Meta line.

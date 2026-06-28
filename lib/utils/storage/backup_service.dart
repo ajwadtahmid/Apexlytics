@@ -96,7 +96,6 @@ Future<String?> exportBackup(
   final defaultFilename = 'apexlytics_$stamp.json';
 
   if (Platform.isIOS) {
-    // iOS doesn't support folder pickers — write to a temp file and share.
     final dir = await getTemporaryDirectory();
     final filePath = '${dir.path}/$defaultFilename';
     await File(filePath).writeAsString(json);

@@ -7,7 +7,9 @@ import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
+import '../ranked_entity_history_screen.dart';
 import 'map_rp_badge.dart';
+import 'ranked_match_list.dart' show MatchGrouping;
 
 enum _Sort { totalRp, games, avgRp }
 
@@ -98,22 +100,49 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
           for (var i = 0; i < rows.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: AppTheme.sm),
-              child: _LegendCard(rank: i + 1, row: rows[i]),
+              child: _LegendCard(
+                rank: i + 1,
+                row: rows[i],
+                onTap: () => _openHistory(context, rows[i]),
+              ),
             ),
         ],
       ),
     );
+  }
+
+  void _openHistory(BuildContext context, LegendBreakdown row) {
+    final games = widget.matches.where((m) => m.legend == row.legend).toList()
+      ..sort((a, b) => b.endTime.compareTo(a.endTime));
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => RankedEntityHistoryScreen(
+        title: row.legend,
+        subtitle:
+            '${row.games} ranked games · ${_signedAvg(row.avgRpPerGame)} RP/game',
+        matches: games,
+        onRefresh: widget.onRefresh,
+        groupLabel: 'map',
+        grouping: MatchGrouping(
+          keyOf: (m) => m.mapKey,
+          nameOf: (m) => rankedMapName(m.mapKey),
+        ),
+      ),
+    ));
   }
 }
 
 class _LegendCard extends StatelessWidget {
   final int rank;
   final LegendBreakdown row;
-  const _LegendCard({required this.rank, required this.row});
+  final VoidCallback onTap;
+  const _LegendCard({required this.rank, required this.row, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+      child: Container(
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -185,6 +214,7 @@ class _LegendCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -261,18 +291,42 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
           for (var i = 0; i < rows.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: AppTheme.sm),
-              child: _MapCard(rank: i + 1, row: rows[i]),
+              child: _MapCard(
+                rank: i + 1,
+                row: rows[i],
+                onTap: () => _openHistory(context, rows[i]),
+              ),
             ),
         ],
       ),
     );
+  }
+
+  void _openHistory(BuildContext context, MapBreakdown row) {
+    final games = widget.matches.where((m) => m.mapKey == row.mapKey).toList()
+      ..sort((a, b) => b.endTime.compareTo(a.endTime));
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => RankedEntityHistoryScreen(
+        title: row.displayName,
+        subtitle:
+            '${row.games} ranked games · ${_signedAvg(row.avgRpPerGame)} RP/game',
+        matches: games,
+        onRefresh: widget.onRefresh,
+        groupLabel: 'legend',
+        grouping: MatchGrouping(
+          keyOf: (m) => m.legend,
+          nameOf: (m) => m.legend,
+        ),
+      ),
+    ));
   }
 }
 
 class _MapCard extends StatelessWidget {
   final int rank;
   final MapBreakdown row;
-  const _MapCard({required this.rank, required this.row});
+  final VoidCallback onTap;
+  const _MapCard({required this.rank, required this.row, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -283,6 +337,7 @@ class _MapCard extends StatelessWidget {
     return SurfaceCard(
       padding: EdgeInsets.zero,
       clip: Clip.antiAlias,
+      onTap: onTap,
       child: SizedBox(
         height: 132,
         child: Stack(

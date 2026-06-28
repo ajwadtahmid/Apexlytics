@@ -4,8 +4,10 @@
 /// isolation. The UI layer (Phase 2+) consumes these view models directly.
 library;
 
+import '../../constants/rank_constants.dart';
 import '../../constants/ranked_map_constants.dart';
 import '../../models/ranked_match.dart';
+import '../formatting/rank_utils.dart' show rankIndex;
 
 /// Default gap that separates one play session from the next.
 const Duration kSessionGap = Duration(hours: 2);
@@ -42,6 +44,7 @@ class RankedSummary {
     required this.totalLengthSecs,
   });
 
+  double get avgRpPerGame => games == 0 ? 0 : netRp / games;
   double get avgKills => games == 0 ? 0 : totalKills / games;
   double get avgDamage => games == 0 ? 0 : totalDamage / games;
   double get avgGameLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
@@ -66,7 +69,7 @@ RankedSummary summarize(List<RankedMatch> all) {
   var newest = matches.first;
   var netRp = 0, kills = 0, damage = 0, length = 0;
   for (final m in matches) {
-    netRp += m.rpChange;
+    netRp += m.effectiveRpChange;
     kills += m.kills;
     damage += m.damage;
     length += m.lengthSecs;
@@ -117,7 +120,7 @@ List<LegendBreakdown> legendBreakdowns(List<RankedMatch> all) {
   final out = byLegend.entries.map((e) {
     var rp = 0, kills = 0, damage = 0, length = 0;
     for (final m in e.value) {
-      rp += m.rpChange;
+      rp += m.effectiveRpChange;
       kills += m.kills;
       damage += m.damage;
       length += m.lengthSecs;
@@ -167,7 +170,7 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> all) {
   final out = byMap.entries.map((e) {
     var rp = 0, kills = 0, damage = 0;
     for (final m in e.value) {
-      rp += m.rpChange;
+      rp += m.effectiveRpChange;
       kills += m.kills;
       damage += m.damage;
     }
@@ -193,6 +196,9 @@ class RankedSession {
   final int totalKills;
   final int totalDamage;
 
+  /// The matches in this session, newest first — drives the session drill-down.
+  final List<RankedMatch> matches;
+
   const RankedSession({
     required this.start,
     required this.end,
@@ -200,7 +206,31 @@ class RankedSession {
     required this.netRp,
     required this.totalKills,
     required this.totalDamage,
+    required this.matches,
   });
+
+  /// Wall-clock span of the session (first start → last end).
+  Duration get duration => end.difference(start);
+
+  /// Legend with the highest effective RP this session, or null when empty.
+  /// Ties break toward the legend with more games, then alphabetically.
+  String? get bestLegend {
+    if (matches.isEmpty) return null;
+    final rp = <String, int>{};
+    final count = <String, int>{};
+    for (final m in matches) {
+      rp[m.legend] = (rp[m.legend] ?? 0) + m.effectiveRpChange;
+      count[m.legend] = (count[m.legend] ?? 0) + 1;
+    }
+    final keys = rp.keys.toList()
+      ..sort((a, b) {
+        final byRp = rp[b]!.compareTo(rp[a]!);
+        if (byRp != 0) return byRp;
+        final byGames = count[b]!.compareTo(count[a]!);
+        return byGames != 0 ? byGames : a.compareTo(b);
+      });
+    return keys.first;
+  }
 }
 
 /// Groups ranked matches into sessions separated by gaps larger than [gap].
@@ -219,7 +249,7 @@ List<RankedSession> sessionize(
   void flush() {
     var rp = 0, kills = 0, damage = 0;
     for (final m in bucket) {
-      rp += m.rpChange;
+      rp += m.effectiveRpChange;
       kills += m.kills;
       damage += m.damage;
     }
@@ -230,6 +260,8 @@ List<RankedSession> sessionize(
       netRp: rp,
       totalKills: kills,
       totalDamage: damage,
+      // bucket is chronological; expose newest-first for the drill-down list.
+      matches: bucket.reversed.toList(),
     ));
   }
 
@@ -246,6 +278,93 @@ List<RankedSession> sessionize(
   flush();
 
   return sessions.reversed.toList();
+}
+
+// ── Rank progress (promotion tracker + optional goal) ───────────────────────
+
+/// Where the player sits on the rank ladder and how far the next division — and
+/// an optional user-set goal — are at their current RP-per-game pace.
+///
+/// Pace uses the window's effective RP/game (reset outliers already neutralized),
+/// so end-of-split placement drops don't poison the estimate.
+/// Sentinel [goalIndex] meaning "Apex Predator" — not a real [kRankLadder]
+/// index but stored the same way in SharedPreferences.
+const int kPredatorGoalIndex = 99;
+
+class RankProgress {
+  final int currentRp;
+  final int currentIndex; // index into kRankLadder
+  final double avgRpPerGame;
+  final int? goalIndex; // user goal ladder index; null = no goal set
+  final int? predatorRp; // live cutoff from /predator, null if unavailable
+
+  const RankProgress({
+    required this.currentRp,
+    required this.currentIndex,
+    required this.avgRpPerGame,
+    required this.goalIndex,
+    this.predatorRp,
+  });
+
+  factory RankProgress.from(
+    RankedSummary summary, {
+    int? goalIndex,
+    int? predatorRp,
+  }) {
+    final avg = summary.games == 0 ? 0.0 : summary.netRp / summary.games;
+    return RankProgress(
+      currentRp: summary.currentRp,
+      currentIndex: rankIndex(summary.currentRp),
+      avgRpPerGame: avg,
+      goalIndex: goalIndex,
+      predatorRp: predatorRp,
+    );
+  }
+
+  RankDivision get current => kRankLadder[currentIndex];
+
+  /// The immediate next division, or null at the top of the ladder (Master —
+  /// Apex Predator is a live ladder cutoff with no fixed RP threshold).
+  RankDivision? get next =>
+      currentIndex + 1 < kRankLadder.length ? kRankLadder[currentIndex + 1] : null;
+
+  bool get isPredatorGoal => goalIndex == kPredatorGoalIndex;
+
+  /// The user's goal division, or null when no goal is set / goal is already
+  /// surpassed. Predator goals use the live cutoff RP.
+  RankDivision? get goal {
+    final i = goalIndex;
+    if (i == null) return null;
+    if (isPredatorGoal) {
+      final rp = predatorRp;
+      if (rp == null || rp <= 0) return null;
+      return RankDivision(kApexPredatorRank, null, rp, kPredatorColor);
+    }
+    if (i <= currentIndex || i >= kRankLadder.length) return null;
+    return kRankLadder[i];
+  }
+
+  bool get atTop => next == null;
+
+  /// Fill fraction (0..1) between the current division floor and the next.
+  double get progressToNext {
+    final n = next;
+    if (n == null) return 1;
+    final span = n.rp - current.rp;
+    if (span <= 0) return 1;
+    return ((currentRp - current.rp) / span).clamp(0.0, 1.0);
+  }
+
+  int rpTo(RankDivision div) => div.rp - currentRp;
+
+  /// Games to reach [div] at the current pace. 0 if already there; null when the
+  /// pace is flat/negative (no honest estimate).
+  int? gamesTo(RankDivision div) {
+    final rp = rpTo(div);
+    if (rp <= 0) return 0;
+    if (avgRpPerGame <= 0) return null;
+    return (rp / avgRpPerGame).ceil();
+  }
 }
 
 // ── Tracker coverage / aggregation (the dynamic stat row) ───────────────────
@@ -405,7 +524,7 @@ List<HourBucket> timeOfDayBuckets(List<RankedMatch> all) {
   for (final m in all.where((m) => m.isRanked)) {
     final hour = m.startTime.toLocal().hour;
     games[hour] = (games[hour] ?? 0) + 1;
-    rp[hour] = (rp[hour] ?? 0) + m.rpChange;
+    rp[hour] = (rp[hour] ?? 0) + m.effectiveRpChange;
   }
   final hours = games.keys.toList()..sort();
   return [

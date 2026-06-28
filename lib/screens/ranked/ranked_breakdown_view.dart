@@ -14,6 +14,7 @@ import 'widgets/ranked_period_selector.dart'
     show RankedSplitDropdown, RankedWeekStrip;
 import 'widgets/ranked_rp_chart.dart';
 import 'widgets/ranked_sessions_card.dart';
+import 'widgets/ranked_stats_card.dart';
 import 'widgets/ranked_summary_header.dart';
 import 'widgets/ranked_time_of_day_chart.dart';
 
@@ -133,6 +134,7 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
                     child: TabBarView(
                       children: [
                         _OverviewTab(
+                          uid: widget.uid,
                           summary: summary,
                           matches: filtered,
                           onRefresh: _refresh,
@@ -165,11 +167,13 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
 }
 
 class _OverviewTab extends StatelessWidget {
+  final String uid;
   final RankedSummary summary;
   final List<RankedMatch> matches;
   final Future<void> Function() onRefresh;
 
   const _OverviewTab({
+    required this.uid,
     required this.summary,
     required this.matches,
     required this.onRefresh,
@@ -183,13 +187,15 @@ class _OverviewTab extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
-          RankedSummaryHeader(summary: summary),
+          RankedSummaryHeader(summary: summary, uid: uid),
+          const SizedBox(height: AppTheme.md),
+          RankedStatsCard(summary: summary),
           const SizedBox(height: AppTheme.md),
           RankedRpChart(matches: matches),
           const SizedBox(height: AppTheme.md),
           RankedOverviewHighlights(matches: matches),
           const SizedBox(height: AppTheme.md),
-          RankedSessionsCard(matches: matches),
+          RankedSessionsCard(matches: matches, onRefresh: onRefresh),
           const SizedBox(height: AppTheme.md),
           RankedTimeOfDayChart(matches: matches),
           const SizedBox(height: AppTheme.lg),
