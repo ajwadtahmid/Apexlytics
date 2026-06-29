@@ -44,6 +44,7 @@ Future<List<LegendStat>> mergeLegendStats(
 
   if (incoming.isEmpty) return stored;
 
+
   final now = DateTime.now();
   final map = <String, LegendStat>{
     for (final legendStat in stored) legendStat.name: legendStat,

@@ -225,7 +225,21 @@ class LegendStat {
 
   int get killCount {
     for (final t in trackers) {
-      if (t.key == 'kills') return t.value;
+      if (t.key == 'kills' || t.key == 'career_kills') return t.value;
+    }
+    return 0;
+  }
+
+  int get damageDealt {
+    for (final t in trackers) {
+      if (t.key == 'damage') return t.value;
+    }
+    return 0;
+  }
+
+  int get winsCount {
+    for (final t in trackers) {
+      if (t.key == 'wins' || t.key == 'career_wins') return t.value;
     }
     return 0;
   }

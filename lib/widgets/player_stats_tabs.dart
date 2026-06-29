@@ -6,7 +6,7 @@ import '../utils/theme.dart';
 import 'legend_stats_section.dart';
 import 'weapon_stats_section.dart';
 
-enum _LegendSortOrder { byNumber, byLastPlayed, byRole }
+enum _LegendSortOrder { byLastPlayed, byKills, byDamage, byWins, byRole }
 
 class PlayerStatsTabs extends StatefulWidget {
   final List<LegendStat> legendStats;
@@ -73,12 +73,37 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
 
   List<LegendStat> _computeSorted() {
     final list = List<LegendStat>.from(widget.legendStats);
+    final originalIndex = {for (var i = 0; i < list.length; i++) list[i].name: i};
     switch (_sort) {
-      case _LegendSortOrder.byNumber:
+      case _LegendSortOrder.byKills:
         list.sort((a, b) {
-          final na = kLegendsByName[a.name.toLowerCase()]?.number ?? 999;
-          final nb = kLegendsByName[b.name.toLowerCase()]?.number ?? 999;
-          return na.compareTo(nb);
+          final k = b.killCount.compareTo(a.killCount);
+          if (k != 0) return k;
+          final d = b.damageDealt.compareTo(a.damageDealt);
+          if (d != 0) return d;
+          final w = b.winsCount.compareTo(a.winsCount);
+          if (w != 0) return w;
+          return originalIndex[a.name]!.compareTo(originalIndex[b.name]!);
+        });
+      case _LegendSortOrder.byDamage:
+        list.sort((a, b) {
+          final d = b.damageDealt.compareTo(a.damageDealt);
+          if (d != 0) return d;
+          final k = b.killCount.compareTo(a.killCount);
+          if (k != 0) return k;
+          final w = b.winsCount.compareTo(a.winsCount);
+          if (w != 0) return w;
+          return originalIndex[a.name]!.compareTo(originalIndex[b.name]!);
+        });
+      case _LegendSortOrder.byWins:
+        list.sort((a, b) {
+          final w = b.winsCount.compareTo(a.winsCount);
+          if (w != 0) return w;
+          final k = b.killCount.compareTo(a.killCount);
+          if (k != 0) return k;
+          final d = b.damageDealt.compareTo(a.damageDealt);
+          if (d != 0) return d;
+          return originalIndex[a.name]!.compareTo(originalIndex[b.name]!);
         });
       case _LegendSortOrder.byRole:
         list.sort((a, b) {
@@ -87,7 +112,6 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
           final roleIdxA = kRoleDisplayOrder.indexOf(roleA);
           final roleIdxB = kRoleDisplayOrder.indexOf(roleB);
           if (roleIdxA != roleIdxB) return roleIdxA.compareTo(roleIdxB);
-          // Within same role, sort by legend number.
           final na = kLegendsByName[a.name.toLowerCase()]?.number ?? 999;
           final nb = kLegendsByName[b.name.toLowerCase()]?.number ?? 999;
           return na.compareTo(nb);
@@ -135,9 +159,11 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
               GestureDetector(
                 onTap: () => setState(() {
                   _sort = switch (_sort) {
-                    _LegendSortOrder.byNumber => _LegendSortOrder.byLastPlayed,
-                    _LegendSortOrder.byLastPlayed => _LegendSortOrder.byRole,
-                    _LegendSortOrder.byRole => _LegendSortOrder.byNumber,
+                    _LegendSortOrder.byLastPlayed => _LegendSortOrder.byKills,
+                    _LegendSortOrder.byKills => _LegendSortOrder.byDamage,
+                    _LegendSortOrder.byDamage => _LegendSortOrder.byWins,
+                    _LegendSortOrder.byWins => _LegendSortOrder.byRole,
+                    _LegendSortOrder.byRole => _LegendSortOrder.byLastPlayed,
                   };
                 }),
                 child: Container(
@@ -152,8 +178,10 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
                       Icon(
                         switch (_sort) {
                           _LegendSortOrder.byLastPlayed => Icons.access_time,
+                          _LegendSortOrder.byKills => Icons.sports_kabaddi,
+                          _LegendSortOrder.byDamage => Icons.bolt,
+                          _LegendSortOrder.byWins => Icons.emoji_events,
                           _LegendSortOrder.byRole => Icons.category,
-                          _LegendSortOrder.byNumber => Icons.format_list_numbered,
                         },
                         size: 13,
                         color: AppTheme.accent,
@@ -162,8 +190,10 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
                       Text(
                         switch (_sort) {
                           _LegendSortOrder.byLastPlayed => 'Recent',
+                          _LegendSortOrder.byKills => 'Kills',
+                          _LegendSortOrder.byDamage => 'Damage',
+                          _LegendSortOrder.byWins => 'Wins',
                           _LegendSortOrder.byRole => 'Role',
-                          _LegendSortOrder.byNumber => 'Order',
                         },
                         style: const TextStyle(
                           color: AppTheme.accent,
