@@ -156,7 +156,7 @@ class _ProgressBars extends StatelessWidget {
             value: progress.progressToNext,
             minHeight: 6,
             backgroundColor: AppTheme.surface2,
-            valueColor: AlwaysStoppedAnimation(next.color),
+            valueColor: AlwaysStoppedAnimation(progress.current.color),
           ),
         ),
         const SizedBox(height: AppTheme.sm),
