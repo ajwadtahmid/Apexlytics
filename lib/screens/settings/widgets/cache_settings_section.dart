@@ -41,10 +41,11 @@ class CacheSettingsSection extends ConsumerWidget {
                 onTap: () => _confirm(
                   context,
                   title: 'Clear all data?',
-                  body: 'Your linked player and saved favorites will be removed.',
+                  body: 'All data including your linked player, favorites, and match history will be removed.',
                   onConfirm: () async {
                     await ref.read(playerSettingsProvider.notifier).clear();
                     await ref.read(searchStateProvider.notifier).clearFavorites();
+                    await ref.read(rankedHistoryStoreProvider).deleteAll();
                   },
                 ),
               ),

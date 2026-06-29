@@ -113,6 +113,11 @@ class RankedHistoryStore {
     await batch.commit(noResult: true);
   }
 
+  Future<void> deleteAll() async {
+    final db = await _open();
+    await db.delete(table);
+  }
+
   Future<void> close() async {
     await _db?.close();
     _db = null;
