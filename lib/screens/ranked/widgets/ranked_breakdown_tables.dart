@@ -355,7 +355,7 @@ class _MapCard extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0x22000000), Color(0xE60D1117)],
+                  colors: [AppTheme.cardScrimTop, AppTheme.cardScrimBottom],
                 ),
               ),
             ),

@@ -60,9 +60,9 @@ class RankedSummary {
   );
 }
 
-RankedSummary summarize(List<RankedMatch> all) {
-  if (all.isEmpty) return RankedSummary.empty;
-  final matches = all.where((m) => m.isRanked).toList();
+/// Assumes [matches] is already ranked-only filtered (the caller owns that via
+/// [rankedOnly]/`matchesInSplit`) — re-filtering on every call was pure waste.
+RankedSummary summarize(List<RankedMatch> matches) {
   if (matches.isEmpty) return RankedSummary.empty;
 
   // Find the newest match for currentRp/rankImg without a full sort.
@@ -112,9 +112,10 @@ class LegendBreakdown {
 }
 
 /// Per-legend breakdown, sorted by total RP contribution (descending).
-List<LegendBreakdown> legendBreakdowns(List<RankedMatch> all) {
+/// Assumes [matches] is already ranked-only filtered.
+List<LegendBreakdown> legendBreakdowns(List<RankedMatch> matches) {
   final byLegend = <String, List<RankedMatch>>{};
-  for (final m in all.where((m) => m.isRanked)) {
+  for (final m in matches) {
     byLegend.putIfAbsent(m.legend, () => []).add(m);
   }
   final out = byLegend.entries.map((e) {
@@ -162,9 +163,10 @@ class MapBreakdown {
 }
 
 /// Per-map breakdown, sorted by games played (descending).
-List<MapBreakdown> mapBreakdowns(List<RankedMatch> all) {
+/// Assumes [matches] is already ranked-only filtered.
+List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
   final byMap = <String, List<RankedMatch>>{};
-  for (final m in all.where((m) => m.isRanked)) {
+  for (final m in matches) {
     byMap.putIfAbsent(m.mapKey, () => []).add(m);
   }
   final out = byMap.entries.map((e) {
@@ -234,12 +236,13 @@ class RankedSession {
 }
 
 /// Groups ranked matches into sessions separated by gaps larger than [gap].
-/// Returned newest session first.
+/// Returned newest session first. Assumes [ranked] is already ranked-only
+/// filtered.
 List<RankedSession> sessionize(
   List<RankedMatch> ranked, {
   Duration gap = kSessionGap,
 }) {
-  final chrono = ranked.where((m) => m.isRanked).toList()
+  final chrono = ranked.toList()
     ..sort((a, b) => a.startTime.compareTo(b.startTime));
   if (chrono.isEmpty) return [];
 
@@ -390,11 +393,11 @@ class TrackerAggregate {
 /// Aggregates trackers that appear in at least [minCoverage] of the window's
 /// ranked matches, so the stat row reflects *whatever the player actually runs*
 /// rather than a hardcoded set. Sorted by coverage (desc), then total (desc).
+/// Assumes [matches] is already ranked-only filtered.
 List<TrackerAggregate> aggregateTrackers(
-  List<RankedMatch> all, {
+  List<RankedMatch> matches, {
   double minCoverage = 0.8,
 }) {
-  final matches = all.where((m) => m.isRanked).toList();
   if (matches.isEmpty) return [];
 
   final present = <String, int>{};
@@ -442,8 +445,8 @@ class RankedInsight {
 }
 
 /// Derives a small set of the most useful strengths/weaknesses for the window.
-List<RankedInsight> generateInsights(List<RankedMatch> all) {
-  final matches = all.where((m) => m.isRanked).toList();
+/// Assumes [matches] is already ranked-only filtered.
+List<RankedInsight> generateInsights(List<RankedMatch> matches) {
   if (matches.isEmpty) return [];
 
   final insights = <RankedInsight>[];
@@ -517,11 +520,12 @@ class HourBucket {
 }
 
 /// Buckets ranked matches by local hour-of-day (from each match's start time).
-/// Only hours with at least one game are returned, ordered 0→23.
-List<HourBucket> timeOfDayBuckets(List<RankedMatch> all) {
+/// Only hours with at least one game are returned, ordered 0→23. Assumes
+/// [matches] is already ranked-only filtered.
+List<HourBucket> timeOfDayBuckets(List<RankedMatch> matches) {
   final games = <int, int>{};
   final rp = <int, int>{};
-  for (final m in all.where((m) => m.isRanked)) {
+  for (final m in matches) {
     final hour = m.startTime.toLocal().hour;
     games[hour] = (games[hour] ?? 0) + 1;
     rp[hour] = (rp[hour] ?? 0) + m.effectiveRpChange;

@@ -212,7 +212,7 @@ class _MapHighlight extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
-                  colors: [Color(0xD90D1117), Color(0x44000000)],
+                  colors: [AppTheme.cardScrimStart, AppTheme.cardScrimEnd],
                 ),
               ),
             ),

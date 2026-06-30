@@ -108,7 +108,9 @@ Future<void> _backgroundFetchAndSchedule() async {
       prefs ??= await SharedPreferences.getInstance();
       await prefs.setString(
           _kLastFetchResultKey, 'error:${DateTime.now().toIso8601String()}:$e');
-    } catch (_) {}
+    } catch (e2) {
+      debugPrint('[BackgroundService] Failed to persist error flag: $e2');
+    }
   }
 }
 

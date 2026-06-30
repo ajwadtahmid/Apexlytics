@@ -398,13 +398,15 @@ class _ControlPill extends StatelessWidget {
 
 // ── Day header ──────────────────────────────────────────────────────────────
 
+final _dayFmt = DateFormat('EEE, MMM d');
+
 String _dayLabel(DateTime day) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final diff = today.difference(day).inDays;
   if (diff == 0) return 'Today';
   if (diff == 1) return 'Yesterday';
-  return DateFormat('EEE, MMM d').format(day);
+  return _dayFmt.format(day);
 }
 
 class _DayHeader extends StatelessWidget {

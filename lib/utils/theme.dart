@@ -14,6 +14,12 @@ class AppTheme {
   static const blue = Color(0xFF79c0ff);
   static const orange = Color(0xFFffa657);
 
+  /// Gradient scrim overlays for hero images behind card content.
+  static const cardScrimTop = Color(0x22000000);
+  static const cardScrimBottom = Color(0xE60D1117);
+  static const cardScrimStart = Color(0xD90D1117);
+  static const cardScrimEnd = Color(0x44000000);
+
   static const double xs = 4;
   static const double sm = 8;
   static const double md = 16;

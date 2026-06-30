@@ -13,16 +13,15 @@ class GeneralSettingsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(playerSettingsProvider);
+    final isPlayerSet = ref.watch(playerSettingsProvider.select((s) => s.isPlayerSet));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionLabel(label: 'Account', icon: Icons.person_outline),
         SettingsCard(
-          child: settings.isPlayerSet
+          child: isPlayerSet
               ? _PlayerInfoContent(
-                  settings: settings,
                   onChangeTap: () => ref.read(currentTabProvider.notifier).setTab(AppTab.stats),
                 )
               : _NoPlayerContent(onTap: () => ref.read(currentTabProvider.notifier).setTab(AppTab.stats)),
@@ -32,13 +31,16 @@ class GeneralSettingsSection extends ConsumerWidget {
   }
 }
 
-class _PlayerInfoContent extends StatelessWidget {
-  final PlayerSettings settings;
+class _PlayerInfoContent extends ConsumerWidget {
   final VoidCallback onChangeTap;
-  const _PlayerInfoContent({required this.settings, required this.onChangeTap});
+  const _PlayerInfoContent({required this.onChangeTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = ref.watch(playerSettingsProvider.select((s) => s.name));
+    final platform = ref.watch(playerSettingsProvider.select((s) => s.platform));
+    final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -54,11 +56,11 @@ class _PlayerInfoContent extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      settings.name,
+                      name,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     Text(
-                      ApiConstants.labelFor(settings.platform),
+                      ApiConstants.labelFor(platform),
                       style: const TextStyle(color: AppTheme.muted, fontSize: 12),
                     ),
                   ],
@@ -74,7 +76,7 @@ class _PlayerInfoContent extends StatelessWidget {
         InkWell(
           borderRadius: BorderRadius.circular(AppTheme.radiusSm),
           onTap: () {
-            Clipboard.setData(ClipboardData(text: settings.uid));
+            Clipboard.setData(ClipboardData(text: uid));
             context.showMessage(
               'UID copied',
               duration: const Duration(seconds: 2),
@@ -86,7 +88,7 @@ class _PlayerInfoContent extends StatelessWidget {
               const SizedBox(width: AppTheme.sm),
               Expanded(
                 child: Text(
-                  settings.uid,
+                  uid,
                   style: const TextStyle(
                     fontSize: 12,
                     fontFamily: 'monospace',

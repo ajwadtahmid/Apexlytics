@@ -46,7 +46,9 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(playerSettingsProvider);
+    final profiles = ref.watch(playerSettingsProvider.select((s) => s.profiles));
+    final activeProfileIndex =
+        ref.watch(playerSettingsProvider.select((s) => s.activeProfileIndex));
     final insets = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
@@ -67,9 +69,9 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
           ),
           const SizedBox(height: AppTheme.md),
           if (_editingIndex != null || _isAdding) ...[
-            _buildLookupView(settings),
+            _buildLookupView(profiles),
           ] else ...[
-            _buildProfileList(settings),
+            _buildProfileList(profiles, activeProfileIndex),
           ],
           const SizedBox(height: AppTheme.sm),
         ],
@@ -77,8 +79,7 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
     );
   }
 
-  Widget _buildProfileList(PlayerSettings settings) {
-    final profiles = settings.profiles;
+  Widget _buildProfileList(List<PlayerProfile> profiles, int activeProfileIndex) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,7 +92,7 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
         for (int i = 0; i < profiles.length; i++) ...[
           _ProfileTile(
             profile: profiles[i],
-            isActive: i == settings.activeProfileIndex,
+            isActive: i == activeProfileIndex,
             onSwitch: () => _switchTo(i),
             onEdit: () => _startEdit(i),
             onRemove: () => _removeProfile(i),
@@ -130,12 +131,12 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
     );
   }
 
-  Widget _buildLookupView(PlayerSettings settings) {
+  Widget _buildLookupView(List<PlayerProfile> profiles) {
     final isAdding = _isAdding;
     final notifier = ref.read(playerSettingsProvider.notifier);
     final editedProfile =
-        !isAdding && _editingIndex != null && _editingIndex! < settings.profiles.length
-            ? settings.profiles[_editingIndex!]
+        !isAdding && _editingIndex != null && _editingIndex! < profiles.length
+            ? profiles[_editingIndex!]
             : null;
 
     return Column(

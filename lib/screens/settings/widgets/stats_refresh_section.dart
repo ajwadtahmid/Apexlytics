@@ -23,7 +23,11 @@ class StatsRefreshSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(playerSettingsProvider);
+    final defaultTab = ref.watch(playerSettingsProvider.select((s) => s.defaultTab));
+    final statsRefreshMinutes =
+        ref.watch(playerSettingsProvider.select((s) => s.statsRefreshMinutes));
+    final compactLegendCards =
+        ref.watch(playerSettingsProvider.select((s) => s.compactLegendCards));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,7 +39,7 @@ class StatsRefreshSection extends ConsumerWidget {
             children: [
               InkWell(
                 borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                onTap: () => _pickDefaultTab(context, ref, settings.defaultTab),
+                onTap: () => _pickDefaultTab(context, ref, defaultTab),
                 child: Row(
                   children: [
                     const Icon(Icons.tab_outlined, color: AppTheme.textPrimary, size: 20),
@@ -44,7 +48,7 @@ class StatsRefreshSection extends ConsumerWidget {
                       child: Text('Default tab', style: TextStyle(fontSize: 14)),
                     ),
                     Text(
-                      _tabLabel(settings.defaultTab),
+                      _tabLabel(defaultTab),
                       style: const TextStyle(color: AppTheme.muted, fontSize: 14),
                     ),
                     const SizedBox(width: AppTheme.xs),
@@ -55,7 +59,7 @@ class StatsRefreshSection extends ConsumerWidget {
               const Divider(color: AppTheme.surface2, height: 24),
               InkWell(
                 borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                onTap: () => _pickRefreshInterval(context, ref, settings.statsRefreshMinutes),
+                onTap: () => _pickRefreshInterval(context, ref, statsRefreshMinutes),
                 child: Row(
                   children: [
                     const Icon(Icons.update, color: AppTheme.textPrimary, size: 20),
@@ -64,7 +68,7 @@ class StatsRefreshSection extends ConsumerWidget {
                       child: Text('Stats update frequency', style: TextStyle(fontSize: 14)),
                     ),
                     Text(
-                      _refreshLabel(settings.statsRefreshMinutes),
+                      _refreshLabel(statsRefreshMinutes),
                       style: const TextStyle(color: AppTheme.muted, fontSize: 14),
                     ),
                     const SizedBox(width: AppTheme.xs),
@@ -81,7 +85,7 @@ class StatsRefreshSection extends ConsumerWidget {
                     child: Text('Compact legend cards', style: TextStyle(fontSize: 14)),
                   ),
                   Switch(
-                    value: settings.compactLegendCards,
+                    value: compactLegendCards,
                     onChanged: (v) =>
                         ref.read(playerSettingsProvider.notifier).setCompactLegendCards(v),
                     activeThumbColor: AppTheme.accent,

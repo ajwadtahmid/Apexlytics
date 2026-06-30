@@ -40,7 +40,11 @@ void main() {
   }
 
   // A,B,C in one session; UNKNOWN excluded; E starts ~5h later (new session).
+  // Aggregate functions assume pre-filtered input (the caller owns ranked
+  // filtering), so tests filter via rankedOnly() before calling them — same
+  // as production callers do.
   late List<RankedMatch> data;
+  late List<RankedMatch> ranked;
   setUp(() {
     data = [
       match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 40, cumulativeRp: 1040, kills: 3, damage: 1000, startOffset: 0, axleTracker: true),
@@ -49,6 +53,7 @@ void main() {
       match(legend: 'Octane', mapKey: 'UNKNOWN', rpChange: 0, cumulativeRp: 999999, kills: 0, damage: 0, startOffset: 5400, gameMode: 'UNKNOWN'),
       match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 10, cumulativeRp: 1090, kills: 2, damage: 800, startOffset: 18000, axleTracker: true),
     ];
+    ranked = rankedOnly(data);
   });
 
   test('rankedOnly excludes UNKNOWN and sorts newest first', () {
@@ -59,7 +64,7 @@ void main() {
   });
 
   test('summarize aggregates the window', () {
-    final s = summarize(data);
+    final s = summarize(ranked);
     expect(s.games, 4);
     expect(s.netRp, 90); // 40 - 20 + 60 + 10
     expect(s.currentRp, 1090);
@@ -74,7 +79,7 @@ void main() {
   });
 
   test('legendBreakdowns sorted by total RP desc', () {
-    final l = legendBreakdowns(data);
+    final l = legendBreakdowns(ranked);
     expect(l.length, 2);
     expect(l.first.legend, 'Bangalore'); // +60 beats Axle's +30
     expect(l.first.totalRp, 60);
@@ -85,7 +90,7 @@ void main() {
   });
 
   test('mapBreakdowns sorted by games desc with display names', () {
-    final m = mapBreakdowns(data);
+    final m = mapBreakdowns(ranked);
     expect(m.length, 2);
     expect(m.first.displayName, 'Olympus');
     expect(m.first.games, 3);
@@ -93,7 +98,7 @@ void main() {
   });
 
   test('sessionize splits on >2h gaps, newest session first', () {
-    final sessions = sessionize(data);
+    final sessions = sessionize(ranked);
     expect(sessions.length, 2);
     expect(sessions.first.games, 1); // newest = E alone
     expect(sessions.first.netRp, 10);
@@ -102,7 +107,7 @@ void main() {
   });
 
   test('aggregateTrackers keeps only high-coverage trackers', () {
-    final t = aggregateTrackers(data); // minCoverage 0.8
+    final t = aggregateTrackers(ranked); // minCoverage 0.8
     // BR Kills + BR Damage are in all 4 (1.0); axle tracker only 3/4 (0.75).
     expect(t.map((e) => e.name), containsAll(['BR Kills', 'BR Damage']));
     expect(t.any((e) => e.name.contains('Nitro')), false);
@@ -112,7 +117,7 @@ void main() {
   });
 
   test('generateInsights surfaces net, best legend, strongest map', () {
-    final insights = generateInsights(data);
+    final insights = generateInsights(ranked);
     final labels = insights.map((i) => i.label).toList();
     expect(labels, contains('Net gain'));
     expect(labels, contains('Best legend'));
@@ -122,7 +127,7 @@ void main() {
   });
 
   test('timeOfDayBuckets covers all ranked games and conserves net RP', () {
-    final buckets = timeOfDayBuckets(data);
+    final buckets = timeOfDayBuckets(ranked);
     final totalGames = buckets.fold<int>(0, (a, b) => a + b.games);
     final totalRp = buckets.fold<int>(0, (a, b) => a + b.netRp);
     expect(totalGames, 4); // UNKNOWN excluded

@@ -344,7 +344,21 @@ class _MapAlertsSheetContentState
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(playerSettingsProvider);
+    final notifyRanked =
+        ref.watch(playerSettingsProvider.select((s) => s.notifyRankedMapRotation));
+    final rankedMinutesBefore =
+        ref.watch(playerSettingsProvider.select((s) => s.rankedNotifyMinutesBefore));
+    final notifyPubs = ref.watch(playerSettingsProvider.select((s) => s.notifyPubsMapRotation));
+    final pubsMinutesBefore =
+        ref.watch(playerSettingsProvider.select((s) => s.pubsNotifyMinutesBefore));
+    final notifyWildcard =
+        ref.watch(playerSettingsProvider.select((s) => s.notifyWildcardMapRotation));
+    final wildcardMinutesBefore =
+        ref.watch(playerSettingsProvider.select((s) => s.wildcardNotifyMinutesBefore));
+    final notifyMixtape =
+        ref.watch(playerSettingsProvider.select((s) => s.notifyMixtapeMapRotation));
+    final mixtapeMinutesBefore =
+        ref.watch(playerSettingsProvider.select((s) => s.mixtapeNotifyMinutesBefore));
     final seasonalMapsAsync = ref.watch(seasonalMapsProvider);
 
     return DraggableScrollableSheet(
@@ -392,16 +406,16 @@ class _MapAlertsSheetContentState
                   MapModeTile(
                     icon: Icons.leaderboard_outlined,
                     label: 'Ranked',
-                    enabled: settings.notifyRankedMapRotation,
+                    enabled: notifyRanked,
                     onTap: () => _toggleMode(
                       context,
                       _NotifMode.ranked,
-                      !settings.notifyRankedMapRotation,
+                      !notifyRanked,
                     ),
                   ),
-                  if (settings.notifyRankedMapRotation) ...[
+                  if (notifyRanked) ...[
                     MapTimingTile(
-                      label: _timingLabel(settings.rankedNotifyMinutesBefore),
+                      label: _timingLabel(rankedMinutesBefore),
                       onTap: () => _pickTiming(context, _NotifMode.ranked),
                     ),
                     ..._visibleNames(seasonalMaps.ranked, _rankedNotify, _showAllRanked)
@@ -424,16 +438,16 @@ class _MapAlertsSheetContentState
                   MapModeTile(
                     icon: Icons.public,
                     label: 'Pubs',
-                    enabled: settings.notifyPubsMapRotation,
+                    enabled: notifyPubs,
                     onTap: () => _toggleMode(
                       context,
                       _NotifMode.pubs,
-                      !settings.notifyPubsMapRotation,
+                      !notifyPubs,
                     ),
                   ),
-                  if (settings.notifyPubsMapRotation) ...[
+                  if (notifyPubs) ...[
                     MapTimingTile(
-                      label: _timingLabel(settings.pubsNotifyMinutesBefore),
+                      label: _timingLabel(pubsMinutesBefore),
                       onTap: () => _pickTiming(context, _NotifMode.pubs),
                     ),
                     ..._visibleNames(seasonalMaps.pubs, _pubsNotify, _showAllPubs)
@@ -456,16 +470,16 @@ class _MapAlertsSheetContentState
                   MapModeTile(
                     icon: Icons.casino,
                     label: 'Wildcards',
-                    enabled: settings.notifyWildcardMapRotation,
+                    enabled: notifyWildcard,
                     onTap: () => _toggleMode(
                       context,
                       _NotifMode.wildcard,
-                      !settings.notifyWildcardMapRotation,
+                      !notifyWildcard,
                     ),
                   ),
-                  if (settings.notifyWildcardMapRotation) ...[
+                  if (notifyWildcard) ...[
                     MapTimingTile(
-                      label: _timingLabel(settings.wildcardNotifyMinutesBefore),
+                      label: _timingLabel(wildcardMinutesBefore),
                       onTap: () => _pickTiming(context, _NotifMode.wildcard),
                     ),
                   ],
@@ -476,16 +490,16 @@ class _MapAlertsSheetContentState
                   MapModeTile(
                     icon: Icons.music_note_outlined,
                     label: 'Mixtape',
-                    enabled: settings.notifyMixtapeMapRotation,
+                    enabled: notifyMixtape,
                     onTap: () => _toggleMode(
                       context,
                       _NotifMode.mixtape,
-                      !settings.notifyMixtapeMapRotation,
+                      !notifyMixtape,
                     ),
                   ),
-                  if (settings.notifyMixtapeMapRotation) ...[
+                  if (notifyMixtape) ...[
                     MapTimingTile(
-                      label: _timingLabel(settings.mixtapeNotifyMinutesBefore),
+                      label: _timingLabel(mixtapeMinutesBefore),
                       onTap: () => _pickTiming(context, _NotifMode.mixtape),
                     ),
                   ],

@@ -10,7 +10,29 @@ class NotificationSettingsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(playerSettingsProvider);
+    final notifyRanked =
+        ref.watch(playerSettingsProvider.select((s) => s.notifyRankedMapRotation));
+    final rankedMinutes =
+        ref.watch(playerSettingsProvider.select((s) => s.rankedNotifyMinutesBefore));
+    final notifyPubs = ref.watch(playerSettingsProvider.select((s) => s.notifyPubsMapRotation));
+    final pubsMinutes =
+        ref.watch(playerSettingsProvider.select((s) => s.pubsNotifyMinutesBefore));
+    final notifyWildcard =
+        ref.watch(playerSettingsProvider.select((s) => s.notifyWildcardMapRotation));
+    final wildcardMinutes =
+        ref.watch(playerSettingsProvider.select((s) => s.wildcardNotifyMinutesBefore));
+    final notifyMixtape =
+        ref.watch(playerSettingsProvider.select((s) => s.notifyMixtapeMapRotation));
+    final mixtapeMinutes =
+        ref.watch(playerSettingsProvider.select((s) => s.mixtapeNotifyMinutesBefore));
+
+    final active = [
+      notifyRanked && rankedMinutes > 0,
+      notifyPubs && pubsMinutes > 0,
+      notifyWildcard && wildcardMinutes > 0,
+      notifyMixtape && mixtapeMinutes > 0,
+    ];
+    final activeCount = active.where((b) => b).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,9 +50,9 @@ class NotificationSettingsSection extends ConsumerWidget {
                   child: Text('Map rotation alerts', style: TextStyle(fontSize: 14)),
                 ),
                 Text(
-                  _notifSummary(settings),
+                  activeCount == 0 ? 'Off' : '$activeCount active',
                   style: TextStyle(
-                    color: _anyActive(settings) ? AppTheme.accent : AppTheme.muted,
+                    color: activeCount > 0 ? AppTheme.accent : AppTheme.muted,
                     fontSize: 14,
                   ),
                 ),
@@ -42,21 +64,5 @@ class NotificationSettingsSection extends ConsumerWidget {
         ),
       ],
     );
-  }
-
-  static bool _anyActive(PlayerSettings settings) =>
-      (settings.notifyRankedMapRotation && settings.rankedNotifyMinutesBefore > 0) ||
-      (settings.notifyPubsMapRotation && settings.pubsNotifyMinutesBefore > 0) ||
-      (settings.notifyWildcardMapRotation && settings.wildcardNotifyMinutesBefore > 0) ||
-      (settings.notifyMixtapeMapRotation && settings.mixtapeNotifyMinutesBefore > 0);
-
-  static String _notifSummary(PlayerSettings settings) {
-    final count = [
-      settings.notifyRankedMapRotation && settings.rankedNotifyMinutesBefore > 0,
-      settings.notifyPubsMapRotation && settings.pubsNotifyMinutesBefore > 0,
-      settings.notifyWildcardMapRotation && settings.wildcardNotifyMinutesBefore > 0,
-      settings.notifyMixtapeMapRotation && settings.mixtapeNotifyMinutesBefore > 0,
-    ].where((b) => b).length;
-    return count == 0 ? 'Off' : '$count active';
   }
 }
