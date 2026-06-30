@@ -429,8 +429,31 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       _prefs.remove(PrefsKeys.playerName),
       _prefs.remove(PrefsKeys.playerUid),
       _prefs.remove(PrefsKeys.playerPlatform),
+      _prefs.remove(PrefsKeys.notifyPubsMapRotation),
+      _prefs.remove(PrefsKeys.notifyRankedMapRotation),
+      _prefs.remove(PrefsKeys.notifyMixtapeMapRotation),
+      _prefs.remove(PrefsKeys.notifyWildcardMapRotation),
+      _prefs.remove(PrefsKeys.rankedNotifyMinutes),
+      _prefs.remove(PrefsKeys.pubsNotifyMinutes),
+      _prefs.remove(PrefsKeys.mixtapeNotifyMinutes),
+      _prefs.remove(PrefsKeys.wildcardNotifyMinutes),
+      _prefs.remove(PrefsKeys.favoriteRankedMapNames),
+      _prefs.remove(PrefsKeys.favoritePubsMapNames),
     ]);
-    state = state.copyWith(profiles: [], activeProfileIndex: 0);
+    state = state.copyWith(
+      profiles: [],
+      activeProfileIndex: 0,
+      notifyPubsMapRotation: false,
+      notifyRankedMapRotation: false,
+      notifyMixtapeMapRotation: false,
+      notifyWildcardMapRotation: false,
+      rankedNotifyMinutesBefore: 0,
+      pubsNotifyMinutesBefore: 0,
+      mixtapeNotifyMinutesBefore: 0,
+      wildcardNotifyMinutesBefore: 0,
+      favoriteRankedMapNames: [],
+      favoritePubsMapNames: [],
+    );
   }
 }
 

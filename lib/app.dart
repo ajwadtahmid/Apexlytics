@@ -138,7 +138,6 @@ class _AppShellState extends ConsumerState<_AppShell>
     await Future.delayed(_kPhase2Delay);
     unawaited(_prefetch(ref.read(predatorProvider.future)));
     unawaited(_prefetch(ref.read(serverStatusProvider.future)));
-
   }
 
   Future<void> _prefetch(Future<Object?> future) async {

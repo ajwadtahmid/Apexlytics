@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../providers/api_provider.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../providers/search_provider.dart';
 import '../../../providers/settings_provider.dart';
@@ -46,6 +47,7 @@ class CacheSettingsSection extends ConsumerWidget {
                     await ref.read(playerSettingsProvider.notifier).clear();
                     await ref.read(searchStateProvider.notifier).clearFavorites();
                     await ref.read(rankedHistoryStoreProvider).deleteAll();
+                    await ref.read(apiServiceProvider).clearCache();
                   },
                 ),
               ),

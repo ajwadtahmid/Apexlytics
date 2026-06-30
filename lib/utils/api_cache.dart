@@ -49,10 +49,34 @@ class ApiCache {
     // Millisecond epoch comparison: timezone-safe because both sides use the same
     // internal clock reference regardless of local time zone.
     if (DateTime.now().difference(savedAt).inMinutes > ttl) return null;
+    return _decode(raw, savedAt);
+  }
+
+  /// Loads cached data by [key] regardless of TTL — for the offline-fallback
+  /// path, where stale-with-a-banner beats nothing. Returns null only if
+  /// there's no entry at all.
+  CachedEntry? loadStale(String key) {
+    final raw = _prefs.getString('$_cacheKeyPrefix$key');
+    final ts = _prefs.getInt('$_cacheTimestampKeyPrefix$key');
+    if (raw == null || ts == null) return null;
+    return _decode(raw, DateTime.fromMillisecondsSinceEpoch(ts));
+  }
+
+  CachedEntry? _decode(String raw, DateTime savedAt) {
     try {
       return CachedEntry(data: jsonDecode(raw), savedAt: savedAt);
     } on FormatException {
       return null;
+    }
+  }
+
+  /// Removes every cached response and its timestamp — used by "Clear all data".
+  Future<void> clear() async {
+    final keys = _prefs.getKeys().where(
+      (k) => k.startsWith(_cacheKeyPrefix) || k.startsWith(_cacheTimestampKeyPrefix),
+    );
+    for (final key in keys.toList()) {
+      await _prefs.remove(key);
     }
   }
 

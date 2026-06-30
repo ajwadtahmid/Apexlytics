@@ -54,6 +54,9 @@ class ApiService {
     }
   }
 
+  /// Removes every cached response — used by "Clear all data".
+  Future<void> clearCache() => _cache.clear();
+
   /// Returns cached data synchronously without making a network request.
   /// Returns null if no valid cache entry exists.
   ApiResult<Map<String, dynamic>>? loadCached(
@@ -124,7 +127,7 @@ class ApiService {
       return ApiResult(data);
     } on DioException catch (e) {
       if (!noCache) {
-        final cached = _cache.load(key);
+        final cached = _cache.loadStale(key);
         if (cached != null) {
           return ApiResult(cacheNormalizer(cached.data), staleAt: cached.savedAt);
         }

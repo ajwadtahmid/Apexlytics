@@ -71,7 +71,9 @@ class MyPlayerStatsNotifier extends AsyncNotifier<ApiResult<PlayerStats?>> {
   // build() runs again before _refreshSilent completes, the outdated fetch will
   // check its generation against the current value and discard its result.
   int _buildGeneration = 0;
-  bool _refreshing = false;
+  // Keyed by generation (not a plain bool) so a refresh for the previous
+  // profile can't block the new profile's refresh after a profile switch.
+  int? _refreshingGeneration;
 
   @override
   Future<ApiResult<PlayerStats?>> build() async {
@@ -111,10 +113,10 @@ class MyPlayerStatsNotifier extends AsyncNotifier<ApiResult<PlayerStats?>> {
     String platform,
     int generation,
   ) async {
-    if (_refreshing) return;
+    if (_refreshingGeneration == generation) return;
     // Set synchronously before the first await — Dart's single-threaded model
     // guarantees no other caller can interleave before this flag is set.
-    _refreshing = true;
+    _refreshingGeneration = generation;
     try {
       final fresh = await service.getPlayerStatsByUid(uid, platform);
       // Only update if we are still in the same build cycle and the notifier
@@ -129,7 +131,7 @@ class MyPlayerStatsNotifier extends AsyncNotifier<ApiResult<PlayerStats?>> {
         log.w('Silent refresh failed', error: e);
       }
     } finally {
-      _refreshing = false;
+      if (_refreshingGeneration == generation) _refreshingGeneration = null;
     }
   }
 }

@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
 import '../utils/theme.dart';
 
-const _shimmerHighlight = Color(0xFF2d3a4a);
-
 // Wrap any skeleton tree in this once at the top level so every ShimmerBox
 // inside shares a single animation and sweeps in sync.
 
@@ -15,7 +13,7 @@ class ShimmerWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Shimmer.fromColors(
       baseColor: AppTheme.surface2,
-      highlightColor: _shimmerHighlight,
+      highlightColor: AppTheme.shimmerHighlight,
       child: child,
     );
   }

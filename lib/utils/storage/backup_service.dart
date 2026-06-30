@@ -165,6 +165,10 @@ Future<ImportResult> importBackup(
       return ImportError('Invalid prefs structure in backup file.');
     }
     for (final entry in prefsData.entries) {
+      if (!_include(entry.key)) {
+        log.w('Backup import: skipping disallowed key "${entry.key}"');
+        continue;
+      }
       final v = entry.value;
       if (v is String) {
         await prefs.setString(entry.key, v);
