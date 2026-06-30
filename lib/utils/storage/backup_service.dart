@@ -8,9 +8,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../constants/prefs_keys.dart';
-import '../../services/ranked_history_store.dart';
 import '../app_logger.dart';
 import 'legend_stats_storage.dart';
+import 'ranked_history_store.dart';
 import 'rp_snapshot_storage.dart';
 
 // v2 adds the `ranked_history` section. v1 backups (prefs only) still import.

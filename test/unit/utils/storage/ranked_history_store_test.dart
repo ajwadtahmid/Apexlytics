@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:apexlytics/models/ranked_match.dart';
-import 'package:apexlytics/services/ranked_history_store.dart';
+import 'package:apexlytics/utils/storage/ranked_history_store.dart';
 
 void main() {
   // sqflite has no native binding under `flutter test` (host VM) — use FFI.

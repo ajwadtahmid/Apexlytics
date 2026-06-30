@@ -1,7 +1,7 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
-import '../models/ranked_match.dart';
+import '../../models/ranked_match.dart';
 
 /// Local SQLite store that accumulates ranked match history per UID, beyond the
 /// API's rolling 100-match window. Matches are deduped by [RankedMatch.dedupKey]
