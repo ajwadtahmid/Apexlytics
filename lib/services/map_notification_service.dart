@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/map_rotation.dart';
+import '../providers/map_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/app_logger.dart';
 import 'notification_service.dart';
@@ -16,6 +17,10 @@ class MapNotificationService {
         (s.notifyMixtapeMapRotation && s.mixtapeNotifyMinutesBefore > 0) ||
         (s.notifyWildcardMapRotation && s.wildcardNotifyMinutesBefore > 0);
     if (anyActive) {
+      // The cyclic rotation order (from /maps) lets every projected Ranked/Pubs
+      // alert be named, not just the next one. Falls back to generic copy if the
+      // sequence hasn't loaded yet.
+      final seasonal = ref.read(seasonalMapsProvider).asData?.value;
       unawaited(NotificationService.scheduleAll(
         data,
         notifyRanked: s.notifyRankedMapRotation,
@@ -28,6 +33,8 @@ class MapNotificationService {
         wildcardMinutesBefore: s.wildcardNotifyMinutesBefore,
         favoriteRankedMapNames: s.favoriteRankedMapNames,
         favoritePubsMapNames: s.favoritePubsMapNames,
+        rankedSequence: seasonal?.rankedNames ?? const [],
+        pubsSequence: seasonal?.pubsNames ?? const [],
       ).catchError((Object e) {
         log.e('Notification scheduling failed', error: e);
       }));

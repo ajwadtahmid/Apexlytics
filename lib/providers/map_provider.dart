@@ -22,7 +22,7 @@ final mapRotationProvider =
     );
 
 class SeasonalMapsNotifier extends AsyncNotifier<SeasonalMaps> {
-  static const String _cacheKey = 'seasonal_maps_cache';
+  static const String _cacheKey = SeasonalMaps.cacheKey;
 
   @override
   Future<SeasonalMaps> build() async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -7,6 +8,11 @@ import '../utils/app_logger.dart';
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+
+  // Desktop has no OS-level scheduler or background wakeup, so pending alerts
+  // are held as in-app timers and fire only while the app is running. They are
+  // re-armed on every fetch and cancelled wholesale, mirroring [cancelAll].
+  static final List<Timer> _desktopTimers = [];
 
   static const String _channelId = 'map_rotation_v2';
 
@@ -20,23 +26,38 @@ class NotificationService {
   static const _details = NotificationDetails(
     android: _androidChannel,
     iOS: DarwinNotificationDetails(),
+    macOS: DarwinNotificationDetails(),
+    linux: LinuxNotificationDetails(),
+    windows: WindowsNotificationDetails(),
   );
 
   static Future<void> init() async {
     if (_initialized) return;
-    if (!_supportsScheduled) return;
+    if (!_supported) return;
     const androidSettings = AndroidInitializationSettings(
       '@drawable/ic_notification',
     );
-    const iosSettings = DarwinInitializationSettings(
+    const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
+    const linuxSettings = LinuxInitializationSettings(
+      defaultActionName: 'Open Apexlytics',
+    );
+    const windowsSettings = WindowsInitializationSettings(
+      appName: 'Apexlytics',
+      appUserModelId: 'Apexlytics.Apexlytics',
+      // Stable GUID identifying this app's notification activation callback.
+      guid: 'b8e7d3a2-9f1c-4e6b-8a7d-2c5f0e1a4b3c',
+    );
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: androidSettings,
-        iOS: iosSettings,
+        iOS: darwinSettings,
+        macOS: darwinSettings,
+        linux: linuxSettings,
+        windows: windowsSettings,
       ),
     );
     _initialized = true;
@@ -53,6 +74,11 @@ class NotificationService {
           IOSFlutterLocalNotificationsPlugin
         >();
 
+    final macos = _plugin
+        .resolvePlatformSpecificImplementation<
+          MacOSFlutterLocalNotificationsPlugin
+        >();
+
     bool granted = false;
     if (android != null) {
       granted = await android.requestNotificationsPermission() ?? false;
@@ -63,13 +89,32 @@ class NotificationService {
             sound: true,
           ) ??
           false;
+    } else if (macos != null) {
+      granted = await macos.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          ) ??
+          false;
+    } else {
+      // Linux/Windows require no runtime notification permission.
+      granted = _supportsImmediate;
     }
     log.i('Notification permission granted=$granted');
     return granted;
   }
 
-  /// Whether the current platform supports local notifications and background fetch.
+  /// Mobile platforms hold scheduled alerts at the OS level and support
+  /// background fetch, so notifications fire even when the app is closed.
   static bool get _supportsScheduled => Platform.isAndroid || Platform.isIOS;
+
+  /// Desktop platforms can show notifications while the app is running but have
+  /// no OS scheduler or background wakeup — alerts are fired by in-app timers
+  /// and stop when the app exits.
+  static bool get _supportsImmediate =>
+      Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+
+  static bool get _supported => _supportsScheduled || _supportsImmediate;
 
   // Each mode owns a contiguous block of [_maxPerMode] notification IDs so a
   // batch of upcoming-rotation alerts can be scheduled — and cancelled —
@@ -88,11 +133,14 @@ class NotificationService {
   /// Schedules a batch of upcoming-rotation notifications per enabled mode and
   /// cancels any previously scheduled ones.
   ///
-  /// The API only reports the current and next map, so only the next rotation's
-  /// map name is known; later rotations are projected from [MapMode.durationMins]
-  /// with generic copy. Batching means the OS (AlarmManager / UNUserNotification
-  /// Center) holds hours of alerts and fires them while the app is suspended —
-  /// the app no longer has to be open to re-arm each one.
+  /// [rotation] reports the current and next map with timing. For Ranked and
+  /// Pubs, [rankedSequence] / [pubsSequence] give the full cyclic rotation order
+  /// (from the `/maps` endpoint), so every projected rotation can be named — not
+  /// just the next one. Mixtape/Wildcard have no sequence, so rotations past the
+  /// next are projected from [MapMode.durationMins] with generic copy. Batching
+  /// means the OS (AlarmManager / UNUserNotificationCenter) holds hours of alerts
+  /// and fires them while the app is suspended; on desktop they fire via in-app
+  /// timers while the app runs.
   ///
   /// Each mode has its own [minutesBefore] timing.
   /// [favoriteRankedMapNames] / [favoritePubsMapNames] filter alerts by map.
@@ -108,10 +156,12 @@ class NotificationService {
     int wildcardMinutesBefore = 0,
     List<String> favoriteRankedMapNames = const [],
     List<String> favoritePubsMapNames = const [],
+    List<String> rankedSequence = const [],
+    List<String> pubsSequence = const [],
   }) async {
-    if (!_supportsScheduled || !_initialized) return;
+    if (!_supported || !_initialized) return;
 
-    await _plugin.cancelAll();
+    await _cancelAllInternal();
 
     var budget = _maxTotalScheduled;
 
@@ -124,6 +174,7 @@ class NotificationService {
         rankedMinutesBefore,
         budget,
         favoriteMapNames: favoriteRankedMapNames,
+        mapSequence: rankedSequence,
       );
     }
     if (notifyPubs && pubsMinutesBefore > 0) {
@@ -135,6 +186,7 @@ class NotificationService {
         pubsMinutesBefore,
         budget,
         favoriteMapNames: favoritePubsMapNames,
+        mapSequence: pubsSequence,
       );
     }
     if (notifyMixtape &&
@@ -167,8 +219,11 @@ class NotificationService {
 
   /// Schedules a series of upcoming-rotation notifications for one mode, up to
   /// [_maxPerMode] or the remaining [budget], and returns how many were
-  /// scheduled. Only the first rotation's map name is known; later rotations
-  /// are projected from [nextMap.durationMins] with generic copy.
+  /// scheduled.
+  ///
+  /// When [mapSequence] (the cyclic rotation order) is provided, every projected
+  /// rotation is named by walking the cycle from [nextMap]'s position. Without
+  /// it, only the next rotation is named and later ones use generic copy.
   static Future<int> _scheduleModeSeries(
     int idBase,
     String modeLabel,
@@ -177,6 +232,7 @@ class NotificationService {
     int minutesBefore,
     int budget, {
     List<String> favoriteMapNames = const [],
+    List<String> mapSequence = const [],
   }) async {
     if (budget <= 0) return 0;
 
@@ -184,18 +240,32 @@ class NotificationService {
     final durationSecs = nextMap.durationMins * 60;
     final filtering = favoriteMapNames.isNotEmpty;
 
+    // Where the next map sits in the rotation cycle. Rotation i is then
+    // sequence[(nextIndex + i) % length], so future maps can be named.
+    final nextIndex = mapSequence.indexOf(nextMap.map);
+    final hasSequence = nextIndex >= 0;
+
     var rotationStartSecs = currentRemainingSecs;
     var scheduled = 0;
 
     for (var i = 0; i < _maxPerMode && scheduled < budget; i++) {
-      final knownMap = i == 0;
+      // The map name for rotation i: the live next map for i==0, otherwise
+      // projected from the cycle. Null means we can't identify it.
+      final String? mapName = i == 0
+          ? nextMap.map
+          : (hasSequence
+                ? mapSequence[(nextIndex + i) % mapSequence.length]
+                : null);
 
-      // The favourites filter only applies to the one map we actually know (the
-      // next rotation). If it isn't a favourite, stop — we can't predict whether
-      // later maps qualify.
-      if (knownMap && filtering && !favoriteMapNames.contains(nextMap.map)) {
-        log.d('$modeLabel notification skipped (map not in favourites)');
-        break;
+      // Favourites filter: skip rotations whose map isn't a favourite. Without a
+      // known name we can't tell, so stop projecting.
+      if (filtering) {
+        if (mapName == null) break;
+        if (!favoriteMapNames.contains(mapName)) {
+          if (durationSecs <= 0) break;
+          rotationStartSecs += durationSecs;
+          continue;
+        }
       }
 
       final notifyAt = now
@@ -204,28 +274,57 @@ class NotificationService {
 
       if (notifyAt.isAfter(now)) {
         final unit = minutesBefore == 1 ? 'minute' : 'minutes';
-        final body = knownMap
-            ? '$modeLabel: ${_mapDisplay(nextMap)} starts in $minutesBefore $unit'
-            : '$modeLabel: Next map starts in $minutesBefore $unit';
-        await _plugin.zonedSchedule(
-          id: idBase + i,
-          title: 'Apexlytics',
-          body: body,
-          scheduledDate: notifyAt,
-          notificationDetails: _details,
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        );
+        final String body;
+        if (i == 0) {
+          body = '$modeLabel: ${_mapDisplay(nextMap)} starts in $minutesBefore $unit';
+        } else if (mapName != null) {
+          body = '$modeLabel: $mapName starts in $minutesBefore $unit';
+        } else {
+          body = '$modeLabel: Next map starts in $minutesBefore $unit';
+        }
+        await _dispatch(idBase + i, body, notifyAt, now);
         scheduled++;
       }
 
-      // Can't project further without a known cadence, or when filtering (future
-      // map names are unknown, so unfilterable).
-      if (durationSecs <= 0 || filtering) break;
+      // Can't project further rotations without a known cadence.
+      if (durationSecs <= 0) break;
       rotationStartSecs += durationSecs;
     }
 
     log.d('$modeLabel: scheduled $scheduled notification(s)');
     return scheduled;
+  }
+
+  /// Arms a single alert. Mobile hands it to the OS scheduler so it fires even
+  /// when the app is closed; desktop sets an in-app timer that fires [show]
+  /// only while the app keeps running.
+  static Future<void> _dispatch(
+    int id,
+    String body,
+    tz.TZDateTime at,
+    tz.TZDateTime now,
+  ) async {
+    if (_supportsScheduled) {
+      await _plugin.zonedSchedule(
+        id: id,
+        title: 'Apexlytics',
+        body: body,
+        scheduledDate: at,
+        notificationDetails: _details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    } else {
+      _desktopTimers.add(
+        Timer(at.difference(now), () {
+          _plugin.show(
+            id: id,
+            title: 'Apexlytics',
+            body: body,
+            notificationDetails: _details,
+          );
+        }),
+      );
+    }
   }
 
   static String _mapDisplay(MapMode m) =>
@@ -235,6 +334,14 @@ class NotificationService {
 
   static Future<void> cancelAll() async {
     if (!_initialized) return;
+    await _cancelAllInternal();
+  }
+
+  static Future<void> _cancelAllInternal() async {
+    for (final t in _desktopTimers) {
+      t.cancel();
+    }
+    _desktopTimers.clear();
     await _plugin.cancelAll();
   }
 }

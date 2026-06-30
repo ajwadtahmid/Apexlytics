@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
@@ -11,11 +12,24 @@ import '../constants/timeout_constants.dart';
 import '../env/env.dart';
 import '../models/background_fetch_settings.dart';
 import '../models/map_rotation.dart';
+import '../models/seasonal_maps.dart';
 import '../utils/app_logger.dart';
 import 'notification_service.dart';
 
 const int _backgroundFetchIntervalMinutes = 30;
 const String _kLastFetchResultKey = 'bg_fetch_last_result';
+
+/// Reads the cached rotation order written by the foreground /maps provider.
+/// Returns null if absent or unparseable — callers fall back to generic copy.
+SeasonalMaps? _cachedSeasonalMaps(SharedPreferences prefs) {
+  final jsonStr = prefs.getString(SeasonalMaps.cacheKey);
+  if (jsonStr == null) return null;
+  try {
+    return SeasonalMaps.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
+  }
+}
 
 // Runs when the app is fully terminated (headless). Must be top-level.
 @pragma('vm:entry-point')
@@ -65,6 +79,11 @@ Future<void> _backgroundFetchAndSchedule() async {
       response.data as Map<String, dynamic>,
     );
 
+    // The cyclic rotation order (cached by the foreground /maps provider) lets
+    // every projected Ranked/Pubs alert be named. The isolate has no provider
+    // tree, so read it straight from prefs; absence just falls back to generic.
+    final seasonal = _cachedSeasonalMaps(prefs);
+
     await NotificationService.scheduleAll(
       rotation,
       notifyPubs: settings.notifyPubs,
@@ -77,6 +96,8 @@ Future<void> _backgroundFetchAndSchedule() async {
       wildcardMinutesBefore: settings.wildcardMinutesBefore,
       favoriteRankedMapNames: settings.favoriteRankedMapNames,
       favoritePubsMapNames: settings.favoritePubsMapNames,
+      rankedSequence: seasonal?.rankedNames ?? const [],
+      pubsSequence: seasonal?.pubsNames ?? const [],
     );
     debugPrint('[BackgroundService] Notifications scheduled successfully');
     await prefs.setString(
