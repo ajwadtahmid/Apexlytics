@@ -9,7 +9,7 @@ import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
 import '../ranked_entity_history_screen.dart';
 import 'map_rp_badge.dart';
-import 'ranked_match_list.dart' show MatchGrouping;
+import 'match_history_items.dart' show MatchGrouping;
 
 enum _Sort { totalRp, games, avgRp }
 

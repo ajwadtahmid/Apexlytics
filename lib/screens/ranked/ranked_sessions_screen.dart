@@ -5,7 +5,7 @@ import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_entity_history_screen.dart';
-import 'widgets/ranked_match_list.dart' show MatchGrouping;
+import 'widgets/match_history_items.dart' show MatchGrouping;
 
 final _sessionDateFmt = DateFormat('MMM d · h:mm a');
 final _sessionDayFmt = DateFormat('MMM d');

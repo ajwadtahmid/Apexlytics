@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/ranked_match.dart';
 import '../../utils/theme.dart';
-import 'widgets/ranked_match_list.dart';
+import 'widgets/match_history_items.dart';
+import 'widgets/match_history_list.dart';
 
 /// Full-screen ranked history for a single legend or map, reached by tapping a
 /// card in the Legends/Maps tabs. Shows the same day-grouped rows as the
