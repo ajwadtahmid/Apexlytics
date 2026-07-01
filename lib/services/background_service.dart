@@ -8,11 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 
 import '../constants/api_constants.dart';
-import '../constants/timeout_constants.dart';
-import '../env/env.dart';
 import '../models/background_fetch_settings.dart';
 import '../models/map_rotation.dart';
 import '../models/seasonal_maps.dart';
+import '../utils/api_base_options.dart';
 import '../utils/app_logger.dart';
 import 'notification_service.dart';
 
@@ -58,17 +57,9 @@ Future<void> _backgroundFetchAndSchedule() async {
     final settings = BackgroundFetchSettings.fromPrefs(prefs);
     if (settings == null) return;
 
-    final clientToken = Env.clientToken;
     // Headless tasks run in a detached isolate — no provider tree is available,
     // so ApiService cannot be used here. Create a minimal Dio client directly.
-    final dio = Dio(
-      BaseOptions(
-        baseUrl: Env.proxyUrl,
-        connectTimeout: TimeoutConstants.apiConnect,
-        receiveTimeout: TimeoutConstants.apiReceive,
-        headers: clientToken.isNotEmpty ? {'x-client-token': clientToken} : {},
-      ),
-    );
+    final dio = Dio(buildApiBaseOptions());
 
     final response = await dio.get(
       ApiConstants.mapRotationPath,

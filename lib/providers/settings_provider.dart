@@ -98,12 +98,14 @@ class PlayerSettings {
     this.favoritePubsMapNames = const [],
   });
 
-  PlayerProfile? get activeProfile =>
-      activeProfileIndex < profiles.length ? profiles[activeProfileIndex] : null;
+  PlayerProfile? get activeProfile => activeProfileIndex < profiles.length
+      ? profiles[activeProfileIndex]
+      : null;
 
   String get name => activeProfile?.name ?? '';
   String get uid => activeProfile?.uid ?? '';
-  String get platform => activeProfile?.platform ?? ApiConstants.defaultPlatform;
+  String get platform =>
+      activeProfile?.platform ?? ApiConstants.defaultPlatform;
   bool get isPlayerSet => activeProfile?.isSet ?? false;
 
   @override
@@ -221,7 +223,8 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       final name = _prefs.getString(PrefsKeys.playerName) ?? '';
       final uid = _prefs.getString(PrefsKeys.playerUid) ?? '';
       final platform =
-          _prefs.getString(PrefsKeys.playerPlatform) ?? ApiConstants.defaultPlatform;
+          _prefs.getString(PrefsKeys.playerPlatform) ??
+          ApiConstants.defaultPlatform;
       if (name.isNotEmpty || uid.isNotEmpty) {
         profiles = [PlayerProfile(name: name, uid: uid, platform: platform)];
         activeIdx = 0;
@@ -230,7 +233,10 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
         // migration re-runs harmlessly on next launch.
         unawaited(
           _prefs
-              .setString(PrefsKeys.profiles, jsonEncode([profiles.first.toJson()]))
+              .setString(
+                PrefsKeys.profiles,
+                jsonEncode([profiles.first.toJson()]),
+              )
               .catchError((Object e) {
                 log.w('Migration persist failed', error: e);
                 return false;
@@ -249,14 +255,16 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
         !_prefs.containsKey(PrefsKeys.rankedNotifyMinutes) &&
         !_prefs.containsKey(PrefsKeys.pubsNotifyMinutes) &&
         !_prefs.containsKey(PrefsKeys.mixtapeNotifyMinutes)) {
-      unawaited(Future.wait([
-        _prefs.setInt(PrefsKeys.rankedNotifyMinutes, legacyMinutes),
-        _prefs.setInt(PrefsKeys.pubsNotifyMinutes, legacyMinutes),
-        _prefs.setInt(PrefsKeys.mixtapeNotifyMinutes, legacyMinutes),
-      ]).catchError((Object e) {
-        log.w('Per-mode timing migration failed', error: e);
-        return <bool>[];
-      }));
+      unawaited(
+        Future.wait([
+          _prefs.setInt(PrefsKeys.rankedNotifyMinutes, legacyMinutes),
+          _prefs.setInt(PrefsKeys.pubsNotifyMinutes, legacyMinutes),
+          _prefs.setInt(PrefsKeys.mixtapeNotifyMinutes, legacyMinutes),
+        ]).catchError((Object e) {
+          log.w('Per-mode timing migration failed', error: e);
+          return <bool>[];
+        }),
+      );
     }
 
     return PlayerSettings(
@@ -281,10 +289,12 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       wildcardNotifyMinutesBefore:
           _prefs.getInt(PrefsKeys.wildcardNotifyMinutes) ?? 0,
       defaultTab: _prefs.getInt(PrefsKeys.defaultTab) ?? 0,
-      favoriteRankedMapNames:
-          parseStringList(_prefs.getString(PrefsKeys.favoriteRankedMapNames)),
-      favoritePubsMapNames:
-          parseStringList(_prefs.getString(PrefsKeys.favoritePubsMapNames)),
+      favoriteRankedMapNames: parseStringList(
+        _prefs.getString(PrefsKeys.favoriteRankedMapNames),
+      ),
+      favoritePubsMapNames: parseStringList(
+        _prefs.getString(PrefsKeys.favoritePubsMapNames),
+      ),
     );
   }
 
@@ -329,7 +339,12 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   }
 
   /// Updates a specific profile slot without switching the active profile.
-  Future<void> updateProfile(int index, String name, String uid, String platform) async {
+  Future<void> updateProfile(
+    int index,
+    String name,
+    String uid,
+    String platform,
+  ) async {
     if (index < 0 || index >= state.profiles.length) return;
     final profiles = List<PlayerProfile>.from(state.profiles);
     profiles[index] = PlayerProfile(name: name, uid: uid, platform: platform);
@@ -351,76 +366,107 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     state = state.copyWith(profiles: profiles, activeProfileIndex: activeIdx);
   }
 
-  Future<void> _setAndPersist<T>(
+  Future<void> _setBool(
     String key,
-    T value,
+    bool value,
     PlayerSettings Function(PlayerSettings) update,
   ) async {
-    // Supported types: bool, int, List<String>. Callers must only pass these types.
-    if (value is bool) {
-      await _prefs.setBool(key, value);
-    } else if (value is int) {
-      await _prefs.setInt(key, value);
-    } else if (value is List<String>) {
-      await _prefs.setString(key, jsonEncode(value));
-    } else {
-      assert(false, '_setAndPersist called with unsupported type: $T');
-      return;
-    }
+    await _prefs.setBool(key, value);
     state = update(state);
   }
 
-  Future<void> setStatsRefreshMinutes(int v) =>
-      _setAndPersist(PrefsKeys.statsRefreshMinutes, v,
-          (s) => s.copyWith(statsRefreshMinutes: v));
+  Future<void> _setInt(
+    String key,
+    int value,
+    PlayerSettings Function(PlayerSettings) update,
+  ) async {
+    await _prefs.setInt(key, value);
+    state = update(state);
+  }
 
-  Future<void> setCompactLegendCards(bool v) =>
-      _setAndPersist(PrefsKeys.compactLegendCards, v,
-          (s) => s.copyWith(compactLegendCards: v));
+  Future<void> _setStringList(
+    String key,
+    List<String> value,
+    PlayerSettings Function(PlayerSettings) update,
+  ) async {
+    await _prefs.setString(key, jsonEncode(value));
+    state = update(state);
+  }
 
-  Future<void> setRankedNotifyMinutesBefore(int v) =>
-      _setAndPersist(PrefsKeys.rankedNotifyMinutes, v,
-          (s) => s.copyWith(rankedNotifyMinutesBefore: v));
+  Future<void> setStatsRefreshMinutes(int v) => _setInt(
+    PrefsKeys.statsRefreshMinutes,
+    v,
+    (s) => s.copyWith(statsRefreshMinutes: v),
+  );
 
-  Future<void> setPubsNotifyMinutesBefore(int v) =>
-      _setAndPersist(PrefsKeys.pubsNotifyMinutes, v,
-          (s) => s.copyWith(pubsNotifyMinutesBefore: v));
+  Future<void> setCompactLegendCards(bool v) => _setBool(
+    PrefsKeys.compactLegendCards,
+    v,
+    (s) => s.copyWith(compactLegendCards: v),
+  );
 
-  Future<void> setMixtapeNotifyMinutesBefore(int v) =>
-      _setAndPersist(PrefsKeys.mixtapeNotifyMinutes, v,
-          (s) => s.copyWith(mixtapeNotifyMinutesBefore: v));
+  Future<void> setRankedNotifyMinutesBefore(int v) => _setInt(
+    PrefsKeys.rankedNotifyMinutes,
+    v,
+    (s) => s.copyWith(rankedNotifyMinutesBefore: v),
+  );
 
-  Future<void> setNotifyPubsMapRotation(bool v) =>
-      _setAndPersist(PrefsKeys.notifyPubsMapRotation, v,
-          (s) => s.copyWith(notifyPubsMapRotation: v));
+  Future<void> setPubsNotifyMinutesBefore(int v) => _setInt(
+    PrefsKeys.pubsNotifyMinutes,
+    v,
+    (s) => s.copyWith(pubsNotifyMinutesBefore: v),
+  );
 
-  Future<void> setNotifyRankedMapRotation(bool v) =>
-      _setAndPersist(PrefsKeys.notifyRankedMapRotation, v,
-          (s) => s.copyWith(notifyRankedMapRotation: v));
+  Future<void> setMixtapeNotifyMinutesBefore(int v) => _setInt(
+    PrefsKeys.mixtapeNotifyMinutes,
+    v,
+    (s) => s.copyWith(mixtapeNotifyMinutesBefore: v),
+  );
 
-  Future<void> setNotifyMixtapeMapRotation(bool v) =>
-      _setAndPersist(PrefsKeys.notifyMixtapeMapRotation, v,
-          (s) => s.copyWith(notifyMixtapeMapRotation: v));
+  Future<void> setNotifyPubsMapRotation(bool v) => _setBool(
+    PrefsKeys.notifyPubsMapRotation,
+    v,
+    (s) => s.copyWith(notifyPubsMapRotation: v),
+  );
 
-  Future<void> setNotifyWildcardMapRotation(bool v) =>
-      _setAndPersist(PrefsKeys.notifyWildcardMapRotation, v,
-          (s) => s.copyWith(notifyWildcardMapRotation: v));
+  Future<void> setNotifyRankedMapRotation(bool v) => _setBool(
+    PrefsKeys.notifyRankedMapRotation,
+    v,
+    (s) => s.copyWith(notifyRankedMapRotation: v),
+  );
 
-  Future<void> setWildcardNotifyMinutesBefore(int v) =>
-      _setAndPersist(PrefsKeys.wildcardNotifyMinutes, v,
-          (s) => s.copyWith(wildcardNotifyMinutesBefore: v));
+  Future<void> setNotifyMixtapeMapRotation(bool v) => _setBool(
+    PrefsKeys.notifyMixtapeMapRotation,
+    v,
+    (s) => s.copyWith(notifyMixtapeMapRotation: v),
+  );
+
+  Future<void> setNotifyWildcardMapRotation(bool v) => _setBool(
+    PrefsKeys.notifyWildcardMapRotation,
+    v,
+    (s) => s.copyWith(notifyWildcardMapRotation: v),
+  );
+
+  Future<void> setWildcardNotifyMinutesBefore(int v) => _setInt(
+    PrefsKeys.wildcardNotifyMinutes,
+    v,
+    (s) => s.copyWith(wildcardNotifyMinutesBefore: v),
+  );
 
   Future<void> setDefaultTab(int v) =>
-      _setAndPersist(PrefsKeys.defaultTab, v,
-          (s) => s.copyWith(defaultTab: v));
+      _setInt(PrefsKeys.defaultTab, v, (s) => s.copyWith(defaultTab: v));
 
-  Future<void> setFavoriteRankedMapNames(List<String> v) =>
-      _setAndPersist(PrefsKeys.favoriteRankedMapNames, v,
-          (s) => s.copyWith(favoriteRankedMapNames: v));
+  Future<void> setFavoriteRankedMapNames(List<String> v) => _setStringList(
+    PrefsKeys.favoriteRankedMapNames,
+    v,
+    (s) => s.copyWith(favoriteRankedMapNames: v),
+  );
 
-  Future<void> setFavoritePubsMapNames(List<String> v) =>
-      _setAndPersist(PrefsKeys.favoritePubsMapNames, v,
-          (s) => s.copyWith(favoritePubsMapNames: v));
+  Future<void> setFavoritePubsMapNames(List<String> v) => _setStringList(
+    PrefsKeys.favoritePubsMapNames,
+    v,
+    (s) => s.copyWith(favoritePubsMapNames: v),
+  );
 
   Future<void> clear() async {
     await Future.wait([
@@ -439,6 +485,9 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       _prefs.remove(PrefsKeys.wildcardNotifyMinutes),
       _prefs.remove(PrefsKeys.favoriteRankedMapNames),
       _prefs.remove(PrefsKeys.favoritePubsMapNames),
+      _prefs.remove(PrefsKeys.statsRefreshMinutes),
+      _prefs.remove(PrefsKeys.compactLegendCards),
+      _prefs.remove(PrefsKeys.defaultTab),
     ]);
     state = state.copyWith(
       profiles: [],
@@ -453,6 +502,9 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       wildcardNotifyMinutesBefore: 0,
       favoriteRankedMapNames: [],
       favoritePubsMapNames: [],
+      statsRefreshMinutes: 0,
+      compactLegendCards: false,
+      defaultTab: 0,
     );
   }
 }
@@ -463,4 +515,3 @@ final playerSettingsProvider =
     NotifierProvider<PlayerSettingsNotifier, PlayerSettings>(
       PlayerSettingsNotifier.new,
     );
-

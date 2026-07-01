@@ -1,9 +1,27 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../models/map_rotation.dart';
 import '../utils/app_logger.dart';
+
+/// A single scheduling decision produced by
+/// [NotificationService.projectModeSeries]: which alert id fires, with what body
+/// copy, at what time. Deliberately free of any platform-channel call so the
+/// scheduling math (budget, favourites filter, sequence projection, timing) is
+/// unit-testable without a plugin.
+class PlannedAlert {
+  final int id;
+  final String body;
+  final tz.TZDateTime notifyAt;
+
+  const PlannedAlert({
+    required this.id,
+    required this.body,
+    required this.notifyAt,
+  });
+}
 
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
@@ -234,9 +252,49 @@ class NotificationService {
     List<String> favoriteMapNames = const [],
     List<String> mapSequence = const [],
   }) async {
-    if (budget <= 0) return 0;
-
     final now = tz.TZDateTime.now(tz.UTC);
+    final alerts = projectModeSeries(
+      idBase,
+      modeLabel,
+      nextMap,
+      currentRemainingSecs,
+      minutesBefore,
+      budget,
+      favoriteMapNames: favoriteMapNames,
+      mapSequence: mapSequence,
+      now: now,
+    );
+    for (final a in alerts) {
+      await _dispatch(a.id, a.body, a.notifyAt, now);
+    }
+    log.d('$modeLabel: scheduled ${alerts.length} notification(s)');
+    return alerts.length;
+  }
+
+  /// Pure projection of which alerts a single mode should schedule, given the
+  /// live [now]. Applies the same [budget]/[_maxPerMode] caps, favourites
+  /// filtering, cyclic-sequence naming, and past-alert dropping as the real
+  /// scheduler, but returns the decisions instead of dispatching them so the
+  /// math can be tested without a platform channel.
+  ///
+  /// When [mapSequence] (the cyclic rotation order) is provided, every projected
+  /// rotation is named by walking the cycle from [nextMap]'s position. Without
+  /// it, only the next rotation is named and later ones use generic copy.
+  @visibleForTesting
+  static List<PlannedAlert> projectModeSeries(
+    int idBase,
+    String modeLabel,
+    MapMode nextMap,
+    int currentRemainingSecs,
+    int minutesBefore,
+    int budget, {
+    List<String> favoriteMapNames = const [],
+    List<String> mapSequence = const [],
+    required tz.TZDateTime now,
+  }) {
+    final alerts = <PlannedAlert>[];
+    if (budget <= 0) return alerts;
+
     final durationSecs = nextMap.durationMins * 60;
     final filtering = favoriteMapNames.isNotEmpty;
 
@@ -246,9 +304,8 @@ class NotificationService {
     final hasSequence = nextIndex >= 0;
 
     var rotationStartSecs = currentRemainingSecs;
-    var scheduled = 0;
 
-    for (var i = 0; i < _maxPerMode && scheduled < budget; i++) {
+    for (var i = 0; i < _maxPerMode && alerts.length < budget; i++) {
       // The map name for rotation i: the live next map for i==0, otherwise
       // projected from the cycle. Null means we can't identify it.
       final String? mapName = i == 0
@@ -282,8 +339,7 @@ class NotificationService {
         } else {
           body = '$modeLabel: Next map starts in $minutesBefore $unit';
         }
-        await _dispatch(idBase + i, body, notifyAt, now);
-        scheduled++;
+        alerts.add(PlannedAlert(id: idBase + i, body: body, notifyAt: notifyAt));
       }
 
       // Can't project further rotations without a known cadence.
@@ -291,8 +347,7 @@ class NotificationService {
       rotationStartSecs += durationSecs;
     }
 
-    log.d('$modeLabel: scheduled $scheduled notification(s)');
-    return scheduled;
+    return alerts;
   }
 
   /// Arms a single alert. Mobile hands it to the OS scheduler so it fires even

@@ -29,7 +29,7 @@ class MapModeTile extends StatelessWidget {
         child: Row(
           children: [
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: AppTheme.shortAnimation,
               width: 10,
               height: 10,
               decoration: BoxDecoration(color: color, shape: BoxShape.circle),
@@ -150,7 +150,7 @@ class MapAlertTile extends StatelessWidget {
         child: Row(
           children: [
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: AppTheme.shortAnimation,
               width: 10,
               height: 10,
               decoration: BoxDecoration(color: color, shape: BoxShape.circle),

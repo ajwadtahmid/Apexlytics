@@ -1,8 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../constants/timeout_constants.dart';
-import '../env/env.dart';
+import '../utils/api_base_options.dart';
 import '../utils/api_cache.dart';
 import '../utils/app_logger.dart';
 import '../utils/error_messages.dart' show AppException, friendlyError;
@@ -18,16 +17,7 @@ class ApiService {
   late final ApiCache _cache;
 
   ApiService(SharedPreferences prefs) {
-    final proxyUrl = Env.proxyUrl;
-    final clientToken = Env.clientToken;
-    _dio = Dio(
-      BaseOptions(
-        baseUrl: proxyUrl,
-        connectTimeout: TimeoutConstants.apiConnect,
-        receiveTimeout: TimeoutConstants.apiReceive,
-        headers: clientToken.isNotEmpty ? {'x-client-token': clientToken} : {},
-      ),
-    );
+    _dio = Dio(buildApiBaseOptions());
     if (kDebugMode) {
       _dio.interceptors.add(
         LogInterceptor(
@@ -84,7 +74,10 @@ class ApiService {
         noCache: noCache,
         // Defensive fallback: wrap non-map responses (e.g. scalars, lists) so the
         // caller always receives a Map<String, dynamic>. The wrapped value is in '_raw'.
-        normalizer: (d) => d is Map<String, dynamic> ? d : {'_raw': d},
+        normalizer: (d) {
+          if (d is Map && d.containsKey('error')) throw AppException(d['error']);
+          return d is Map<String, dynamic> ? d : {'_raw': d};
+        },
         cacheNormalizer: (d) => d as Map<String, dynamic>,
       );
 

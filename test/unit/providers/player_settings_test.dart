@@ -103,5 +103,29 @@ void main() {
       addTearDown(container.dispose);
       expect(container.read(playerSettingsProvider).activeProfile, isNull);
     });
+
+    test('clear() resets UI prefs (defaultTab, statsRefreshMinutes, compactLegendCards)',
+        () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
+      final notifier = container.read(playerSettingsProvider.notifier);
+
+      await notifier.setDefaultTab(2);
+      await notifier.setStatsRefreshMinutes(30);
+      await notifier.setCompactLegendCards(true);
+      await notifier.clear();
+
+      final settings = container.read(playerSettingsProvider);
+      expect(settings.defaultTab, 0);
+      expect(settings.statsRefreshMinutes, 0);
+      expect(settings.compactLegendCards, isFalse);
+
+      // Reload from prefs to confirm the keys were actually removed, not
+      // just reset in memory.
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('default_tab'), isNull);
+      expect(prefs.getInt('stats_refresh_minutes'), isNull);
+      expect(prefs.getBool('compact_legend_cards'), isNull);
+    });
   });
 }

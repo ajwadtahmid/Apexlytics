@@ -118,5 +118,46 @@ void main() {
       final cache = ApiCache(prefs);
       expect(cache.load('/player'), isNull);
     });
+
+    test('load() prunes an expired entry so it stops counting toward the cap',
+        () async {
+      final prefs = await SharedPreferences.getInstance();
+      await setOldEntry(prefs, '/player', 24 * 60 + 1);
+      final cache = ApiCache(prefs);
+      expect(cache.load('/player'), isNull);
+      expect(prefs.getString('api_cache:/player'), isNull);
+      expect(prefs.getInt('api_cache_ts:/player'), isNull);
+    });
+  });
+
+  group('Eviction cap', () {
+    test('keeps the cache size at or under the cap after many saves', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final cache = ApiCache(prefs);
+      for (var i = 0; i < 160; i++) {
+        await cache.save('/player/uid$i', {'i': i});
+      }
+      final entryCount = prefs
+          .getKeys()
+          .where((k) => k.startsWith('api_cache_ts:'))
+          .length;
+      expect(entryCount, lessThanOrEqualTo(150));
+    });
+
+    test('evicts the oldest entries first, keeping the newest', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final cache = ApiCache(prefs);
+      // Pre-populate 150 entries (the cap) with deterministic, ascending
+      // timestamps so uid0 is unambiguously the oldest.
+      for (var i = 0; i < 150; i++) {
+        await prefs.setString('api_cache:/player/uid$i', '{"i":$i}');
+        await prefs.setInt('api_cache_ts:/player/uid$i', i);
+      }
+      // One more save (real, later timestamp) pushes the cache over the cap.
+      await cache.save('/player/uid150', {'i': 150});
+
+      expect(cache.load('/player/uid0'), isNull);
+      expect(cache.load('/player/uid150'), isNotNull);
+    });
   });
 }

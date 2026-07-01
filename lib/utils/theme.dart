@@ -44,9 +44,8 @@ class AppTheme {
   /// Vertical padding for summary tile rows (shared across tile, skeleton, error).
   static const double summaryTileVerticalPadding = 14;
 
-  /// Duration for mode-picker pill animation.
-  static const Duration modePickerAnimationDuration =
-      Duration(milliseconds: 200);
+  /// Duration for short UI transitions (pill/tab animations, etc).
+  static const Duration shortAnimation = Duration(milliseconds: 200);
 
   // API returns status values in uppercase ('UP', 'DOWN', 'SLOW', 'PARTIAL').
   static Color statusColor(String status) => switch (status) {

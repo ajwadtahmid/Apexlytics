@@ -8,7 +8,6 @@ import '../../providers/player_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/error_messages.dart';
-import '../../utils/storage/season_storage.dart';
 import '../../utils/formatting/season_utils.dart';
 import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/storage/storage.dart';
@@ -22,8 +21,9 @@ class StatsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isPlayerSet =
-        ref.watch(playerSettingsProvider.select((s) => s.isPlayerSet));
+    final isPlayerSet = ref.watch(
+      playerSettingsProvider.select((s) => s.isPlayerSet),
+    );
 
     if (!isPlayerSet) return const _PlayerSetupView();
     return const _StatsView();
@@ -135,9 +135,16 @@ class _StatsViewState extends ConsumerState<_StatsView> {
     }
   }
 
-  Future<void> _openOnALS(BuildContext context, String uid, String platform) async {
+  Future<void> _openOnALS(
+    BuildContext context,
+    String uid,
+    String platform,
+  ) async {
     final url = '${ApiConstants.alsProfileBaseUrl}/$platform/$uid';
-    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    final ok = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
     if (!ok && context.mounted) {
       context.showMessage('Could not open link');
     }
@@ -169,8 +176,12 @@ class _StatsViewState extends ConsumerState<_StatsView> {
   Widget build(BuildContext context) {
     final name = ref.watch(playerSettingsProvider.select((s) => s.name));
     final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
-    final platform = ref.watch(playerSettingsProvider.select((s) => s.platform));
-    final compactLegendCards = ref.watch(playerSettingsProvider.select((s) => s.compactLegendCards));
+    final platform = ref.watch(
+      playerSettingsProvider.select((s) => s.platform),
+    );
+    final compactLegendCards = ref.watch(
+      playerSettingsProvider.select((s) => s.compactLegendCards),
+    );
     final statsAsync = ref.watch(myPlayerStatsProvider);
 
     return Scaffold(
@@ -229,7 +240,12 @@ class _StatsViewState extends ConsumerState<_StatsView> {
               child: Text('No data.', style: TextStyle(color: AppTheme.muted)),
             );
           }
-          return _StatsBody(stats: stats, staleAt: result.staleAt, platform: platform, compactLegendCards: compactLegendCards);
+          return _StatsBody(
+            stats: stats,
+            staleAt: result.staleAt,
+            platform: platform,
+            compactLegendCards: compactLegendCards,
+          );
         },
         loading: () => const _StatsSkeleton(),
         error: (e, _) => ErrorView(
@@ -247,7 +263,12 @@ class _StatsBody extends ConsumerStatefulWidget {
   final String platform;
   final bool compactLegendCards;
 
-  const _StatsBody({required this.stats, required this.platform, required this.compactLegendCards, this.staleAt});
+  const _StatsBody({
+    required this.stats,
+    required this.platform,
+    required this.compactLegendCards,
+    this.staleAt,
+  });
 
   @override
   ConsumerState<_StatsBody> createState() => _StatsBodyState();
@@ -282,7 +303,11 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
   void _initSnapshots() {
     final prefs = ref.read(sharedPreferencesProvider);
     initSnapshotFields(
-        prefs, widget.stats.uid, widget.stats.rankedSeason, widget.stats.rankScore);
+      prefs,
+      widget.stats.uid,
+      widget.stats.rankedSeason,
+      widget.stats.rankScore,
+    );
   }
 
   Future<void> _loadAndAppend() async {
@@ -310,7 +335,11 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
         _mergedLegends = legends;
         _legendStack = stack;
         allSeasons = loadAllSeasonsSync(prefs);
-        rpDelta = computeWeekDelta(snaps, widget.stats.rankedSeason, widget.stats.rankScore);
+        rpDelta = computeWeekDelta(
+          snaps,
+          widget.stats.rankedSeason,
+          widget.stats.rankScore,
+        );
       });
     }
   }
@@ -338,10 +367,7 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           ],
           PlayerInfoCard(stats: stats, rpDelta: rpDelta),
           const SizedBox(height: AppTheme.md),
-          RankedInfoCard(
-            myRp: stats.rankScore,
-            platform: widget.platform,
-          ),
+          RankedInfoCard(myRp: stats.rankScore, platform: widget.platform),
           const SizedBox(height: AppTheme.md),
           GraphCard(
             snapshots: snapshots,

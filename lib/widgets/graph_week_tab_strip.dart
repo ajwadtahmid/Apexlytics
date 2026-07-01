@@ -57,7 +57,7 @@ class _WeekTabStripState extends State<WeekTabStrip> {
         (widget.selectedIndex * _chipWidth - _chipScrollLeadIn).clamp(0.0, double.infinity);
     _scroll.animateTo(
       offset,
-      duration: const Duration(milliseconds: 200),
+      duration: AppTheme.shortAnimation,
       curve: Curves.easeOut,
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,16 +28,22 @@ class ApiCache {
   static const _cacheTimestampKeyPrefix = 'api_cache_ts:';
   // Default TTL: 24 h — useful offline but overridden per endpoint above.
   static const defaultMaxAgeMinutes = 24 * 60;
+  // Caps disk growth from arbitrary-player lookups (search/compare) that each
+  // write a permanent entry with no TTL-driven cleanup. Oldest entries evict
+  // first once the cap is exceeded.
+  static const _maxEntries = 150;
 
   ApiCache(this._prefs);
 
-  /// Saves [data] with a timestamp. Returns null if the entry has exceeded its TTL.
+  /// Saves [data] with a timestamp, then evicts the oldest entries if the
+  /// cache has grown past [_maxEntries].
   Future<void> save(String key, dynamic data) async {
     await _prefs.setString('$_cacheKeyPrefix$key', jsonEncode(data));
     await _prefs.setInt(
       '$_cacheTimestampKeyPrefix$key',
       DateTime.now().millisecondsSinceEpoch,
     );
+    await _evictOldestIfOverCap();
   }
 
   /// Loads cached data by [key]. Returns null if not found or expired past the endpoint's TTL.
@@ -48,7 +55,10 @@ class ApiCache {
     final ttl = _ttlForKey(key);
     // Millisecond epoch comparison: timezone-safe because both sides use the same
     // internal clock reference regardless of local time zone.
-    if (DateTime.now().difference(savedAt).inMinutes > ttl) return null;
+    if (DateTime.now().difference(savedAt).inMinutes > ttl) {
+      unawaited(_removeEntry(key));
+      return null;
+    }
     return _decode(raw, savedAt);
   }
 
@@ -67,6 +77,33 @@ class ApiCache {
       return CachedEntry(data: jsonDecode(raw), savedAt: savedAt);
     } on FormatException {
       return null;
+    }
+  }
+
+  Future<void> _removeEntry(String key) => Future.wait([
+        _prefs.remove('$_cacheKeyPrefix$key'),
+        _prefs.remove('$_cacheTimestampKeyPrefix$key'),
+      ]);
+
+  /// Evicts the oldest entries (by saved-at timestamp) once the cache holds
+  /// more than [_maxEntries], so unbounded player lookups can't grow the
+  /// `SharedPreferences` backing store forever.
+  Future<void> _evictOldestIfOverCap() async {
+    final tsKeys = _prefs
+        .getKeys()
+        .where((k) => k.startsWith(_cacheTimestampKeyPrefix))
+        .toList();
+    final overflow = tsKeys.length - _maxEntries;
+    if (overflow <= 0) return;
+
+    final byAge = tsKeys
+        .map((k) => MapEntry(k, _prefs.getInt(k) ?? 0))
+        .toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    for (final entry in byAge.take(overflow)) {
+      final key = entry.key.substring(_cacheTimestampKeyPrefix.length);
+      await _removeEntry(key);
     }
   }
 

@@ -104,7 +104,7 @@ class _ModePicker extends StatelessWidget {
             child: GestureDetector(
               onTap: () => onSelect(i),
               child: AnimatedContainer(
-                duration: AppTheme.modePickerAnimationDuration,
+                duration: AppTheme.shortAnimation,
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
                   color: active ? AppTheme.accent : Colors.transparent,
