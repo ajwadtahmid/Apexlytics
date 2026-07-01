@@ -128,15 +128,18 @@ final rankedMatchesProvider =
     FutureProvider.autoDispose.family<List<RankedMatch>, String>(
   (ref, uid) async {
     final store = ref.watch(rankedHistoryStoreProvider);
+    final seasons = ref.watch(rankedSeasonsProvider);
     try {
       final fresh = await ref.watch(gamesServiceProvider).getMatches(uid);
-      await store.upsertAll(uid, fresh);
+      await store.upsertAll(uid, fresh, seasons: seasons);
     } catch (e) {
       final existing = await store.getAll(uid);
       if (existing.isEmpty) rethrow;
       log.w('games fetch failed; serving persisted history', error: e);
       return existing;
     }
+    // Classify any pre-column rows now that season metadata is loaded.
+    await store.backfillSeasonIds(seasons);
     return store.getAll(uid);
   },
 );

@@ -51,7 +51,6 @@ void main() async {
     // No DSN configured, or not a supported mobile platform — Sentry's Crashpad
     // backend cannot reliably spawn its handler subprocess on desktop targets.
     _hookFlutterErrors(sentryFlutterHandler: null);
-    FlutterNativeSplash.remove();
     runApp(app);
     return;
   }
@@ -68,7 +67,6 @@ void main() async {
     appRunner: () {
       // Chain our logger after Sentry sets its own FlutterError handler.
       _hookFlutterErrors(sentryFlutterHandler: FlutterError.onError);
-      FlutterNativeSplash.remove();
       runApp(app);
     },
   );

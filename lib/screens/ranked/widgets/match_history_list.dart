@@ -16,7 +16,13 @@ import 'match_history_items.dart';
 /// When [grouping] is supplied, matches are instead sectioned by that entity
 /// (e.g. map within a legend), each section headed by its games/net-RP/avg-RP
 /// summary and ordered by net RP descending. Day grouping is the default.
-class MatchHistoryList extends StatelessWidget {
+///
+/// Day-grouped mode paginates in increments of [kHistoryPageSize], loading the
+/// next page automatically as the user scrolls near the bottom, extended to a
+/// session boundary (see [buildDayItems]) — grouped mode shows everything,
+/// since it's already a filtered, RP-sorted subset rather than a long
+/// chronological feed.
+class MatchHistoryList extends StatefulWidget {
   final List<RankedMatch> matches; // newest first
   final Future<void> Function() onRefresh;
 
@@ -37,17 +43,71 @@ class MatchHistoryList extends StatelessWidget {
   });
 
   @override
+  State<MatchHistoryList> createState() => _MatchHistoryListState();
+}
+
+// Start auto-loading the next page once the user scrolls within this many
+// pixels of the bottom, so the next batch is ready before they hit the edge.
+const double _kLoadMoreThreshold = 400;
+
+class _MatchHistoryListState extends State<MatchHistoryList> {
+  int _pageLimit = kHistoryPageSize;
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(MatchHistoryList old) {
+    super.didUpdateWidget(old);
+    // A genuinely different match set (filter/sort change, not just an
+    // incidental rebuild from a periodic background refetch) starts back at
+    // page one rather than showing a stale scroll depth. Compared by length +
+    // newest key rather than list identity, since callers rebuild a fresh
+    // `List` on every build even when the underlying data is unchanged.
+    if (widget.matches.length != old.matches.length ||
+        _headKey(widget.matches) != _headKey(old.matches) ||
+        widget.grouping != old.grouping) {
+      _pageLimit = kHistoryPageSize;
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  String? _headKey(List<RankedMatch> matches) =>
+      matches.isEmpty ? null : matches.first.dedupKey;
+
+  void _onScroll() {
+    if (widget.grouping != null) return; // pagination is day-mode only
+    if (_pageLimit >= widget.matches.length) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - _kLoadMoreThreshold) {
+      setState(() => _pageLimit += kHistoryPageSize);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final g = grouping;
-    final items = g == null ? buildDayItems(matches) : buildGroupedItems(matches, g);
+    final g = widget.grouping;
+    final items = g == null
+        ? buildDayItems(widget.matches, limit: _pageLimit)
+        : buildGroupedItems(widget.matches, g);
 
     return Column(
       children: [
-        ?header,
+        ?widget.header,
         Expanded(
           child: RefreshIndicator(
             color: AppTheme.accent,
-            onRefresh: onRefresh,
+            onRefresh: widget.onRefresh,
             child: items.isEmpty
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -56,7 +116,7 @@ class MatchHistoryList extends StatelessWidget {
                         padding: const EdgeInsets.all(AppTheme.xl),
                         child: Center(
                           child: Text(
-                            emptyLabel,
+                            widget.emptyLabel,
                             style: const TextStyle(
                                 color: AppTheme.muted, fontSize: 13),
                           ),
@@ -65,6 +125,7 @@ class MatchHistoryList extends StatelessWidget {
                     ],
                   )
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(
                         AppTheme.md, AppTheme.sm, AppTheme.md, AppTheme.md),
                     itemCount: items.length,

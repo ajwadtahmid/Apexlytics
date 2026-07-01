@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/map_provider.dart';
 import 'providers/navigation_provider.dart';
@@ -45,6 +46,14 @@ class _AppShellState extends ConsumerState<_AppShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Hold the native splash until the first real frame has laid out —
+    // removing it any earlier (e.g. right before runApp) leaves a window
+    // where a stray tap can reach the engine before the render tree exists,
+    // crashing with "Cannot hit test a render box that has never been laid
+    // out" on Android.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
     unawaited(Future(() {
       final defaultTab = ref.read(playerSettingsProvider).defaultTab;
       ref.read(currentTabProvider.notifier).setTab(appTabForDefault(defaultTab));

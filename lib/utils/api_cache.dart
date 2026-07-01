@@ -35,16 +35,31 @@ class ApiCache {
 
   ApiCache(this._prefs);
 
+  // Approximate entry count, tracked in memory so [save] doesn't need to scan
+  // every SharedPreferences key on every write. Lazily initialized from a real
+  // scan on first use, then kept roughly in sync; [_evictOldestIfOverCap]
+  // resyncs it exactly whenever it actually runs.
+  int? _entryCount;
+
   /// Saves [data] with a timestamp, then evicts the oldest entries if the
   /// cache has grown past [_maxEntries].
   Future<void> save(String key, dynamic data) async {
+    final tsKey = '$_cacheTimestampKeyPrefix$key';
+    final isNewEntry = !_prefs.containsKey(tsKey);
     await _prefs.setString('$_cacheKeyPrefix$key', jsonEncode(data));
-    await _prefs.setInt(
-      '$_cacheTimestampKeyPrefix$key',
-      DateTime.now().millisecondsSinceEpoch,
-    );
-    await _evictOldestIfOverCap();
+    await _prefs.setInt(tsKey, DateTime.now().millisecondsSinceEpoch);
+    if (isNewEntry) {
+      _entryCount = (_entryCount ?? _scanEntryCount()) + 1;
+    }
+    if ((_entryCount ?? 0) > _maxEntries) {
+      await _evictOldestIfOverCap();
+    }
   }
+
+  int _scanEntryCount() => _prefs
+      .getKeys()
+      .where((k) => k.startsWith(_cacheTimestampKeyPrefix))
+      .length;
 
   /// Loads cached data by [key]. Returns null if not found or expired past the endpoint's TTL.
   CachedEntry? load(String key) {
@@ -94,7 +109,10 @@ class ApiCache {
         .where((k) => k.startsWith(_cacheTimestampKeyPrefix))
         .toList();
     final overflow = tsKeys.length - _maxEntries;
-    if (overflow <= 0) return;
+    if (overflow <= 0) {
+      _entryCount = tsKeys.length;
+      return;
+    }
 
     final byAge = tsKeys
         .map((k) => MapEntry(k, _prefs.getInt(k) ?? 0))
@@ -105,6 +123,7 @@ class ApiCache {
       final key = entry.key.substring(_cacheTimestampKeyPrefix.length);
       await _removeEntry(key);
     }
+    _entryCount = tsKeys.length - overflow;
   }
 
   /// Removes every cached response and its timestamp — used by "Clear all data".
@@ -115,6 +134,7 @@ class ApiCache {
     for (final key in keys.toList()) {
       await _prefs.remove(key);
     }
+    _entryCount = 0;
   }
 
   /// Resolves TTL by matching the key against [kEndpointCacheTtlMinutes].

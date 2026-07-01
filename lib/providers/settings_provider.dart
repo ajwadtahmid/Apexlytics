@@ -483,6 +483,10 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       _prefs.remove(PrefsKeys.pubsNotifyMinutes),
       _prefs.remove(PrefsKeys.mixtapeNotifyMinutes),
       _prefs.remove(PrefsKeys.wildcardNotifyMinutes),
+      // Legacy pre-per-mode key. Without this, the build() migration sees the
+      // per-mode keys absent and this key still present, then re-populates
+      // the per-mode timings from it — undoing the clear.
+      _prefs.remove(PrefsKeys.mapNotifyMinutes),
       _prefs.remove(PrefsKeys.favoriteRankedMapNames),
       _prefs.remove(PrefsKeys.favoritePubsMapNames),
       _prefs.remove(PrefsKeys.statsRefreshMinutes),

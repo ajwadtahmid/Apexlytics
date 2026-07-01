@@ -7,6 +7,21 @@ class WeekRange {
   const WeekRange({required this.start, required this.end});
 }
 
+/// Sentinel season id for matches that fall outside every known season window.
+/// Must match `kOtherSplitId` in `ranked_period.dart` so the stored column and
+/// the picker's "Other" bucket line up.
+const String kOtherSeasonId = '__other__';
+
+/// The season/split id whose window contains [endTime], or [kOtherSeasonId] when
+/// no known season covers it. A match belongs to the season its *end* time falls
+/// in — the same rule the ranked views use to bucket matches.
+String seasonIdForEndTime(DateTime endTime, Iterable<SeasonMeta> seasons) {
+  for (final s in seasons) {
+    if (!endTime.isBefore(s.start) && endTime.isBefore(s.end)) return s.id;
+  }
+  return kOtherSeasonId;
+}
+
 /// Divides a season into 7-day week windows. The final window may be shorter
 /// if the season length is not a multiple of 7 days — no hardcoding needed.
 List<WeekRange> computeWeeks(SeasonMeta season) {

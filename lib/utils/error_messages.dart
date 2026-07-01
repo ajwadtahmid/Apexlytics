@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'app_logger.dart';
 
 class AppException implements Exception {
   final String message;
@@ -30,5 +31,9 @@ String friendlyError(Object? error) {
       },
     };
   }
-  return error?.toString() ?? 'Unknown error';
+  if (error == null) return 'Unknown error';
+  // Unrecognized error shape (e.g. FormatException, DB/cast error). Log the
+  // real error for diagnosis but never surface its raw toString() to the UI.
+  log.w('Unhandled error type in friendlyError', error: error);
+  return 'Something went wrong. Please try again.';
 }

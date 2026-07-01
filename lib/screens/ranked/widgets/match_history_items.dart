@@ -49,12 +49,39 @@ class MatchItem extends HistoryItem {
   MatchItem(this.match);
 }
 
+/// Default (and incremental) number of matches shown in day-grouped history
+/// before scrolling near the bottom loads the next page. Chosen so a typical
+/// week/session's worth of games renders up front, while a multi-thousand-
+/// match history stays cheap to flatten and lay out.
+const int kHistoryPageSize = 50;
+
+/// Extends [limit] forward through [matches] (newest first) until a gap larger
+/// than [kSessionGap] is found, so a page cut never lands mid-session — the
+/// same rule [buildDayItems] uses to place [SessionBreakItem]s.
+List<RankedMatch> _extendToSessionBoundary(
+    List<RankedMatch> matches, int limit) {
+  if (limit >= matches.length) return matches;
+  var end = limit;
+  while (end < matches.length) {
+    final gap = matches[end - 1].startTime.difference(matches[end].endTime);
+    if (gap > kSessionGap) break;
+    end++;
+  }
+  return matches.sublist(0, end);
+}
+
 /// Flattens matches (newest first) into day headers, session breaks and rows.
-List<HistoryItem> buildDayItems(List<RankedMatch> matches) {
+///
+/// When [limit] is set, only the first [limit] matches are shown — extended to
+/// the end of whatever session they land in, so a session is never split
+/// across a page boundary.
+List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
+  final visible =
+      limit == null ? matches : _extendToSessionBoundary(matches, limit);
   final items = <HistoryItem>[];
   DateTime? curDay;
   final dayBuckets = <List<RankedMatch>>[];
-  for (final m in matches) {
+  for (final m in visible) {
     final lm = m.endTime.toLocal();
     final day = DateTime(lm.year, lm.month, lm.day);
     if (curDay == null || day != curDay) {
