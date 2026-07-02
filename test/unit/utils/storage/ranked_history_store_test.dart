@@ -131,6 +131,26 @@ void main() {
     expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 2);
   });
 
+  test('backfillSeasonIds reclassifies rows previously stamped Other once '
+      'their season becomes known', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    // Written before the split's window was cached → stamped Other.
+    await store.upsertAll(
+      '1',
+      [match('1', 500)], // end 1_100_000ms
+      seasons: {'other': season('br_ranked_other', 0, 100)},
+    );
+    expect((await store.seasonCounts('1'))[kOtherSeasonId], 1);
+
+    // The split's window is now known → backfill should self-correct it.
+    await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 2000)});
+    final counts = await store.seasonCounts('1');
+    expect(counts['br_ranked_s1_s1'], 1);
+    expect(counts[kOtherSeasonId], isNull);
+  });
+
   test('migrates a v1 database by adding season_id (rows preserved, NULL)',
       () async {
     final dir = await Directory.systemTemp.createTemp('rhs_mig');

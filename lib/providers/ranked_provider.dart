@@ -138,8 +138,12 @@ final rankedMatchesProvider =
       log.w('games fetch failed; serving persisted history', error: e);
       return existing;
     }
-    // Classify any pre-column rows now that season metadata is loaded.
-    await store.backfillSeasonIds(seasons);
+    // Re-read from prefs rather than reusing the watched `seasons` above: other
+    // screens (e.g. the stats tab) call upsertSeason() directly against prefs
+    // without going through this provider, so a season learned there during
+    // the same session wouldn't otherwise be reflected here until relaunch.
+    final latestSeasons = loadAllSeasonsSync(ref.read(sharedPreferencesProvider));
+    await store.backfillSeasonIds(latestSeasons);
     return store.getAll(uid);
   },
 );

@@ -23,8 +23,6 @@ class RankedHistoryStore {
 
   final String? _overridePath;
   Database? _db;
-  // Guards the one-shot legacy backfill so it runs at most once per store.
-  bool _backfilled = false;
 
   RankedHistoryStore({String? overridePath}) : _overridePath = overridePath;
 
@@ -117,32 +115,40 @@ class RankedHistoryStore {
     await batch.commit(noResult: true);
   }
 
-  /// Classifies rows that predate the [season_id] column (NULL) by deriving each
-  /// from its end timestamp. A cheap no-op once every row is classified, so it's
-  /// safe to call on each launch; skipped entirely until season metadata exists.
+  /// Classifies rows with no known season: both untouched (NULL, predating the
+  /// [season_id] column) and previously-unmatched ([kOtherSeasonId]) rows are
+  /// re-derived from their end timestamp against [seasons]. Re-including
+  /// [kOtherSeasonId] rows lets matches that were unmatched before their split's
+  /// window was cached self-correct once that window becomes known, rather than
+  /// being stuck the moment they're first labeled "Other". Cheap no-op once
+  /// every row already matches its correct id, so it's safe to call often;
+  /// skipped entirely until season metadata exists.
   Future<void> backfillSeasonIds(Map<String, SeasonMeta> seasons) async {
-    if (_backfilled || seasons.isEmpty) return;
+    if (seasons.isEmpty) return;
     final db = await _open();
     final rows = await db.query(
       table,
-      columns: ['id', 'end_ms'],
-      where: 'season_id IS NULL',
+      columns: ['id', 'end_ms', 'season_id'],
+      where: 'season_id IS NULL OR season_id = ?',
+      whereArgs: [kOtherSeasonId],
     );
-    if (rows.isNotEmpty) {
-      final batch = db.batch();
-      for (final r in rows) {
-        final endMs = (r['end_ms'] as num?)?.toInt() ?? 0;
-        final endTime = DateTime.fromMillisecondsSinceEpoch(endMs, isUtc: true);
-        batch.update(
-          table,
-          {'season_id': seasonIdForEndTime(endTime, seasons.values)},
-          where: 'id = ?',
-          whereArgs: [r['id']],
-        );
-      }
-      await batch.commit(noResult: true);
+    if (rows.isEmpty) return;
+    final batch = db.batch();
+    var changed = false;
+    for (final r in rows) {
+      final endMs = (r['end_ms'] as num?)?.toInt() ?? 0;
+      final endTime = DateTime.fromMillisecondsSinceEpoch(endMs, isUtc: true);
+      final newId = seasonIdForEndTime(endTime, seasons.values);
+      if (newId == r['season_id']) continue;
+      changed = true;
+      batch.update(
+        table,
+        {'season_id': newId},
+        where: 'id = ?',
+        whereArgs: [r['id']],
+      );
     }
-    _backfilled = true;
+    if (changed) await batch.commit(noResult: true);
   }
 
   /// Match count per season id for [uid] (unclassified NULL rows omitted). The
