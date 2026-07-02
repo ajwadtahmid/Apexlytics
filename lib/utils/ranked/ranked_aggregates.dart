@@ -324,12 +324,29 @@ class RankProgress {
     );
   }
 
-  RankDivision get current => kRankLadder[currentIndex];
+  /// True once [currentRp] has crossed the live Predator cutoff — mirrors the
+  /// My Stats tab's `isPred` check, which reads straight off the RP value
+  /// rather than assuming Master is the ceiling.
+  bool get isPredator =>
+      predatorRp != null && predatorRp! > 0 && currentRp >= predatorRp!;
 
-  /// The immediate next division, or null at the top of the ladder (Master —
-  /// Apex Predator is a live ladder cutoff with no fixed RP threshold).
-  RankDivision? get next =>
-      currentIndex + 1 < kRankLadder.length ? kRankLadder[currentIndex + 1] : null;
+  RankDivision get current => isPredator
+      ? RankDivision(kApexPredatorRank, null, predatorRp!, kPredatorColor)
+      : kRankLadder[currentIndex];
+
+  /// The immediate next division. At Master, this is the live Predator cutoff
+  /// (if known) rather than null, so the progress bar keeps climbing instead
+  /// of stalling at "top of the ladder" before the player actually is one.
+  /// Null once [isPredator] is true, or at Master with no cutoff available.
+  RankDivision? get next {
+    if (isPredator) return null;
+    if (currentIndex + 1 < kRankLadder.length) return kRankLadder[currentIndex + 1];
+    final rp = predatorRp;
+    if (rp != null && rp > 0) {
+      return RankDivision(kApexPredatorRank, null, rp, kPredatorColor);
+    }
+    return null;
+  }
 
   bool get isPredatorGoal => goalIndex == kPredatorGoalIndex;
 

@@ -6,6 +6,7 @@ import '../../../providers/predator_provider.dart';
 import '../../../providers/rank_goal_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/formatting/format.dart' show formatNumber;
+import '../../../utils/formatting/rank_utils.dart' show rankAssetPathByTier;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
@@ -39,7 +40,19 @@ class RankedSummaryHeader extends ConsumerWidget {
         children: [
           Row(
             children: [
-              if (summary.latestRankImg.isNotEmpty) ...[
+              // Prefer the locally-derived, Predator-aware badge over the raw
+              // API image: the latter reflects whatever tier the last match
+              // was tagged with, which doesn't track the live Predator cutoff.
+              if (progress != null) ...[
+                Image.asset(
+                  rankAssetPathByTier(progress.isPredator, progress.currentIndex),
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const SizedBox(width: 36),
+                ),
+                const SizedBox(width: AppTheme.sm),
+              ] else if (summary.latestRankImg.isNotEmpty) ...[
                 CachedNetworkImage(
                   imageUrl: summary.latestRankImg,
                   width: 36,
@@ -92,8 +105,11 @@ class RankedSummaryHeader extends ConsumerWidget {
           if (progress != null) ...[
             const SizedBox(height: AppTheme.sm),
             _ProgressBars(progress: progress),
-            const Divider(color: AppTheme.surface2, height: AppTheme.lg),
-            _GoalFooter(uid: uid, progress: progress),
+            // No goal to set once you're already the top of the ladder.
+            if (!progress.isPredator) ...[
+              const Divider(color: AppTheme.surface2, height: AppTheme.lg),
+              _GoalFooter(uid: uid, progress: progress),
+            ],
           ],
         ],
       ),
@@ -119,10 +135,17 @@ class _ProgressBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final next = progress.next;
     if (next == null) {
-      return const Text(
-        'Top of the ladder — Apex Predator is a live cutoff.',
+      return Text(
+        progress.isPredator
+            ? 'Apex Predator — top of the ladder.'
+            : 'Top of the ladder — Apex Predator cutoff unavailable.',
         textAlign: TextAlign.center,
-        style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.3),
+        style: TextStyle(
+          color: progress.isPredator ? kPredatorColor : AppTheme.muted,
+          fontSize: 12,
+          height: 1.3,
+          fontWeight: progress.isPredator ? FontWeight.w600 : FontWeight.normal,
+        ),
       );
     }
     return Column(

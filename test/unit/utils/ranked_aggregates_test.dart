@@ -135,4 +135,41 @@ void main() {
     // Hours are device-local; assert each is a valid hour.
     expect(buckets.every((b) => b.hourLocal >= 0 && b.hourLocal <= 23), true);
   });
+
+  group('RankProgress Apex Predator cutoff', () {
+    // Master starts at 16000 RP with no upper bound on kRankLadder, so these
+    // cases sit at/above that floor to exercise the live-cutoff behaviour.
+    RankedSummary summaryAt(int rp) => summarize([
+          match(
+            legend: 'Axle',
+            mapKey: 'olympus_rotation',
+            rpChange: 0,
+            cumulativeRp: rp,
+            kills: 0,
+            damage: 0,
+            startOffset: 0,
+          ),
+        ]);
+
+    test('below the live cutoff stays Master, not Predator', () {
+      final progress = RankProgress.from(summaryAt(16500), predatorRp: 17000);
+      expect(progress.isPredator, false);
+      expect(progress.current.label, 'Master');
+      expect(progress.next?.label, 'Apex Predator');
+    });
+
+    test('crossing the live cutoff flips current to Apex Predator', () {
+      final progress = RankProgress.from(summaryAt(17000), predatorRp: 17000);
+      expect(progress.isPredator, true);
+      expect(progress.current.label, 'Apex Predator');
+      expect(progress.next, isNull);
+    });
+
+    test('with no cutoff known, Master is never promoted to Predator', () {
+      final progress = RankProgress.from(summaryAt(50000), predatorRp: null);
+      expect(progress.isPredator, false);
+      expect(progress.current.label, 'Master');
+      expect(progress.next, isNull);
+    });
+  });
 }
