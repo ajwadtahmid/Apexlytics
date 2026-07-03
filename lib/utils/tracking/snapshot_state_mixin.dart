@@ -47,21 +47,27 @@ mixin SnapshotStateMixin {
   /// Views that need to update additional fields in the same setState call
   /// should call [appendSnapshot] + [loadSnapshotsSync] directly and fold
   /// the snapshot fields into their own setState block.
-  Future<void> appendSnapshotState(
+  ///
+  /// Returns whether a new/changed season was learned, so a
+  /// [ConsumerState] caller can invalidate anything caching the season
+  /// list elsewhere (e.g. the ranked breakdown's split picker).
+  Future<bool> appendSnapshotState(
     SharedPreferences prefs,
     PlayerStats stats,
   ) async {
-    if (!mounted) return;
+    if (!mounted) return false;
     final season = stats.rankedSeason;
-    if (season != null) await upsertSeason(season, prefs);
-    if (!mounted) return;
+    final seasonChanged =
+        season != null ? await upsertSeason(season, prefs) : false;
+    if (!mounted) return seasonChanged;
     await appendSnapshot(stats, prefs, uid: stats.uid);
     final snaps = loadSnapshotsSync(prefs, uid: stats.uid);
-    if (!mounted) return;
+    if (!mounted) return seasonChanged;
     setState(() {
       snapshots = snaps;
       allSeasons = loadAllSeasonsSync(prefs);
       rpDelta = computeWeekDelta(snaps, stats.rankedSeason, stats.rankScore);
     });
+    return seasonChanged;
   }
 }

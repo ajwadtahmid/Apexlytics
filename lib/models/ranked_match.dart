@@ -51,6 +51,12 @@ class RankedMatch {
   final bool isPartyFull;
   final List<MatchTracker> trackers;
 
+  /// The split this match was classified under (e.g. `br_ranked_s29_s2`), or
+  /// null/unknown if unclassified. Only ever populated by reading a persisted
+  /// row back out of the local history store — a freshly API-parsed match
+  /// doesn't know its season until the store derives and saves it.
+  final String? seasonId;
+
   const RankedMatch({
     required this.uid,
     required this.playerName,
@@ -65,6 +71,7 @@ class RankedMatch {
     required this.endTime,
     required this.isPartyFull,
     required this.trackers,
+    this.seasonId,
   });
 
   /// Whether this is a Battle Royale match of any kind (ranked or pubs).
@@ -203,6 +210,7 @@ class RankedMatch {
       ),
       isPartyFull: (m['is_party_full'] as num?)?.toInt() == 1,
       trackers: trackers,
+      seasonId: m['season_id'] as String?,
     );
   }
 }

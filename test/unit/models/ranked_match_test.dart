@@ -131,6 +131,15 @@ void main() {
         restored.trackerValue('Tactical: Nitro Gates Used'),
         orig.trackerValue('Tactical: Nitro Gates Used'),
       );
+      // Not part of toStoredMap() — the history store manages this column
+      // separately (upgrade-only) — so a plain round-trip leaves it unset.
+      expect(restored.seasonId, isNull);
+    });
+
+    test('fromStoredMap reads season_id back from a persisted row', () {
+      final row = RankedMatch.fromJson(brMatch()).toStoredMap();
+      row['season_id'] = 'br_ranked_s29_s2';
+      expect(RankedMatch.fromStoredMap(row).seasonId, 'br_ranked_s29_s2');
     });
   });
 }

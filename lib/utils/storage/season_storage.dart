@@ -23,7 +23,10 @@ Map<String, SeasonMeta> loadAllSeasonsSync(SharedPreferences prefs) =>
     _parseSeasons(prefs.getString(PrefsKeys.seasonHistory));
 
 /// Adds or updates [season] in storage. No-op if start/end are unchanged.
-Future<void> upsertSeason(
+/// Returns whether it actually wrote a new/changed entry, so callers can
+/// invalidate anything caching the season list (e.g. the ranked seasons
+/// provider).
+Future<bool> upsertSeason(
   SeasonMeta season,
   SharedPreferences prefs,
 ) async {
@@ -32,11 +35,12 @@ Future<void> upsertSeason(
   if (prev != null &&
       prev.start == season.start &&
       prev.end == season.end) {
-    return;
+    return false;
   }
   existing[season.id] = season;
   await prefs.setString(
     PrefsKeys.seasonHistory,
     jsonEncode(existing.values.map((s) => s.toJson()).toList()),
   );
+  return true;
 }

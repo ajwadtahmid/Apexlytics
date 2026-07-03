@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
+import 'package:apexlytics/utils/formatting/season_utils.dart';
 import 'package:apexlytics/utils/ranked/ranked_period.dart';
 
 void main() {
@@ -12,33 +13,103 @@ void main() {
         id: 'br_ranked_s29_s1', startSeconds: 2000000, endSeconds: 3000000),
   };
 
-  RankedMatch m(int startSecs, {int rp = 10}) => RankedMatch.fromJson({
-        'uid': '1',
-        'name': 'T',
-        'legendPlayed': 'Axle',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': startSecs,
-        'gameEndTimestamp': startSecs + 600,
-        'gameData': [
-          {'key': 'kills', 'value': 1, 'name': 'BR Kills'},
-        ],
-        'BRScoreChange': rp,
-        'BRScore': 1000,
-        'map': 'olympus_rotation',
-      });
+  // Splits are read from the persisted [RankedMatch.seasonId], not
+  // re-derived live — mirror what RankedHistoryStore.upsertAll would have
+  // stamped on write, using the same [seasonIdForEndTime] it uses.
+  RankedMatch m(int startSecs, {int rp = 10}) {
+    final base = RankedMatch.fromJson({
+      'uid': '1',
+      'name': 'T',
+      'legendPlayed': 'Axle',
+      'gameMode': 'BATTLE_ROYALE',
+      'gameLengthSecs': 600,
+      'gameStartTimestamp': startSecs,
+      'gameEndTimestamp': startSecs + 600,
+      'gameData': [
+        {'key': 'kills', 'value': 1, 'name': 'BR Kills'},
+      ],
+      'BRScoreChange': rp,
+      'BRScore': 1000,
+      'map': 'olympus_rotation',
+    });
+    return RankedMatch(
+      uid: base.uid,
+      playerName: base.playerName,
+      legend: base.legend,
+      gameMode: base.gameMode,
+      mapKey: base.mapKey,
+      rpChange: base.rpChange,
+      cumulativeRp: base.cumulativeRp,
+      rankImg: base.rankImg,
+      lengthSecs: base.lengthSecs,
+      startTime: base.startTime,
+      endTime: base.endTime,
+      isPartyFull: base.isPartyFull,
+      trackers: base.trackers,
+      seasonId: seasonIdForEndTime(base.endTime, seasons.values),
+    );
+  }
 
-  // m1 in A; m2 in B week 1; m3 in B week 2; m4 before any split (Other).
+  // m1 in A; m2 in B week 1; m3 in B week 2; m4 before any split (Unknown).
   final matches = [m(1500000), m(2100000), m(2700000), m(500000)];
 
   group('splitBuckets', () {
-    test('groups by split newest-first with Other appended last', () {
+    test('groups by split newest-first with Unknown appended last', () {
       final buckets = splitBuckets(matches, seasons);
       expect(buckets.length, 3);
       expect(buckets.first.id, 'br_ranked_s29_s1'); // newest = current
       expect(buckets[1].id, 'br_ranked_s28_s2');
-      expect(buckets.last.id, kOtherSplitId);
+      expect(buckets.last.id, kUnknownSplitId);
+      expect(buckets.last.displayName, 'Unknown');
       expect(buckets.last.season, isNull);
+    });
+
+    test('groups by the persisted seasonId, not a live date recheck', () {
+      // Stamped under s29_s1 at write time even though its own end time (in
+      // split A's window) would now derive differently — grouping must
+      // follow the stored id, since a real classification is never allowed
+      // to be second-guessed live.
+      final relabeled = RankedMatch(
+        uid: '1',
+        playerName: 'T',
+        legend: 'Axle',
+        gameMode: 'BATTLE_ROYALE',
+        mapKey: 'olympus_rotation',
+        rpChange: 10,
+        cumulativeRp: 1000,
+        rankImg: '',
+        lengthSecs: 600,
+        startTime: DateTime.fromMillisecondsSinceEpoch(1500000000, isUtc: true),
+        endTime: DateTime.fromMillisecondsSinceEpoch(1500600000, isUtc: true),
+        isPartyFull: false,
+        trackers: const [],
+        seasonId: 'br_ranked_s29_s1',
+      );
+      final buckets = splitBuckets([relabeled], seasons);
+      expect(buckets.single.id, 'br_ranked_s29_s1');
+    });
+
+    test('falls back to the raw id when season metadata is missing', () {
+      final unknownMeta = RankedMatch(
+        uid: '1',
+        playerName: 'T',
+        legend: 'Axle',
+        gameMode: 'BATTLE_ROYALE',
+        mapKey: 'olympus_rotation',
+        rpChange: 10,
+        cumulativeRp: 1000,
+        rankImg: '',
+        lengthSecs: 600,
+        startTime: DateTime.fromMillisecondsSinceEpoch(2100000000, isUtc: true),
+        endTime: DateTime.fromMillisecondsSinceEpoch(2100600000, isUtc: true),
+        isPartyFull: false,
+        trackers: const [],
+        seasonId: 'br_ranked_s30_s1',
+      );
+      final buckets = splitBuckets([unknownMeta], const {});
+      expect(buckets.single.id, 'br_ranked_s30_s1');
+      expect(buckets.single.displayName, 'br_ranked_s30_s1');
+      expect(buckets.single.season, isNull);
     });
   });
 
@@ -67,10 +138,10 @@ void main() {
       expect(view.filtered.length, 1); // m1
     });
 
-    test('Other bucket holds matches outside every known split', () {
-      final view = resolveRankedView(matches, seasons, splitId: kOtherSplitId);
+    test('Unknown bucket holds matches outside every known split', () {
+      final view = resolveRankedView(matches, seasons, splitId: kUnknownSplitId);
       expect(view.filtered.length, 1); // m4
-      expect(view.weeks, isEmpty); // no week navigation for Other
+      expect(view.weeks, isEmpty); // no week navigation for Unknown
     });
 
     test('invalid split id falls back to current split', () {

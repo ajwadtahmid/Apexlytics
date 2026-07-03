@@ -91,12 +91,14 @@ class RankedHistoryStore {
 
   /// Inserts/updates [matches] for [uid]. Idempotent via the primary key.
   ///
-  /// When [seasons] is supplied each row is stamped with its derived
-  /// [season_id] (the split whose window contains the match end time, or
-  /// [kOtherSeasonId] if none). Because upserts replace on conflict, the newest
-  /// ~100 matches re-stamp their season on every fetch — so a match written
-  /// before its split's metadata was known self-corrects on the next refresh.
-  /// With no [seasons] the column is left NULL for [backfillSeasonIds] to fill.
+  /// Every column except [season_id] is overwritten unconditionally on
+  /// conflict. [season_id] only ever *upgrades* — a NULL or [kUnknownSeasonId]
+  /// row adopts the freshly-derived id when [seasons] yields a real one, but a
+  /// row that already carries a real season id is never touched again, even if
+  /// this call's [seasons] is empty/incomplete and would derive [kUnknownSeasonId]
+  /// or nothing at all. This is what lets [backfillSeasonIds] and this method
+  /// safely re-run as often as needed without ever demoting a correct
+  /// classification back to unknown.
   Future<void> upsertAll(
     String uid,
     List<RankedMatch> matches, {
@@ -107,20 +109,65 @@ class RankedHistoryStore {
     final batch = db.batch();
     for (final m in matches) {
       final row = m.toStoredMap();
-      if (seasons.isNotEmpty) {
-        row['season_id'] = seasonIdForEndTime(m.endTime, seasons.values);
-      }
-      batch.insert(table, row, conflictAlgorithm: ConflictAlgorithm.replace);
+      final derivedSeasonId =
+          seasons.isNotEmpty ? seasonIdForEndTime(m.endTime, seasons.values) : null;
+      batch.rawInsert(
+        '''
+        INSERT INTO $table (
+          id, uid, player_name, legend, game_mode, map_key, rp_change,
+          cumulative_rp, rank_img, length_secs, start_ms, end_ms,
+          is_party_full, trackers, season_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          uid = excluded.uid,
+          player_name = excluded.player_name,
+          legend = excluded.legend,
+          game_mode = excluded.game_mode,
+          map_key = excluded.map_key,
+          rp_change = excluded.rp_change,
+          cumulative_rp = excluded.cumulative_rp,
+          rank_img = excluded.rank_img,
+          length_secs = excluded.length_secs,
+          start_ms = excluded.start_ms,
+          end_ms = excluded.end_ms,
+          is_party_full = excluded.is_party_full,
+          trackers = excluded.trackers,
+          season_id = CASE
+            WHEN excluded.season_id IS NOT NULL
+                 AND excluded.season_id != '$kUnknownSeasonId'
+                 AND (season_id IS NULL OR season_id = '$kUnknownSeasonId')
+            THEN excluded.season_id
+            ELSE season_id
+          END
+        ''',
+        [
+          row['id'],
+          row['uid'],
+          row['player_name'],
+          row['legend'],
+          row['game_mode'],
+          row['map_key'],
+          row['rp_change'],
+          row['cumulative_rp'],
+          row['rank_img'],
+          row['length_secs'],
+          row['start_ms'],
+          row['end_ms'],
+          row['is_party_full'],
+          row['trackers'],
+          derivedSeasonId,
+        ],
+      );
     }
     await batch.commit(noResult: true);
   }
 
   /// Classifies rows with no known season: both untouched (NULL, predating the
-  /// [season_id] column) and previously-unmatched ([kOtherSeasonId]) rows are
+  /// [season_id] column) and previously-unmatched ([kUnknownSeasonId]) rows are
   /// re-derived from their end timestamp against [seasons]. Re-including
-  /// [kOtherSeasonId] rows lets matches that were unmatched before their split's
+  /// [kUnknownSeasonId] rows lets matches that were unmatched before their split's
   /// window was cached self-correct once that window becomes known, rather than
-  /// being stuck the moment they're first labeled "Other". Cheap no-op once
+  /// being stuck the moment they're first labeled "Unknown". Cheap no-op once
   /// every row already matches its correct id, so it's safe to call often;
   /// skipped entirely until season metadata exists.
   Future<void> backfillSeasonIds(Map<String, SeasonMeta> seasons) async {
@@ -130,7 +177,7 @@ class RankedHistoryStore {
       table,
       columns: ['id', 'end_ms', 'season_id'],
       where: 'season_id IS NULL OR season_id = ?',
-      whereArgs: [kOtherSeasonId],
+      whereArgs: [kUnknownSeasonId],
     );
     if (rows.isEmpty) return;
     final batch = db.batch();

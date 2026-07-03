@@ -77,7 +77,7 @@ class RankedSplitDropdown extends ConsumerWidget {
 
 /// Week-chip strip hosted in the AppBar's `bottom` slot: `All · W1 · W2 …`, so
 /// the split selector and weeks read as one cohesive header. Hidden for splits
-/// with no week metadata (the "Other" bucket) — callers gate on `weeks`.
+/// with no week metadata (the "Unknown" bucket) — callers gate on `weeks`.
 class RankedWeekStrip extends ConsumerWidget implements PreferredSizeWidget {
   final RankedView view;
   const RankedWeekStrip({super.key, required this.view});

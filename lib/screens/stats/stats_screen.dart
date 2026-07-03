@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/player_stats.dart';
 import '../../providers/player_provider.dart';
+import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/error_messages.dart';
@@ -320,7 +321,12 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
 
     // Upsert the current season before parallel work so loadAllSeasonsSync sees it.
     final season = widget.stats.rankedSeason;
-    if (season != null) await upsertSeason(season, prefs);
+    final seasonChanged =
+        season != null ? await upsertSeason(season, prefs) : false;
+    // A season learned here won't otherwise reach rankedSeasonsProvider's
+    // frozen snapshot until the next app launch — invalidate it so the ranked
+    // split picker picks it up this session too.
+    if (seasonChanged && mounted) ref.invalidate(rankedSeasonsProvider);
 
     final (snaps, legends, stack) = await (
       appendAndLoadSnapshots(widget.stats, prefs),

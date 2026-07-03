@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/player_stats.dart';
 import '../../providers/api_provider.dart';
 import '../../utils/api_cache.dart' show ApiResult;
 import '../../providers/player_provider.dart';
+import '../../providers/ranked_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
@@ -296,6 +298,15 @@ class PlayerResultBody extends ConsumerStatefulWidget {
 
 class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     with SnapshotStateMixin {
+  // A season learned here (a different provider subtree than the ranked tab)
+  // won't otherwise reach rankedSeasonsProvider's frozen snapshot until the
+  // next app launch — invalidate it so the ranked split picker picks it up
+  // this session too.
+  Future<void> _appendSnapshot(SharedPreferences prefs) async {
+    final changed = await appendSnapshotState(prefs, widget.stats);
+    if (changed && mounted) ref.invalidate(rankedSeasonsProvider);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -305,7 +316,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     initSnapshotFields(prefs, widget.stats.uid,
         widget.stats.rankedSeason, widget.stats.rankScore);
     // Append the current data point (disk write) and update if a new entry was added.
-    appendSnapshotState(prefs, widget.stats);
+    _appendSnapshot(prefs);
   }
 
   @override
@@ -315,7 +326,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
       final prefs = ref.read(sharedPreferencesProvider);
       initSnapshotFields(prefs, widget.stats.uid,
           widget.stats.rankedSeason, widget.stats.rankScore);
-      appendSnapshotState(prefs, widget.stats);
+      _appendSnapshot(prefs);
     }
   }
 
@@ -326,7 +337,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
       color: AppTheme.accent,
       onRefresh: () async {
         await widget.onRefresh();
-        await appendSnapshotState(prefs, widget.stats);
+        await _appendSnapshot(prefs);
       },
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),

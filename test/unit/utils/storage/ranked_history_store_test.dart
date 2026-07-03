@@ -105,7 +105,7 @@ void main() {
     expect(counts['br_ranked_s1_s2'], 1);
   });
 
-  test('matches outside every known season are stamped Other', () async {
+  test('matches outside every known season are stamped Unknown', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);
 
@@ -115,7 +115,33 @@ void main() {
       seasons: {'s1': season('br_ranked_s1_s1', 0, 1000)},
     );
 
-    expect((await store.seasonCounts('1'))[kOtherSeasonId], 1);
+    expect((await store.seasonCounts('1'))[kUnknownSeasonId], 1);
+  });
+
+  test('a real season_id is never overwritten by a later re-sync', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    await store.upsertAll(
+      '1',
+      [match('1', 100)], // end 700_000ms
+      seasons: {'s1': season('br_ranked_s1_s1', 0, 1000)},
+    );
+    expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 1);
+
+    // Re-synced (e.g. still in the API's rolling window) with no season
+    // metadata this call — must not blank the existing classification.
+    await store.upsertAll('1', [match('1', 100)]);
+    expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 1);
+
+    // Re-synced with a season map that would derive a *different* answer —
+    // still must not downgrade an already-real classification.
+    await store.upsertAll(
+      '1',
+      [match('1', 100)],
+      seasons: {'s2': season('br_ranked_s2_s1', 5000, 6000)},
+    );
+    expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 1);
   });
 
   test('backfillSeasonIds classifies rows written without season metadata',
@@ -131,24 +157,24 @@ void main() {
     expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 2);
   });
 
-  test('backfillSeasonIds reclassifies rows previously stamped Other once '
+  test('backfillSeasonIds reclassifies rows previously stamped Unknown once '
       'their season becomes known', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);
 
-    // Written before the split's window was cached → stamped Other.
+    // Written before the split's window was cached → stamped Unknown.
     await store.upsertAll(
       '1',
       [match('1', 500)], // end 1_100_000ms
       seasons: {'other': season('br_ranked_other', 0, 100)},
     );
-    expect((await store.seasonCounts('1'))[kOtherSeasonId], 1);
+    expect((await store.seasonCounts('1'))[kUnknownSeasonId], 1);
 
     // The split's window is now known → backfill should self-correct it.
     await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 2000)});
     final counts = await store.seasonCounts('1');
     expect(counts['br_ranked_s1_s1'], 1);
-    expect(counts[kOtherSeasonId], isNull);
+    expect(counts[kUnknownSeasonId], isNull);
   });
 
   test('migrates a v1 database by adding season_id (rows preserved, NULL)',
