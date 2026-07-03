@@ -52,9 +52,13 @@ class NotificationService {
   static Future<void> init() async {
     if (_initialized) return;
     if (!_supported) return;
-    const androidSettings = AndroidInitializationSettings(
-      '@drawable/ic_notification',
-    );
+    // Bare resource name (no '@drawable/' prefix) is the plugin's documented
+    // form and resolves via getIdentifier(). The icon lives in the unqualified
+    // drawable/ folder (plus density variants) so it ships in the base APK and
+    // is always present — a density-only copy got split out of some Play
+    // App Bundle installs, making initialize() throw invalid_icon and leaving
+    // the whole service uninitialised (no notifications ever scheduled).
+    const androidSettings = AndroidInitializationSettings('ic_notification');
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,

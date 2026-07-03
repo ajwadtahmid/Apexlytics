@@ -4,6 +4,7 @@ import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
+import '../../../widgets/win_loss_stat.dart';
 
 /// Match-stat aggregates for the ranked window — averages plus season totals,
 /// laid out as a centered chip grid.
@@ -41,6 +42,7 @@ class RankedStatsCard extends StatelessWidget {
                 value: '${avgRp >= 0 ? '+' : ''}${avgRp.toStringAsFixed(1)}',
               ),
               StatDisplay(label: 'Games', value: '${s.games}'),
+              WinLossStat(wins: s.wins, losses: s.losses),
               StatDisplay(
                   label: 'Avg Kills', value: s.avgKills.toStringAsFixed(1)),
               StatDisplay(label: 'Kills', value: formatNumber(s.totalKills)),

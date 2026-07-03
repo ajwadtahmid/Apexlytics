@@ -73,6 +73,35 @@ void main() {
     expect(s.avgGameLengthSecs, 600);
   });
 
+  test('summarize counts wins/losses and win rate from effective RP', () {
+    final s = summarize(ranked); // +40, -20, +60, +10
+    expect(s.wins, 3);
+    expect(s.losses, 1);
+    expect(s.decidedGames, 4);
+    expect(s.winRate, closeTo(0.75, 0.001));
+  });
+
+  test('win/loss ignores RP-neutral and reset-outlier games', () {
+    final withResets = rankedOnly([
+      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 40, cumulativeRp: 40, kills: 1, damage: 100, startOffset: 0),
+      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: -20, cumulativeRp: 20, kills: 1, damage: 100, startOffset: 60),
+      // End-of-split reset artifact: |rp| >= 1000 → effectiveRpChange 0, so it's
+      // neither a win nor a loss (a played game, but RP-neutral).
+      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: -1500, cumulativeRp: 0, kills: 0, damage: 0, startOffset: 120),
+    ]);
+    final s = summarize(withResets);
+    expect(s.games, 3); // all three are ranked games
+    expect(s.wins, 1);
+    expect(s.losses, 1);
+    expect(s.decidedGames, 2); // the reset game is excluded
+    expect(s.winRate, closeTo(0.5, 0.001));
+  });
+
+  test('winRate is 0 when there are no decided games', () {
+    expect(summarize(const []).winRate, 0);
+    expect(RankedSummary.empty.winRate, 0);
+  });
+
   test('summarize on empty input returns empty', () {
     expect(summarize([]).games, 0);
     expect(summarize(const []).currentRp, 0);
@@ -87,6 +116,13 @@ void main() {
     expect(axle.games, 3);
     expect(axle.totalRp, 30);
     expect(axle.avgRpPerGame, closeTo(10.0, 0.001));
+    // Axle: +40, -20, +10 → 2W / 1L. Bangalore: +60 → 1W / 0L.
+    expect(axle.wins, 2);
+    expect(axle.losses, 1);
+    expect(axle.winRate, closeTo(2 / 3, 0.001));
+    expect(l.first.wins, 1); // Bangalore
+    expect(l.first.losses, 0);
+    expect(l.first.winRate, 1.0);
   });
 
   test('mapBreakdowns sorted by games desc with display names', () {
@@ -95,6 +131,13 @@ void main() {
     expect(m.first.displayName, 'Olympus');
     expect(m.first.games, 3);
     expect(m.last.displayName, 'Storm Point');
+    // Olympus (Axle's 3 games): +40, -20, +10 → 2W / 1L.
+    expect(m.first.wins, 2);
+    expect(m.first.losses, 1);
+    expect(m.first.winRate, closeTo(2 / 3, 0.001));
+    // Storm Point (Bangalore's +60): 1W / 0L.
+    expect(m.last.wins, 1);
+    expect(m.last.losses, 0);
   });
 
   test('sessionize splits on >2h gaps, newest session first', () {

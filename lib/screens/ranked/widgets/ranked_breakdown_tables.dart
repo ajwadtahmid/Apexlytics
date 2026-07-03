@@ -7,6 +7,7 @@ import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
+import '../../../widgets/win_loss_stat.dart';
 import '../ranked_entity_history_screen.dart';
 import 'map_rp_badge.dart';
 import 'match_history_items.dart' show MatchGrouping;
@@ -200,6 +201,11 @@ class _LegendCard extends StatelessWidget {
                     child: Row(
                       children: [
                         _chip('Avg RP', _signedAvg(row.avgRpPerGame), highlight: true),
+                        Padding(
+                          padding: const EdgeInsets.only(right: AppTheme.sm),
+                          child: WinLossStat(
+                              wins: row.wins, losses: row.losses),
+                        ),
                         _chip('Total Kills', formatNumber(row.totalKills)),
                         _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
                         _chip('Total Dmg', formatNumber(row.totalDamage)),
@@ -394,6 +400,11 @@ class _MapCard extends StatelessWidget {
                     child: Row(
                       children: [
                         _MapStat(label: 'Avg RP', value: _signedAvg(row.avgRpPerGame), color: rpColor),
+                        Padding(
+                          padding: const EdgeInsets.only(right: AppTheme.md),
+                          child: WinLossStat(
+                              wins: row.wins, losses: row.losses, onImage: true),
+                        ),
                         _MapStat(label: 'Kills', value: row.avgKills.toStringAsFixed(1)),
                         _MapStat(label: 'Dmg', value: formatNumber(row.avgDamage.round())),
                         _MapStat(label: 'Games', value: '${row.games}'),

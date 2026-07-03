@@ -33,6 +33,8 @@ class RankedSummary {
   final int totalKills;
   final int totalDamage;
   final int totalLengthSecs;
+  final int wins; // games with positive effective RP
+  final int losses; // games with negative effective RP
 
   const RankedSummary({
     required this.games,
@@ -42,12 +44,21 @@ class RankedSummary {
     required this.totalKills,
     required this.totalDamage,
     required this.totalLengthSecs,
+    required this.wins,
+    required this.losses,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : netRp / games;
   double get avgKills => games == 0 ? 0 : totalKills / games;
   double get avgDamage => games == 0 ? 0 : totalDamage / games;
   double get avgGameLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
+
+  /// Games that count toward win rate: wins + losses. Excludes RP-neutral games
+  /// (pubs and neutralized end-of-split reset artifacts), so it can be < [games].
+  int get decidedGames => wins + losses;
+
+  /// Fraction of decided games won (0..1); 0 when no decided games.
+  double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
 
   static const empty = RankedSummary(
     games: 0,
@@ -57,6 +68,8 @@ class RankedSummary {
     totalKills: 0,
     totalDamage: 0,
     totalLengthSecs: 0,
+    wins: 0,
+    losses: 0,
   );
 }
 
@@ -67,12 +80,17 @@ RankedSummary summarize(List<RankedMatch> matches) {
 
   // Find the newest match for currentRp/rankImg without a full sort.
   var newest = matches.first;
-  var netRp = 0, kills = 0, damage = 0, length = 0;
+  var netRp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;
   for (final m in matches) {
     netRp += m.effectiveRpChange;
     kills += m.kills;
     damage += m.damage;
     length += m.lengthSecs;
+    if (m.effectiveRpChange > 0) {
+      wins++;
+    } else if (m.effectiveRpChange < 0) {
+      losses++;
+    }
     if (m.endTime.isAfter(newest.endTime)) newest = m;
   }
   return RankedSummary(
@@ -83,6 +101,8 @@ RankedSummary summarize(List<RankedMatch> matches) {
     totalKills: kills,
     totalDamage: damage,
     totalLengthSecs: length,
+    wins: wins,
+    losses: losses,
   );
 }
 
@@ -95,6 +115,8 @@ class LegendBreakdown {
   final int totalKills;
   final int totalDamage;
   final int totalLengthSecs;
+  final int wins;
+  final int losses;
 
   const LegendBreakdown({
     required this.legend,
@@ -103,12 +125,16 @@ class LegendBreakdown {
     required this.totalKills,
     required this.totalDamage,
     required this.totalLengthSecs,
+    required this.wins,
+    required this.losses,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
   double get avgKills => games == 0 ? 0 : totalKills / games;
   double get avgDamage => games == 0 ? 0 : totalDamage / games;
   double get avgLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
+  int get decidedGames => wins + losses;
+  double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
 }
 
 /// Per-legend breakdown, sorted by total RP contribution (descending).
@@ -119,12 +145,17 @@ List<LegendBreakdown> legendBreakdowns(List<RankedMatch> matches) {
     byLegend.putIfAbsent(m.legend, () => []).add(m);
   }
   final out = byLegend.entries.map((e) {
-    var rp = 0, kills = 0, damage = 0, length = 0;
+    var rp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;
     for (final m in e.value) {
       rp += m.effectiveRpChange;
       kills += m.kills;
       damage += m.damage;
       length += m.lengthSecs;
+      if (m.effectiveRpChange > 0) {
+        wins++;
+      } else if (m.effectiveRpChange < 0) {
+        losses++;
+      }
     }
     return LegendBreakdown(
       legend: e.key,
@@ -133,6 +164,8 @@ List<LegendBreakdown> legendBreakdowns(List<RankedMatch> matches) {
       totalKills: kills,
       totalDamage: damage,
       totalLengthSecs: length,
+      wins: wins,
+      losses: losses,
     );
   }).toList()..sort((a, b) => b.totalRp.compareTo(a.totalRp));
   return out;
@@ -147,6 +180,8 @@ class MapBreakdown {
   final int totalRp;
   final int totalKills;
   final int totalDamage;
+  final int wins;
+  final int losses;
 
   const MapBreakdown({
     required this.mapKey,
@@ -155,11 +190,15 @@ class MapBreakdown {
     required this.totalRp,
     required this.totalKills,
     required this.totalDamage,
+    required this.wins,
+    required this.losses,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
   double get avgKills => games == 0 ? 0 : totalKills / games;
   double get avgDamage => games == 0 ? 0 : totalDamage / games;
+  int get decidedGames => wins + losses;
+  double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
 }
 
 /// Per-map breakdown, sorted by games played (descending).
@@ -170,11 +209,16 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
     byMap.putIfAbsent(m.mapKey, () => []).add(m);
   }
   final out = byMap.entries.map((e) {
-    var rp = 0, kills = 0, damage = 0;
+    var rp = 0, kills = 0, damage = 0, wins = 0, losses = 0;
     for (final m in e.value) {
       rp += m.effectiveRpChange;
       kills += m.kills;
       damage += m.damage;
+      if (m.effectiveRpChange > 0) {
+        wins++;
+      } else if (m.effectiveRpChange < 0) {
+        losses++;
+      }
     }
     return MapBreakdown(
       mapKey: e.key,
@@ -183,6 +227,8 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
       totalRp: rp,
       totalKills: kills,
       totalDamage: damage,
+      wins: wins,
+      losses: losses,
     );
   }).toList()..sort((a, b) => b.games.compareTo(a.games));
   return out;
