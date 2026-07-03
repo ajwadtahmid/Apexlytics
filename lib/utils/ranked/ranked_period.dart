@@ -30,55 +30,65 @@ class RankedSplitBucket {
   });
 }
 
-/// Splits (with at least one ranked match) newest-first, plus an "Unknown"
-/// bucket appended last if any match has no classified split.
-List<RankedSplitBucket> splitBuckets(
-  List<RankedMatch> matches,
+/// Builds the split picker from per-split ranked *counts* (not the matches
+/// themselves) so the dropdown can render without hydrating any history — the
+/// key to scoping match loads to one split at a time. [rankedCounts] comes from
+/// `RankedHistoryStore.rankedSeasonCounts` (already folds NULL season ids into
+/// [kUnknownSplitId]); [seasons] supplies display metadata.
+///
+/// Ordered newest-first by season start (a newer season/split has a later
+/// start), splits with missing metadata after those, and the "Unknown" bucket
+/// always last.
+List<RankedSplitBucket> buildSplitBuckets(
+  Map<String, int> rankedCounts,
   Map<String, SeasonMeta> seasons,
 ) {
-  final ids = <String, DateTime>{}; // id -> newest match end time
-  var hasOther = false;
+  final real = <RankedSplitBucket>[];
+  var hasUnknown = false;
 
-  for (final m in matches.where((m) => m.isRanked)) {
-    final id = m.seasonId ?? kUnknownSplitId;
-    if (id == kUnknownSplitId) {
-      hasOther = true;
-    } else {
-      final cur = ids[id];
-      if (cur == null || m.endTime.isAfter(cur)) ids[id] = m.endTime;
+  for (final entry in rankedCounts.entries) {
+    if (entry.value <= 0) continue;
+    if (entry.key == kUnknownSplitId) {
+      hasUnknown = true;
+      continue;
     }
+    real.add(RankedSplitBucket(
+      id: entry.key,
+      // Metadata may be momentarily missing (e.g. the local season cache was
+      // cleared after this id was assigned) — fall back to the raw id rather
+      // than lose the bucket entirely.
+      displayName: seasons[entry.key]?.displayName ?? entry.key,
+      season: seasons[entry.key],
+    ));
   }
 
-  final buckets = ids.entries
-      .map((e) => RankedSplitBucket(
-            id: e.key,
-            // Metadata may be momentarily missing (e.g. the local season
-            // cache was cleared after this id was assigned) — fall back to
-            // the raw id rather than lose the bucket entirely.
-            displayName: seasons[e.key]?.displayName ?? e.key,
-            season: seasons[e.key],
-          ))
-      .toList()
-    ..sort((a, b) => ids[b.id]!.compareTo(ids[a.id]!));
+  real.sort((a, b) {
+    final sa = a.season?.start;
+    final sb = b.season?.start;
+    if (sa != null && sb != null) return sb.compareTo(sa); // newest first
+    if (sa == null && sb == null) return b.id.compareTo(a.id);
+    return sa == null ? 1 : -1; // splits with known metadata first
+  });
 
-  if (hasOther) {
-    buckets.add(const RankedSplitBucket(id: kUnknownSplitId, displayName: 'Unknown'));
+  if (hasUnknown) {
+    real.add(const RankedSplitBucket(id: kUnknownSplitId, displayName: 'Unknown'));
   }
-  return buckets;
+  return real;
 }
 
-/// Matches belonging to [bucket]'s split, by their persisted [seasonId].
-/// With [rankedOnly] (default) only ranked matches are returned (for
-/// aggregates); pass false to include pubs and every other match (for the
-/// History tab).
-List<RankedMatch> matchesInSplit(
-  List<RankedMatch> matches,
-  RankedSplitBucket bucket, {
-  bool rankedOnly = true,
-}) {
-  final pool = rankedOnly ? matches.where((m) => m.isRanked) : matches;
-  return pool.where((m) => (m.seasonId ?? kUnknownSplitId) == bucket.id).toList();
+/// The split id that a [selectedId] resolves to: itself when it's a real bucket,
+/// otherwise the newest (first) split. Empty string when there are no splits.
+/// Callers use this to decide *which* split's matches to load before building
+/// the view.
+String effectiveSplitId(List<RankedSplitBucket> splits, String? selectedId) {
+  if (splits.isEmpty) return '';
+  return splits.any((b) => b.id == selectedId) ? selectedId! : splits.first.id;
 }
+
+/// The 7-day week windows for [bucket]'s split, or empty when the split has no
+/// season metadata (the Unknown bucket).
+List<WeekRange> weeksForBucket(RankedSplitBucket bucket) =>
+    bucket.season != null ? computeWeeks(bucket.season!) : const <WeekRange>[];
 
 List<RankedMatch> matchesInWeek(List<RankedMatch> matches, WeekRange week) =>
     matches
@@ -118,38 +128,36 @@ class RankedView {
   );
 }
 
-/// Resolves the [RankedView] for a [splitId]/[weekIndex] selection. An invalid
-/// or null split defaults to the newest (current) split; an out-of-range week
-/// defaults to All.
-RankedView resolveRankedView(
-  List<RankedMatch> matches,
-  Map<String, SeasonMeta> seasons, {
-  String? splitId,
+/// Resolves the [RankedView] from the pre-built [splits] (the picker) and the
+/// already-scoped [splitMatches] for the effective split — i.e. exactly one
+/// split's rows, loaded via `RankedHistoryStore.getBySeason`, not the whole
+/// history. [selectedSplitId] should already be the effective id (see
+/// [effectiveSplitId]); an invalid one falls back to the newest split, and an
+/// out-of-range [weekIndex] falls back to All.
+RankedView resolveRankedView({
+  required List<RankedSplitBucket> splits,
+  required List<RankedMatch> splitMatches,
+  String? selectedSplitId,
   int weekIndex = -1,
 }) {
-  final buckets = splitBuckets(matches, seasons);
-  if (buckets.isEmpty) return RankedView.empty;
+  if (splits.isEmpty) return RankedView.empty;
 
-  final effId =
-      buckets.any((b) => b.id == splitId) ? splitId! : buckets.first.id;
-  final bucket = buckets.firstWhere((b) => b.id == effId);
-  final weeks =
-      bucket.season != null ? computeWeeks(bucket.season!) : <WeekRange>[];
+  final effId = effectiveSplitId(splits, selectedSplitId);
+  final bucket = splits.firstWhere((b) => b.id == effId);
+  final weeks = weeksForBucket(bucket);
   final effWeek =
       (weekIndex >= 0 && weekIndex < weeks.length) ? weekIndex : -1;
 
-  // Ranked-only matches drive the aggregates…
-  final rankedSplit = matchesInSplit(matches, bucket);
+  // [splitMatches] already belongs to this split, so ranked/history split is
+  // just the pubs filter — no per-match season check needed.
+  final ranked = splitMatches.where((m) => m.isRanked).toList();
   final filtered =
-      effWeek < 0 ? rankedSplit : matchesInWeek(rankedSplit, weeks[effWeek]);
-
-  // …while History keeps everything in the same period (pubs included).
-  final allSplit = matchesInSplit(matches, bucket, rankedOnly: false);
+      effWeek < 0 ? ranked : matchesInWeek(ranked, weeks[effWeek]);
   final history =
-      effWeek < 0 ? allSplit : matchesInWeek(allSplit, weeks[effWeek]);
+      effWeek < 0 ? splitMatches : matchesInWeek(splitMatches, weeks[effWeek]);
 
   return RankedView(
-    splits: buckets,
+    splits: splits,
     effectiveSplitId: effId,
     weeks: weeks,
     weekIndex: effWeek,

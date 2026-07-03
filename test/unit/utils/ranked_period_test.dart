@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
-import 'package:apexlytics/utils/formatting/season_utils.dart';
 import 'package:apexlytics/utils/ranked/ranked_period.dart';
 
 void main() {
@@ -13,162 +12,154 @@ void main() {
         id: 'br_ranked_s29_s1', startSeconds: 2000000, endSeconds: 3000000),
   };
 
-  // Splits are read from the persisted [RankedMatch.seasonId], not
-  // re-derived live — mirror what RankedHistoryStore.upsertAll would have
-  // stamped on write, using the same [seasonIdForEndTime] it uses.
-  RankedMatch m(int startSecs, {int rp = 10}) {
-    final base = RankedMatch.fromJson({
-      'uid': '1',
-      'name': 'T',
-      'legendPlayed': 'Axle',
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': 600,
-      'gameStartTimestamp': startSecs,
-      'gameEndTimestamp': startSecs + 600,
-      'gameData': [
-        {'key': 'kills', 'value': 1, 'name': 'BR Kills'},
-      ],
-      'BRScoreChange': rp,
-      'BRScore': 1000,
-      'map': 'olympus_rotation',
-    });
-    return RankedMatch(
-      uid: base.uid,
-      playerName: base.playerName,
-      legend: base.legend,
-      gameMode: base.gameMode,
-      mapKey: base.mapKey,
-      rpChange: base.rpChange,
-      cumulativeRp: base.cumulativeRp,
-      rankImg: base.rankImg,
-      lengthSecs: base.lengthSecs,
-      startTime: base.startTime,
-      endTime: base.endTime,
-      isPartyFull: base.isPartyFull,
-      trackers: base.trackers,
-      seasonId: seasonIdForEndTime(base.endTime, seasons.values),
-    );
-  }
+  // A plain match — the split picker now comes from counts, and
+  // resolveRankedView takes matches already scoped to one split, so only
+  // isRanked (rp != 0) and endTime (for week slicing) matter here.
+  RankedMatch m(int startSecs, {int rp = 10}) => RankedMatch.fromJson({
+        'uid': '1',
+        'name': 'T',
+        'legendPlayed': 'Axle',
+        'gameMode': 'BATTLE_ROYALE',
+        'gameLengthSecs': 600,
+        'gameStartTimestamp': startSecs,
+        'gameEndTimestamp': startSecs + 600,
+        'gameData': [
+          {'key': 'kills', 'value': 1, 'name': 'BR Kills'},
+        ],
+        'BRScoreChange': rp,
+        'BRScore': 1000,
+        'map': 'olympus_rotation',
+      });
 
-  // m1 in A; m2 in B week 1; m3 in B week 2; m4 before any split (Unknown).
-  final matches = [m(1500000), m(2100000), m(2700000), m(500000)];
-
-  group('splitBuckets', () {
-    test('groups by split newest-first with Unknown appended last', () {
-      final buckets = splitBuckets(matches, seasons);
+  group('buildSplitBuckets', () {
+    test('newest split first, Unknown last, names from metadata', () {
+      final buckets = buildSplitBuckets({
+        'br_ranked_s28_s2': 1,
+        'br_ranked_s29_s1': 2,
+        kUnknownSplitId: 1,
+      }, seasons);
       expect(buckets.length, 3);
-      expect(buckets.first.id, 'br_ranked_s29_s1'); // newest = current
+      expect(buckets[0].id, 'br_ranked_s29_s1'); // newest = current
+      expect(buckets[0].displayName, 'Season 29 (Split 1)');
       expect(buckets[1].id, 'br_ranked_s28_s2');
       expect(buckets.last.id, kUnknownSplitId);
       expect(buckets.last.displayName, 'Unknown');
       expect(buckets.last.season, isNull);
     });
 
-    test('groups by the persisted seasonId, not a live date recheck', () {
-      // Stamped under s29_s1 at write time even though its own end time (in
-      // split A's window) would now derive differently — grouping must
-      // follow the stored id, since a real classification is never allowed
-      // to be second-guessed live.
-      final relabeled = RankedMatch(
-        uid: '1',
-        playerName: 'T',
-        legend: 'Axle',
-        gameMode: 'BATTLE_ROYALE',
-        mapKey: 'olympus_rotation',
-        rpChange: 10,
-        cumulativeRp: 1000,
-        rankImg: '',
-        lengthSecs: 600,
-        startTime: DateTime.fromMillisecondsSinceEpoch(1500000000, isUtc: true),
-        endTime: DateTime.fromMillisecondsSinceEpoch(1500600000, isUtc: true),
-        isPartyFull: false,
-        trackers: const [],
-        seasonId: 'br_ranked_s29_s1',
-      );
-      final buckets = splitBuckets([relabeled], seasons);
-      expect(buckets.single.id, 'br_ranked_s29_s1');
+    test('excludes zero-count splits', () {
+      final buckets = buildSplitBuckets(
+          {'br_ranked_s29_s1': 0, 'br_ranked_s28_s2': 3}, seasons);
+      expect(buckets.map((b) => b.id), ['br_ranked_s28_s2']);
     });
 
-    test('falls back to the raw id when season metadata is missing', () {
-      final unknownMeta = RankedMatch(
-        uid: '1',
-        playerName: 'T',
-        legend: 'Axle',
-        gameMode: 'BATTLE_ROYALE',
-        mapKey: 'olympus_rotation',
-        rpChange: 10,
-        cumulativeRp: 1000,
-        rankImg: '',
-        lengthSecs: 600,
-        startTime: DateTime.fromMillisecondsSinceEpoch(2100000000, isUtc: true),
-        endTime: DateTime.fromMillisecondsSinceEpoch(2100600000, isUtc: true),
-        isPartyFull: false,
-        trackers: const [],
-        seasonId: 'br_ranked_s30_s1',
-      );
-      final buckets = splitBuckets([unknownMeta], const {});
+    test('falls back to the raw id when metadata is missing', () {
+      final buckets = buildSplitBuckets({'br_ranked_s30_s1': 2}, const {});
       expect(buckets.single.id, 'br_ranked_s30_s1');
       expect(buckets.single.displayName, 'br_ranked_s30_s1');
       expect(buckets.single.season, isNull);
     });
+
+    test('empty counts yield no buckets', () {
+      expect(buildSplitBuckets(const {}, seasons), isEmpty);
+    });
+  });
+
+  group('effectiveSplitId', () {
+    final splits = buildSplitBuckets(
+        {'br_ranked_s29_s1': 1, 'br_ranked_s28_s2': 1}, seasons);
+
+    test('returns the selection when it is a real split', () {
+      expect(effectiveSplitId(splits, 'br_ranked_s28_s2'), 'br_ranked_s28_s2');
+    });
+    test('falls back to the newest split when null or invalid', () {
+      expect(effectiveSplitId(splits, null), 'br_ranked_s29_s1');
+      expect(effectiveSplitId(splits, 'nope'), 'br_ranked_s29_s1');
+    });
+    test('empty splits resolve to empty string', () {
+      expect(effectiveSplitId(const [], 'x'), '');
+    });
+  });
+
+  group('weeksForBucket', () {
+    test('a real split divides into weeks', () {
+      final b = buildSplitBuckets({'br_ranked_s29_s1': 1}, seasons).single;
+      expect(weeksForBucket(b).length, 2); // ~11.5 days → 2 weeks
+    });
+    test('the Unknown bucket has no weeks', () {
+      final b = buildSplitBuckets({kUnknownSplitId: 1}, seasons).single;
+      expect(weeksForBucket(b), isEmpty);
+    });
   });
 
   group('resolveRankedView', () {
-    test('defaults to current split, all weeks', () {
-      final view = resolveRankedView(matches, seasons);
+    final splits = buildSplitBuckets(
+        {'br_ranked_s29_s1': 2, 'br_ranked_s28_s2': 1}, seasons);
+    // Matches already scoped to split B (as getBySeason would return them).
+    final splitB = [m(2100000), m(2700000)]; // week 0, week 1
+
+    test('defaults to the current split, all weeks', () {
+      final view = resolveRankedView(splits: splits, splitMatches: splitB);
       expect(view.effectiveSplitId, 'br_ranked_s29_s1');
       expect(view.weekIndex, -1);
-      expect(view.filtered.length, 2); // m2 + m3 (both in split B)
-      expect(view.weeks.length, 2); // ~11.5 days → 2 weeks
+      expect(view.filtered.length, 2);
+      expect(view.weeks.length, 2);
     });
 
     test('filters by week within the split', () {
-      final w0 = resolveRankedView(matches, seasons,
-          splitId: 'br_ranked_s29_s1', weekIndex: 0);
-      expect(w0.filtered.length, 1); // m2 only
+      final w0 = resolveRankedView(
+          splits: splits,
+          splitMatches: splitB,
+          selectedSplitId: 'br_ranked_s29_s1',
+          weekIndex: 0);
+      expect(w0.filtered.length, 1);
 
-      final w1 = resolveRankedView(matches, seasons,
-          splitId: 'br_ranked_s29_s1', weekIndex: 1);
-      expect(w1.filtered.length, 1); // m3 only
+      final w1 = resolveRankedView(
+          splits: splits,
+          splitMatches: splitB,
+          selectedSplitId: 'br_ranked_s29_s1',
+          weekIndex: 1);
+      expect(w1.filtered.length, 1);
     });
 
-    test('selecting an older split scopes to its matches', () {
-      final view =
-          resolveRankedView(matches, seasons, splitId: 'br_ranked_s28_s2');
-      expect(view.filtered.length, 1); // m1
+    test('keeps pubs (0 RP) in history but excludes them from aggregates', () {
+      final data = [m(2100000), m(2700000, rp: 0)];
+      final view = resolveRankedView(
+          splits: splits,
+          splitMatches: data,
+          selectedSplitId: 'br_ranked_s29_s1');
+      expect(view.filtered.length, 1); // ranked only
+      expect(view.history.length, 2); // pub kept in history
     });
 
-    test('Unknown bucket holds matches outside every known split', () {
-      final view = resolveRankedView(matches, seasons, splitId: kUnknownSplitId);
-      expect(view.filtered.length, 1); // m4
-      expect(view.weeks, isEmpty); // no week navigation for Unknown
-    });
-
-    test('invalid split id falls back to current split', () {
-      final view = resolveRankedView(matches, seasons, splitId: 'nonexistent');
+    test('an invalid split id falls back to the current split', () {
+      final view = resolveRankedView(
+          splits: splits, splitMatches: splitB, selectedSplitId: 'nonexistent');
       expect(view.effectiveSplitId, 'br_ranked_s29_s1');
     });
 
-    test('out-of-range week falls back to All', () {
-      final view = resolveRankedView(matches, seasons,
-          splitId: 'br_ranked_s29_s1', weekIndex: 99);
+    test('an out-of-range week falls back to All', () {
+      final view = resolveRankedView(
+          splits: splits,
+          splitMatches: splitB,
+          selectedSplitId: 'br_ranked_s29_s1',
+          weekIndex: 99);
       expect(view.weekIndex, -1);
       expect(view.filtered.length, 2);
     });
 
-    test('no matches yields the empty view', () {
-      expect(resolveRankedView(const [], seasons).isEmpty, true);
+    test('the Unknown split has no week navigation', () {
+      final s = buildSplitBuckets({kUnknownSplitId: 1}, seasons);
+      final view = resolveRankedView(
+          splits: s, splitMatches: [m(500000)], selectedSplitId: kUnknownSplitId);
+      expect(view.filtered.length, 1);
+      expect(view.weeks, isEmpty);
     });
 
-    test('History keeps pubs (0 RP) but aggregates exclude them', () {
-      final data = [
-        m(2100000), // ranked in split B
-        m(2700000, rp: 0), // pub in split B (no RP change)
-      ];
-      final view = resolveRankedView(data, seasons);
-      expect(view.effectiveSplitId, 'br_ranked_s29_s1');
-      expect(view.filtered.length, 1); // ranked only
-      expect(view.history.length, 2); // pub kept in history
+    test('no splits yields the empty view', () {
+      expect(
+          resolveRankedView(splits: const [], splitMatches: const []).isEmpty,
+          true);
     });
   });
 }

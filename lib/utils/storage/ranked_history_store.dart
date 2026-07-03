@@ -212,6 +212,24 @@ class RankedHistoryStore {
     };
   }
 
+  /// Ranked-match count per split for [uid], keyed by season id with NULL folded
+  /// into [kUnknownSeasonId]. Only counts *ranked* games (BR with an RP change),
+  /// so a split that holds only pubs never shows in the picker. Drives the split
+  /// dropdown without hydrating a single match — the core of scoping loads to
+  /// one split at a time.
+  Future<Map<String, int>> rankedSeasonCounts(String uid) async {
+    final db = await _open();
+    final rows = await db.rawQuery(
+      'SELECT COALESCE(season_id, ?) AS sid, COUNT(*) AS c FROM $table '
+      "WHERE uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0 "
+      'GROUP BY sid',
+      [kUnknownSeasonId, uid],
+    );
+    return {
+      for (final r in rows) r['sid'] as String: (r['c'] as num).toInt(),
+    };
+  }
+
   /// All persisted matches for [uid], newest first.
   Future<List<RankedMatch>> getAll(String uid) async {
     final db = await _open();
@@ -221,6 +239,28 @@ class RankedHistoryStore {
       whereArgs: [uid],
       orderBy: 'start_ms DESC',
     );
+    return rows.map(RankedMatch.fromStoredMap).toList();
+  }
+
+  /// Matches for a single split, newest first (pubs included — the History tab
+  /// needs them; callers filter to ranked for aggregates). The [kUnknownSeasonId]
+  /// bucket also picks up rows whose [season_id] is still NULL (never classified),
+  /// matching how [rankedSeasonCounts] folds NULL into Unknown.
+  Future<List<RankedMatch>> getBySeason(String uid, String seasonId) async {
+    final db = await _open();
+    final rows = seasonId == kUnknownSeasonId
+        ? await db.query(
+            table,
+            where: 'uid = ? AND (season_id = ? OR season_id IS NULL)',
+            whereArgs: [uid, kUnknownSeasonId],
+            orderBy: 'start_ms DESC',
+          )
+        : await db.query(
+            table,
+            where: 'uid = ? AND season_id = ?',
+            whereArgs: [uid, seasonId],
+            orderBy: 'start_ms DESC',
+          );
     return rows.map(RankedMatch.fromStoredMap).toList();
   }
 

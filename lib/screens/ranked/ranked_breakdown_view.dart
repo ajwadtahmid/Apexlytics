@@ -43,7 +43,7 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
     super.initState();
     _refreshTimer = Timer.periodic(
       _kViewRefreshInterval,
-      (_) => ref.invalidate(rankedMatchesProvider(widget.uid)),
+      (_) => ref.invalidate(rankedSyncProvider(widget.uid)),
     );
   }
 
@@ -54,9 +54,11 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
   }
 
   Future<void> _refresh() async {
-    ref.invalidate(rankedMatchesProvider(widget.uid));
+    // Re-syncing cascades to the split picker and the loaded split's matches,
+    // which both await this provider's future.
+    ref.invalidate(rankedSyncProvider(widget.uid));
     try {
-      await ref.read(rankedMatchesProvider(widget.uid).future);
+      await ref.read(rankedSyncProvider(widget.uid).future);
     } catch (_) {
       // Error surfaces through the provider's AsyncError state.
     }
@@ -64,31 +66,43 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(rankedMatchesProvider(widget.uid));
+    final splitsAsync = ref.watch(rankedSplitsProvider(widget.uid));
     final period = ref.watch(rankedPeriodProvider);
-    final seasons = ref.watch(rankedSeasonsProvider);
 
-    // Resolve the period view when ranked data is present (null while loading,
-    // empty/warming-up, or errored) so the AppBar split action can render.
-    final matches = async.asData?.value;
-    final resolved = matches != null
-        ? resolveRankedView(matches, seasons,
-            splitId: period.splitId, weekIndex: period.weekIndex)
-        : null;
-    final view = (resolved != null && !resolved.isEmpty) ? resolved : null;
+    // A matches-free "shell" view (splits + weeks only) so the AppBar's split
+    // dropdown and week strip render the moment the picker resolves, before the
+    // selected split's matches load. Null until there's at least one split.
+    RankedView? shell;
+    final splits = splitsAsync.asData?.value;
+    if (splits != null && splits.isNotEmpty) {
+      final effId = effectiveSplitId(splits, period.splitId);
+      final bucket = splits.firstWhere((b) => b.id == effId);
+      final weeks = weeksForBucket(bucket);
+      final effWeek = (period.weekIndex >= 0 && period.weekIndex < weeks.length)
+          ? period.weekIndex
+          : -1;
+      shell = RankedView(
+        splits: splits,
+        effectiveSplitId: effId,
+        weeks: weeks,
+        weekIndex: effWeek,
+        filtered: const [],
+        history: const [],
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ranked Breakdown'),
-        actions: [if (view != null) RankedSplitDropdown(view: view)],
+        actions: [if (shell != null) RankedSplitDropdown(view: shell)],
         // Weeks ride in the AppBar's bottom slot so split + weeks read as one
         // header surface instead of a separate floating strip.
-        bottom: (view != null && view.weeks.isNotEmpty)
-            ? RankedWeekStrip(view: view)
+        bottom: (shell != null && shell.weeks.isNotEmpty)
+            ? RankedWeekStrip(view: shell)
             : null,
       ),
       body: SafeArea(
-        child: async.when(
+        child: splitsAsync.when(
           loading: () => const Center(
             child: CircularProgressIndicator(color: AppTheme.accent),
           ),
@@ -98,8 +112,8 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
             message: friendlyError(e),
             onRetry: _refresh,
           ),
-          data: (_) {
-            if (view == null) {
+          data: (splits) {
+            if (splits.isEmpty) {
               return _MessageState(
                 icon: Icons.hourglass_empty,
                 title: 'Warming up',
@@ -109,58 +123,83 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
                 onRetry: _refresh,
               );
             }
-
-            final filtered = view.filtered;
-            final summary = summarize(filtered);
-
-            return DefaultTabController(
-              length: 4,
-              child: Column(
-                children: [
-                  const TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.center,
-                    labelStyle:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                    unselectedLabelStyle: TextStyle(fontSize: 14),
-                    tabs: [
-                      Tab(height: 42, text: 'Overview'),
-                      Tab(height: 42, text: 'Legends'),
-                      Tab(height: 42, text: 'Maps'),
-                      Tab(height: 42, text: 'History'),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      children: [
-                        _OverviewTab(
-                          uid: widget.uid,
-                          summary: summary,
-                          matches: filtered,
-                          onRefresh: _refresh,
-                        ),
-                        RankedLegendBreakdown(
-                          matches: filtered,
-                          onRefresh: _refresh,
-                        ),
-                        RankedMapBreakdown(
-                          matches: filtered,
-                          onRefresh: _refresh,
-                        ),
-                        // History keeps everything (pubs included), not just
-                        // the ranked matches that drive the other tabs.
-                        RankedMatchList(
-                          matches: view.history,
-                          onRefresh: _refresh,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+            // Load only the selected split's matches — never the whole history.
+            final effId = shell!.effectiveSplitId;
+            final matchesAsync = ref.watch(
+                rankedSplitMatchesProvider((uid: widget.uid, splitId: effId)));
+            return matchesAsync.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(color: AppTheme.accent),
               ),
+              error: (e, _) => _MessageState(
+                icon: Icons.lock_outline,
+                title: 'Not available',
+                message: friendlyError(e),
+                onRetry: _refresh,
+              ),
+              data: (splitMatches) {
+                final view = resolveRankedView(
+                  splits: splits,
+                  splitMatches: splitMatches,
+                  selectedSplitId: effId,
+                  weekIndex: period.weekIndex,
+                );
+                return _tabs(view);
+              },
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _tabs(RankedView view) {
+    final filtered = view.filtered;
+    final summary = summarize(filtered);
+
+    return DefaultTabController(
+      length: 4,
+      child: Column(
+        children: [
+          const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.center,
+            labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            unselectedLabelStyle: TextStyle(fontSize: 14),
+            tabs: [
+              Tab(height: 42, text: 'Overview'),
+              Tab(height: 42, text: 'Legends'),
+              Tab(height: 42, text: 'Maps'),
+              Tab(height: 42, text: 'History'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _OverviewTab(
+                  uid: widget.uid,
+                  summary: summary,
+                  matches: filtered,
+                  onRefresh: _refresh,
+                ),
+                RankedLegendBreakdown(
+                  matches: filtered,
+                  onRefresh: _refresh,
+                ),
+                RankedMapBreakdown(
+                  matches: filtered,
+                  onRefresh: _refresh,
+                ),
+                // History keeps everything (pubs included), not just
+                // the ranked matches that drive the other tabs.
+                RankedMatchList(
+                  matches: view.history,
+                  onRefresh: _refresh,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

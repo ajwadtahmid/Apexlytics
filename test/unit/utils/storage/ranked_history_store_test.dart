@@ -19,7 +19,8 @@ void main() {
   SeasonMeta season(String id, int startSecs, int endSecs) =>
       SeasonMeta.fromApi(id: id, startSeconds: startSecs, endSeconds: endSecs);
 
-  RankedMatch match(String uid, int startSecs, {String legend = 'Axle'}) =>
+  RankedMatch match(String uid, int startSecs,
+          {String legend = 'Axle', int rp = 10}) =>
       RankedMatch.fromJson({
         'uid': uid,
         'name': 'Tester',
@@ -31,7 +32,7 @@ void main() {
         'gameData': [
           {'key': 'kills', 'value': 3, 'name': 'BR Kills'},
         ],
-        'BRScoreChange': 10,
+        'BRScoreChange': rp,
         'BRScore': 1000,
         'map': 'olympus_rotation',
       });
@@ -103,6 +104,47 @@ void main() {
     final counts = await store.seasonCounts('1');
     expect(counts['br_ranked_s1_s1'], 2);
     expect(counts['br_ranked_s1_s2'], 1);
+  });
+
+  test('rankedSeasonCounts counts ranked-only and folds NULL into Unknown',
+      () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    final seasons = {'s1': season('br_ranked_s1_s1', 0, 1000)};
+    await store.upsertAll('1', [
+      match('1', 100), // end 700_000ms → s1 (ranked)
+      match('1', 300), // → s1 (ranked)
+      match('1', 200, rp: 0), // pub in s1 — excluded
+    ], seasons: seasons);
+    // Written with no season metadata → season_id left NULL.
+    await store.upsertAll('1', [match('1', 5000)]);
+
+    final counts = await store.rankedSeasonCounts('1');
+    expect(counts['br_ranked_s1_s1'], 2); // pub not counted
+    expect(counts[kUnknownSeasonId], 1); // NULL folded into Unknown
+  });
+
+  test('getBySeason returns one split; Unknown includes NULL rows', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    final seasons = {
+      's1': season('br_ranked_s1_s1', 0, 1000),
+      's2': season('br_ranked_s1_s2', 1000, 2000),
+    };
+    await store.upsertAll('1', [
+      match('1', 100), // → s1
+      match('1', 1100), // → s2
+    ], seasons: seasons);
+    await store.upsertAll('1', [match('1', 5000)]); // NULL season
+
+    final s1 = await store.getBySeason('1', 'br_ranked_s1_s1');
+    expect(s1.length, 1);
+    expect(s1.single.seasonId, 'br_ranked_s1_s1');
+
+    final unknown = await store.getBySeason('1', kUnknownSeasonId);
+    expect(unknown.length, 1); // the NULL-season row folds in
   });
 
   test('matches outside every known season are stamped Unknown', () async {

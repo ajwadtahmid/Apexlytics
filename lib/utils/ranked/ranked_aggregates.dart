@@ -180,6 +180,7 @@ class MapBreakdown {
   final int totalRp;
   final int totalKills;
   final int totalDamage;
+  final int totalLengthSecs;
   final int wins;
   final int losses;
 
@@ -190,6 +191,7 @@ class MapBreakdown {
     required this.totalRp,
     required this.totalKills,
     required this.totalDamage,
+    required this.totalLengthSecs,
     required this.wins,
     required this.losses,
   });
@@ -197,6 +199,7 @@ class MapBreakdown {
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
   double get avgKills => games == 0 ? 0 : totalKills / games;
   double get avgDamage => games == 0 ? 0 : totalDamage / games;
+  double get avgLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
   int get decidedGames => wins + losses;
   double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
 }
@@ -209,11 +212,12 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
     byMap.putIfAbsent(m.mapKey, () => []).add(m);
   }
   final out = byMap.entries.map((e) {
-    var rp = 0, kills = 0, damage = 0, wins = 0, losses = 0;
+    var rp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;
     for (final m in e.value) {
       rp += m.effectiveRpChange;
       kills += m.kills;
       damage += m.damage;
+      length += m.lengthSecs;
       if (m.effectiveRpChange > 0) {
         wins++;
       } else if (m.effectiveRpChange < 0) {
@@ -227,6 +231,7 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
       totalRp: rp,
       totalKills: kills,
       totalDamage: damage,
+      totalLengthSecs: length,
       wins: wins,
       losses: losses,
     );

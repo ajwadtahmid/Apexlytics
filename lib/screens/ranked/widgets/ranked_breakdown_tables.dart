@@ -55,8 +55,8 @@ class _RankBadge extends StatelessWidget {
       ),
       child: Text(
         '#$rank',
-        style: TextStyle(
-          color: onImage ? Colors.white : AppTheme.accent,
+        style: const TextStyle(
+          color: AppTheme.accent,
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
@@ -190,17 +190,15 @@ class _LegendCard extends StatelessWidget {
                       _RpPill(totalRp: row.totalRp),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${row.games} games',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-                  ),
                   const SizedBox(height: AppTheme.sm),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _chip('Avg RP', _signedAvg(row.avgRpPerGame), highlight: true),
+                        Padding(
+                          padding: const EdgeInsets.only(right: AppTheme.sm),
+                          child: _AvgRpChip(avgRp: row.avgRpPerGame),
+                        ),
                         Padding(
                           padding: const EdgeInsets.only(right: AppTheme.sm),
                           child: WinLossStat(
@@ -212,6 +210,7 @@ class _LegendCard extends StatelessWidget {
                         _chip('Avg Dmg', formatNumber(row.avgDamage.round())),
                         _chip('Total Time', formatDuration(row.totalLengthSecs)),
                         _chip('Avg Time', formatDuration(row.avgLengthSecs.round())),
+                        _chip('Games', '${row.games}'),
                       ],
                     ),
                   ),
@@ -229,6 +228,37 @@ class _LegendCard extends StatelessWidget {
         padding: const EdgeInsets.only(right: AppTheme.sm),
         child: StatDisplay(label: label, value: value, highlight: highlight),
       );
+}
+
+/// Avg RP chip in the same neutral box as the other stat chips — only the
+/// value itself is coloured green/red (positive/negative), not the whole box.
+class _AvgRpChip extends StatelessWidget {
+  final double avgRp;
+  const _AvgRpChip({required this.avgRp});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = avgRp >= 0 ? AppTheme.green : AppTheme.red;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Avg RP', style: TextStyle(color: AppTheme.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 3),
+          Text(
+            _signedAvg(avgRp),
+            style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _RpPill extends StatelessWidget {
@@ -394,9 +424,8 @@ class _MapCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
                         _MapStat(label: 'Avg RP', value: _signedAvg(row.avgRpPerGame), color: rpColor),
@@ -405,8 +434,12 @@ class _MapCard extends StatelessWidget {
                           child: WinLossStat(
                               wins: row.wins, losses: row.losses, onImage: true),
                         ),
-                        _MapStat(label: 'Kills', value: row.avgKills.toStringAsFixed(1)),
-                        _MapStat(label: 'Dmg', value: formatNumber(row.avgDamage.round())),
+                        _MapStat(label: 'Total Kills', value: formatNumber(row.totalKills)),
+                        _MapStat(label: 'Avg Kills', value: row.avgKills.toStringAsFixed(1)),
+                        _MapStat(label: 'Total Dmg', value: formatNumber(row.totalDamage)),
+                        _MapStat(label: 'Avg Dmg', value: formatNumber(row.avgDamage.round())),
+                        _MapStat(label: 'Total Time', value: formatDuration(row.totalLengthSecs)),
+                        _MapStat(label: 'Avg Time', value: formatDuration(row.avgLengthSecs.round())),
                         _MapStat(label: 'Games', value: '${row.games}'),
                       ],
                     ),

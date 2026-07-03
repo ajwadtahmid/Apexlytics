@@ -7,6 +7,7 @@ import '../constants/prefs_keys.dart';
 import '../models/ranked_match.dart';
 import '../models/season_meta.dart';
 import '../utils/app_logger.dart';
+import '../utils/ranked/ranked_period.dart';
 import '../utils/storage/ranked_history_store.dart';
 import '../utils/storage/season_storage.dart';
 import 'api_provider.dart';
@@ -117,15 +118,16 @@ class RankedPeriodNotifier extends Notifier<RankedPeriod> {
       state = RankedPeriod(splitId: state.splitId, weekIndex: index);
 }
 
-/// Ranked match history for [uid]: fetches the latest 100 from `/games`, merges
-/// them into the local store, and returns the *full* persisted history (so
-/// matches older than the API window remain viewable).
+/// Syncs ranked history for [uid]: fetches the latest 100 from `/games`, merges
+/// them into the local store, and classifies any newly/legacy-unstamped rows.
+/// This is the write half — the split picker and per-split match loaders below
+/// depend on it so they re-run after each sync, but it deliberately loads *no*
+/// matches into memory itself.
 ///
-/// If the fetch fails but history exists, the persisted history is returned
-/// (graceful offline/stale). Only when there's no fetch *and* no history does
-/// the error surface so the view can show a retry.
-final rankedMatchesProvider =
-    FutureProvider.autoDispose.family<List<RankedMatch>, String>(
+/// A fetch failure is swallowed when persisted history exists (graceful
+/// offline/stale) and only rethrown when there's nothing to show, so the view
+/// can surface a retry.
+final rankedSyncProvider = FutureProvider.autoDispose.family<void, String>(
   (ref, uid) async {
     final store = ref.watch(rankedHistoryStoreProvider);
     final seasons = ref.watch(rankedSeasonsProvider);
@@ -133,10 +135,9 @@ final rankedMatchesProvider =
       final fresh = await ref.watch(gamesServiceProvider).getMatches(uid);
       await store.upsertAll(uid, fresh, seasons: seasons);
     } catch (e) {
-      final existing = await store.getAll(uid);
-      if (existing.isEmpty) rethrow;
+      if (await store.count(uid) == 0) rethrow;
       log.w('games fetch failed; serving persisted history', error: e);
-      return existing;
+      return;
     }
     // Re-read from prefs rather than reusing the watched `seasons` above: other
     // screens (e.g. the stats tab) call upsertSeason() directly against prefs
@@ -144,6 +145,30 @@ final rankedMatchesProvider =
     // the same session wouldn't otherwise be reflected here until relaunch.
     final latestSeasons = loadAllSeasonsSync(ref.read(sharedPreferencesProvider));
     await store.backfillSeasonIds(latestSeasons);
-    return store.getAll(uid);
+  },
+);
+
+/// The split buckets that drive the picker for [uid], built from a cheap ranked
+/// `COUNT` per split — no match hydration. Re-runs after each [rankedSyncProvider].
+final rankedSplitsProvider =
+    FutureProvider.autoDispose.family<List<RankedSplitBucket>, String>(
+  (ref, uid) async {
+    await ref.watch(rankedSyncProvider(uid).future);
+    final store = ref.watch(rankedHistoryStoreProvider);
+    final seasons = ref.watch(rankedSeasonsProvider);
+    final counts = await store.rankedSeasonCounts(uid);
+    return buildSplitBuckets(counts, seasons);
+  },
+);
+
+/// Loads just one split's matches (pubs included), keyed by uid + split id, so
+/// only the selected split is ever held in memory — never the whole history.
+/// Re-runs after each [rankedSyncProvider].
+final rankedSplitMatchesProvider = FutureProvider.autoDispose
+    .family<List<RankedMatch>, ({String uid, String splitId})>(
+  (ref, arg) async {
+    await ref.watch(rankedSyncProvider(arg.uid).future);
+    final store = ref.watch(rankedHistoryStoreProvider);
+    return store.getBySeason(arg.uid, arg.splitId);
   },
 );
