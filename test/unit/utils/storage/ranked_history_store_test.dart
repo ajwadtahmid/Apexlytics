@@ -516,5 +516,19 @@ void main() {
         contains('idx_needs_season_id'),
       );
     });
+
+    test('the ranked-scope aggregate query uses idx_ranked_scope', () async {
+      final store = RankedHistoryStore(overridePath: dbPath);
+      await store.upsertAll('1', [match('1', 100), match('1', 200)]);
+      await store.close();
+
+      // The shared WHERE prefix of summaryFor/legendBreakdownsFor/etc.
+      expect(
+        await planFor(
+          "uid = '1' AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0",
+        ),
+        contains('idx_ranked_scope'),
+      );
+    });
   });
 }

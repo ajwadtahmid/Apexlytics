@@ -21,7 +21,7 @@ import '../ranked/ranked_aggregates.dart';
 class RankedHistoryStore {
   static const _dbName = 'ranked_history.db';
   static const table = 'ranked_matches';
-  static const _version = 4;
+  static const _version = 5;
 
   // Predicates for the two lazy backfills' "rows still needing work" scope.
   // Each is used verbatim by both a partial index and its backfill query — they
@@ -70,6 +70,10 @@ class RankedHistoryStore {
         await db.execute(
           'CREATE INDEX idx_uid_season ON $table (uid, season_id)',
         );
+        await db.execute(
+          'CREATE INDEX idx_ranked_scope '
+          'ON $table (uid, game_mode, rp_change)',
+        );
         await _createBackfillIndexes(db);
       },
       onUpgrade: (db, oldVersion, _) async {
@@ -94,6 +98,15 @@ class RankedHistoryStore {
         // sync once the backlog is drained.
         if (oldVersion < 4) {
           await _createBackfillIndexes(db);
+        }
+        // v4 → v5: index the ranked-scope prefix shared by every SQL aggregate
+        // (uid + BATTLE_ROYALE + RP-changed), so the Lifetime queries narrow to
+        // a player's ranked games instead of scanning all of their rows.
+        if (oldVersion < 5) {
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_ranked_scope '
+            'ON $table (uid, game_mode, rp_change)',
+          );
         }
       },
     );
