@@ -70,6 +70,36 @@ bool _include(String key) {
 @visibleForTesting
 bool backupIncludesKey(String key) => _include(key);
 
+/// Restores [prefsData] into [prefs], skipping disallowed keys and dispatching
+/// each value to the matching typed `SharedPreferences` setter. Extracted from
+/// [importBackup] so the type-dispatch is testable without a file picker.
+@visibleForTesting
+Future<void> restorePrefsData(
+  SharedPreferences prefs,
+  Map<String, dynamic> prefsData,
+) async {
+  for (final entry in prefsData.entries) {
+    if (!_include(entry.key)) {
+      log.w('Backup import: skipping disallowed key "${entry.key}"');
+      continue;
+    }
+    final v = entry.value;
+    if (v is String) {
+      await prefs.setString(entry.key, v);
+    } else if (v is int) {
+      await prefs.setInt(entry.key, v);
+    } else if (v is bool) {
+      await prefs.setBool(entry.key, v);
+    } else if (v is double) {
+      await prefs.setDouble(entry.key, v);
+    } else if (v is List) {
+      await prefs.setStringList(entry.key, v.map((e) => e.toString()).toList());
+    } else {
+      log.w('Backup import: skipping unsupported type for "${entry.key}": ${v.runtimeType}');
+    }
+  }
+}
+
 Map<String, dynamic> _collect(SharedPreferences prefs) {
   final result = <String, dynamic>{};
   for (final key in prefs.getKeys()) {
@@ -173,24 +203,7 @@ Future<ImportResult> importBackup(
     if (prefsData is! Map<String, dynamic>) {
       return ImportError('Invalid prefs structure in backup file.');
     }
-    for (final entry in prefsData.entries) {
-      if (!_include(entry.key)) {
-        log.w('Backup import: skipping disallowed key "${entry.key}"');
-        continue;
-      }
-      final v = entry.value;
-      if (v is String) {
-        await prefs.setString(entry.key, v);
-      } else if (v is int) {
-        await prefs.setInt(entry.key, v);
-      } else if (v is bool) {
-        await prefs.setBool(entry.key, v);
-      } else if (v is double) {
-        await prefs.setDouble(entry.key, v);
-      } else {
-        log.w('Backup import: skipping unsupported type for "${entry.key}": ${v.runtimeType}');
-      }
-    }
+    await restorePrefsData(prefs, prefsData);
 
     // Restore embedded ranked history (absent in v1 backups).
     final rankedHistory = envelope['ranked_history'];

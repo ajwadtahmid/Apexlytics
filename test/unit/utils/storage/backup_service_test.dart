@@ -1,6 +1,7 @@
 import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/utils/storage/backup_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('backup key allowlist', () {
@@ -36,6 +37,54 @@ void main() {
       expect(backupIncludesKey(PrefsKeys.approvedUidsCache), isFalse);
       expect(backupIncludesKey(PrefsKeys.uidSearchWarningShown), isFalse);
       expect(backupIncludesKey('api_cache:whatever'), isFalse);
+    });
+  });
+
+  group('restorePrefsData', () {
+    test('restores a native string-list value instead of dropping it', () async {
+      // Every backed-up list pref today is stored as a JSON-encoded string, so
+      // this simulates the type a future setStringList-backed pref would
+      // round-trip as — the exact case that used to hit the "unsupported
+      // type" branch and vanish silently.
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      await restorePrefsData(prefs, {
+        PrefsKeys.favoriteRankedMapNames: ['Olympus', "World's Edge"],
+      });
+
+      expect(
+        prefs.getStringList(PrefsKeys.favoriteRankedMapNames),
+        ['Olympus', "World's Edge"],
+      );
+    });
+
+    test('still restores string/int/bool/double values', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      await restorePrefsData(prefs, {
+        PrefsKeys.playerName: 'Aceu',
+        PrefsKeys.statsRefreshMinutes: 30,
+        PrefsKeys.compactLegendCards: true,
+      });
+
+      expect(prefs.getString(PrefsKeys.playerName), 'Aceu');
+      expect(prefs.getInt(PrefsKeys.statsRefreshMinutes), 30);
+      expect(prefs.getBool(PrefsKeys.compactLegendCards), isTrue);
+    });
+
+    test('skips keys not on the backup allowlist', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      await restorePrefsData(prefs, {
+        PrefsKeys.uidSearchWarningShown: true,
+        'api_cache:whatever': 'stale',
+      });
+
+      expect(prefs.getBool(PrefsKeys.uidSearchWarningShown), isNull);
+      expect(prefs.getString('api_cache:whatever'), isNull);
     });
   });
 }

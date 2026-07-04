@@ -161,6 +161,7 @@ The app proxies all API calls through a private server instead of calling APIs d
 # .env
 PROXY_URL=https://your-proxy-server.example.com
 CLIENT_TOKEN=your-secret-token
+SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/01234567
 ```
 
 After editing `.env`, regenerate:
@@ -250,6 +251,7 @@ No. Just search for any public player by name or UID.
 - **Legend stats** — Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
 - **Predator cutoff** — Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.
 - **Offline player search** — If a player hasn't been searched before, their data won't be cached and you'll need internet to look them up.
+- **Desktop crash reporting** — Crash reports are only sent on Android and iOS. Desktop builds (Linux, Windows, macOS) don't report crashes automatically, since Sentry's crash handler can't reliably run there — desktop issues rely on user-submitted [bug reports](https://github.com/ajwadtahmid/Apexlytics/issues).
 
 ---
 

@@ -127,5 +127,88 @@ void main() {
       expect(prefs.getInt('stats_refresh_minutes'), isNull);
       expect(prefs.getBool('compact_legend_cards'), isNull);
     });
+
+    group('removeProfile', () {
+      Future<ProviderContainer> containerWithProfiles(
+        List<(String, String, String)> profiles, {
+        int active = 0,
+      }) async {
+        final container = await makeContainer();
+        final notifier = container.read(playerSettingsProvider.notifier);
+        for (final (name, uid, platform) in profiles) {
+          await notifier.addProfile(name, uid, platform);
+        }
+        await notifier.setActiveProfileIndex(active);
+        return container;
+      }
+
+      test('removing a slot before the active one keeps the same profile active',
+          () async {
+        // [A, B, C] with B active. Removing A (index 0, before active index 1)
+        // must shift the active pointer down so it still resolves to B, not C.
+        final container = await containerWithProfiles([
+          ('A', 'uidA', 'PC'),
+          ('B', 'uidB', 'PC'),
+          ('C', 'uidC', 'PC'),
+        ], active: 1);
+        addTearDown(container.dispose);
+        final notifier = container.read(playerSettingsProvider.notifier);
+
+        await notifier.removeProfile(0);
+
+        final settings = container.read(playerSettingsProvider);
+        expect(settings.profiles.map((p) => p.uid), ['uidB', 'uidC']);
+        expect(settings.uid, 'uidB');
+      });
+
+      test('removing the active profile falls back to a neighboring slot',
+          () async {
+        final container = await containerWithProfiles([
+          ('A', 'uidA', 'PC'),
+          ('B', 'uidB', 'PC'),
+          ('C', 'uidC', 'PC'),
+        ], active: 1);
+        addTearDown(container.dispose);
+        final notifier = container.read(playerSettingsProvider.notifier);
+
+        await notifier.removeProfile(1);
+
+        final settings = container.read(playerSettingsProvider);
+        expect(settings.profiles.map((p) => p.uid), ['uidA', 'uidC']);
+        expect(settings.uid, 'uidC');
+      });
+
+      test('removing a slot after the active one leaves the active profile unchanged',
+          () async {
+        final container = await containerWithProfiles([
+          ('A', 'uidA', 'PC'),
+          ('B', 'uidB', 'PC'),
+          ('C', 'uidC', 'PC'),
+        ], active: 1);
+        addTearDown(container.dispose);
+        final notifier = container.read(playerSettingsProvider.notifier);
+
+        await notifier.removeProfile(2);
+
+        final settings = container.read(playerSettingsProvider);
+        expect(settings.profiles.map((p) => p.uid), ['uidA', 'uidB']);
+        expect(settings.uid, 'uidB');
+      });
+
+      test('removing the last remaining profile clears the active player',
+          () async {
+        final container = await containerWithProfiles([
+          ('A', 'uidA', 'PC'),
+        ], active: 0);
+        addTearDown(container.dispose);
+        final notifier = container.read(playerSettingsProvider.notifier);
+
+        await notifier.removeProfile(0);
+
+        final settings = container.read(playerSettingsProvider);
+        expect(settings.profiles, isEmpty);
+        expect(settings.isPlayerSet, isFalse);
+      });
+    });
   });
 }

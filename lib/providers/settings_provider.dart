@@ -356,6 +356,10 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     if (index < 0 || index >= state.profiles.length) return;
     final profiles = List<PlayerProfile>.from(state.profiles)..removeAt(index);
     var activeIdx = state.activeProfileIndex;
+    // Removing a slot before the active one shifts every later index down by
+    // one, so the active pointer must shift with it to keep pointing at the
+    // same profile.
+    if (index < activeIdx) activeIdx--;
     if (profiles.isEmpty) {
       activeIdx = 0;
     } else if (activeIdx >= profiles.length) {
@@ -384,7 +388,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     state = update(state);
   }
 
-  Future<void> _setStringList(
+  Future<void> _setJsonList(
     String key,
     List<String> value,
     PlayerSettings Function(PlayerSettings) update,
@@ -456,13 +460,13 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   Future<void> setDefaultTab(int v) =>
       _setInt(PrefsKeys.defaultTab, v, (s) => s.copyWith(defaultTab: v));
 
-  Future<void> setFavoriteRankedMapNames(List<String> v) => _setStringList(
+  Future<void> setFavoriteRankedMapNames(List<String> v) => _setJsonList(
     PrefsKeys.favoriteRankedMapNames,
     v,
     (s) => s.copyWith(favoriteRankedMapNames: v),
   );
 
-  Future<void> setFavoritePubsMapNames(List<String> v) => _setStringList(
+  Future<void> setFavoritePubsMapNames(List<String> v) => _setJsonList(
     PrefsKeys.favoritePubsMapNames,
     v,
     (s) => s.copyWith(favoritePubsMapNames: v),
