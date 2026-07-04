@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../constants/ranked_map_constants.dart';
-import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart' show formatNumber;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
@@ -9,33 +8,40 @@ import '../../../widgets/surface_card.dart';
 import 'map_rp_badge.dart';
 
 /// Overview highlight reel: best & worst legends (compact, side by side) and the
-/// worst & best maps (image banners). "Unknown" maps are excluded.
+/// worst & best maps (image banners). "Unknown" maps are excluded. Takes
+/// precomputed breakdowns so it works off either the in-memory split aggregates
+/// or the SQL lifetime aggregates.
 class RankedOverviewHighlights extends StatelessWidget {
-  final List<RankedMatch> matches;
-  const RankedOverviewHighlights({super.key, required this.matches});
+  final List<LegendBreakdown> legends;
+  final List<MapBreakdown> maps;
+  const RankedOverviewHighlights({
+    super.key,
+    required this.legends,
+    required this.maps,
+  });
 
   static String _signed(double v) =>
       '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}';
 
   @override
   Widget build(BuildContext context) {
-    final legends = _rankByAvgRp(
-      legendBreakdowns(matches),
+    final legendsRanked = _rankByAvgRp(
+      legends,
       (l) => l.games,
       (l) => l.avgRpPerGame,
     );
-    final maps = _rankByAvgRp(
-      mapBreakdowns(matches).where((m) => !isUnknownMapKey(m.mapKey)).toList(),
+    final mapsRanked = _rankByAvgRp(
+      maps.where((m) => !isUnknownMapKey(m.mapKey)).toList(),
       (m) => m.games,
       (m) => m.avgRpPerGame,
     );
 
     // Split legends into top (best) and bottom (worst) without overlap.
-    final n = legends.length;
+    final n = legendsRanked.length;
     final worstCount = n >= 2 ? (n >= 4 ? 2 : 1) : 0;
     final bestCount = (n - worstCount).clamp(0, 2);
-    final best = legends.take(bestCount).toList();
-    final worst = legends.sublist(n - worstCount).reversed.toList();
+    final best = legendsRanked.take(bestCount).toList();
+    final worst = legendsRanked.sublist(n - worstCount).reversed.toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,13 +55,13 @@ class RankedOverviewHighlights extends StatelessWidget {
           const _SectionLabel('Worst Legends'),
           _legendRow(worst),
         ],
-        if (maps.isNotEmpty) ...[
+        if (mapsRanked.isNotEmpty) ...[
           const SizedBox(height: AppTheme.md),
           const _SectionLabel('Maps'),
-          _MapHighlight(label: 'Best Map', map: maps.first),
-          if (maps.length > 1) ...[
+          _MapHighlight(label: 'Best Map', map: mapsRanked.first),
+          if (mapsRanked.length > 1) ...[
             const SizedBox(height: AppTheme.sm),
-            _MapHighlight(label: 'Worst Map', map: maps.last),
+            _MapHighlight(label: 'Worst Map', map: mapsRanked.last),
           ],
         ],
       ],
@@ -85,8 +91,9 @@ class RankedOverviewHighlights extends StatelessWidget {
     int Function(T) games,
     double Function(T) avgRp,
   ) {
-    final qualified =
-        all.where((e) => games(e) >= kMinGamesForInsight).toList();
+    final qualified = all
+        .where((e) => games(e) >= kMinGamesForInsight)
+        .toList();
     final pool = qualified.isNotEmpty ? qualified : List<T>.from(all);
     pool.sort((a, b) => avgRp(b).compareTo(avgRp(a)));
     return pool;
@@ -256,15 +263,18 @@ class _MapHighlight extends StatelessWidget {
                         _MapStat(
                           label: 'Avg RP',
                           value: RankedOverviewHighlights._signed(
-                              map.avgRpPerGame),
+                            map.avgRpPerGame,
+                          ),
                           color: accent,
                         ),
                         _MapStat(
-                            label: 'Kills',
-                            value: map.avgKills.toStringAsFixed(1)),
+                          label: 'Kills',
+                          value: map.avgKills.toStringAsFixed(1),
+                        ),
                         _MapStat(
-                            label: 'Dmg',
-                            value: formatNumber(map.avgDamage.round())),
+                          label: 'Dmg',
+                          value: formatNumber(map.avgDamage.round()),
+                        ),
                         _MapStat(label: 'Games', value: '${map.games}'),
                       ],
                     ),

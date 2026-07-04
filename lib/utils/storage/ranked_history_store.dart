@@ -4,9 +4,11 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../../constants/ranked_map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
 import '../formatting/season_utils.dart';
+import '../ranked/ranked_aggregates.dart';
 
 /// Local SQLite store that accumulates ranked match history per UID, beyond the
 /// API's rolling 100-match window. Matches are deduped by [RankedMatch.dedupKey]
@@ -19,7 +21,7 @@ import '../formatting/season_utils.dart';
 class RankedHistoryStore {
   static const _dbName = 'ranked_history.db';
   static const table = 'ranked_matches';
-  static const _version = 2;
+  static const _version = 3;
 
   final String? _overridePath;
   Database? _db;
@@ -49,7 +51,9 @@ class RankedHistoryStore {
             end_ms INTEGER,
             is_party_full INTEGER,
             trackers TEXT,
-            season_id TEXT
+            season_id TEXT,
+            kills INTEGER,
+            damage INTEGER
           )
         ''');
         await db.execute(
@@ -68,6 +72,13 @@ class RankedHistoryStore {
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_uid_season ON $table (uid, season_id)',
           );
+        }
+        // v2 → v3: denormalize kills/damage out of the trackers JSON blob into
+        // real columns so aggregates can SUM() them in SQL. Existing rows get
+        // NULLs, filled lazily by [backfillKillsDamage].
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE $table ADD COLUMN kills INTEGER');
+          await db.execute('ALTER TABLE $table ADD COLUMN damage INTEGER');
         }
       },
     );
@@ -109,15 +120,16 @@ class RankedHistoryStore {
     final batch = db.batch();
     for (final m in matches) {
       final row = m.toStoredMap();
-      final derivedSeasonId =
-          seasons.isNotEmpty ? seasonIdForEndTime(m.endTime, seasons.values) : null;
+      final derivedSeasonId = seasons.isNotEmpty
+          ? seasonIdForEndTime(m.endTime, seasons.values)
+          : null;
       batch.rawInsert(
         '''
         INSERT INTO $table (
           id, uid, player_name, legend, game_mode, map_key, rp_change,
           cumulative_rp, rank_img, length_secs, start_ms, end_ms,
-          is_party_full, trackers, season_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          is_party_full, trackers, season_id, kills, damage
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           uid = excluded.uid,
           player_name = excluded.player_name,
@@ -132,6 +144,8 @@ class RankedHistoryStore {
           end_ms = excluded.end_ms,
           is_party_full = excluded.is_party_full,
           trackers = excluded.trackers,
+          kills = excluded.kills,
+          damage = excluded.damage,
           season_id = CASE
             WHEN excluded.season_id IS NOT NULL
                  AND excluded.season_id != '$kUnknownSeasonId'
@@ -156,6 +170,8 @@ class RankedHistoryStore {
           row['is_party_full'],
           row['trackers'],
           derivedSeasonId,
+          m.kills,
+          m.damage,
         ],
       );
     }
@@ -198,6 +214,34 @@ class RankedHistoryStore {
     if (changed) await batch.commit(noResult: true);
   }
 
+  /// Fills the [kills]/[damage] columns for rows that predate them (v2 → v3
+  /// migration left them NULL) by parsing each row's stored `trackers` blob.
+  /// New rows are stamped by [upsertAll] on write, so this only ever touches
+  /// the legacy backlog and is a cheap no-op once drained — safe to call on
+  /// each launch, like [backfillSeasonIds].
+  Future<void> backfillKillsDamage() async {
+    final db = await _open();
+    final rows = await db.query(
+      table,
+      columns: ['id', 'trackers'],
+      where: 'kills IS NULL OR damage IS NULL',
+    );
+    if (rows.isEmpty) return;
+    final batch = db.batch();
+    for (final r in rows) {
+      // Only `trackers` matters here; fromStoredMap defaults the rest and
+      // exposes the same BR Kills / BR Damage lookup upsert uses.
+      final m = RankedMatch.fromStoredMap({'trackers': r['trackers']});
+      batch.update(
+        table,
+        {'kills': m.kills, 'damage': m.damage},
+        where: 'id = ?',
+        whereArgs: [r['id']],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   /// Match count per season id for [uid] (unclassified NULL rows omitted). The
   /// cheap enumeration that will drive the season picker — no row hydration.
   Future<Map<String, int>> seasonCounts(String uid) async {
@@ -225,9 +269,7 @@ class RankedHistoryStore {
       'GROUP BY sid',
       [kUnknownSeasonId, uid],
     );
-    return {
-      for (final r in rows) r['sid'] as String: (r['c'] as num).toInt(),
-    };
+    return {for (final r in rows) r['sid'] as String: (r['c'] as num).toInt()};
   }
 
   /// All persisted matches for [uid], newest first.
@@ -261,6 +303,196 @@ class RankedHistoryStore {
             whereArgs: [uid, seasonId],
             orderBy: 'start_ms DESC',
           );
+    return rows.map(RankedMatch.fromStoredMap).toList();
+  }
+
+  // ── SQL aggregation (drives the Lifetime view without hydrating matches) ────
+  //
+  // These compute the same figures as the Dart aggregates in `ranked_aggregates`
+  // but as GROUP BY sums, so a 50k-match lifetime scope returns a handful of rows
+  // instead of loading every match. Semantics mirror the Dart path exactly:
+  // ranked-only (`BATTLE_ROYALE` with an RP change), net RP and win/loss use the
+  // same outlier neutralisation ([kRankedOutlierThreshold]).
+
+  /// Ranked-only WHERE scope for [uid] and an optional [seasonId] (null = every
+  /// split — the lifetime scope). Folds Unknown/NULL together like [getBySeason].
+  (String, List<Object?>) _rankedScope(String uid, String? seasonId) {
+    final buf = StringBuffer(
+      "uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0",
+    );
+    final args = <Object?>[uid];
+    if (seasonId == kUnknownSeasonId) {
+      buf.write(' AND (season_id = ? OR season_id IS NULL)');
+      args.add(kUnknownSeasonId);
+    } else if (seasonId != null) {
+      buf.write(' AND season_id = ?');
+      args.add(seasonId);
+    }
+    return (buf.toString(), args);
+  }
+
+  // Shared aggregate columns. Net RP zeroes reset outliers; a win/loss is an
+  // RP-positive/negative game that isn't a reset artifact — matching
+  // `RankedMatch.effectiveRpChange`.
+  static const _aggCols =
+      '''
+      COUNT(*) AS games,
+      COALESCE(SUM(kills), 0) AS kills,
+      COALESCE(SUM(damage), 0) AS damage,
+      COALESCE(SUM(length_secs), 0) AS length_secs,
+      COALESCE(SUM(CASE WHEN ABS(rp_change) >= $kRankedOutlierThreshold
+                        THEN 0 ELSE rp_change END), 0) AS net_rp,
+      COALESCE(SUM(CASE WHEN rp_change > 0 AND rp_change < $kRankedOutlierThreshold
+                        THEN 1 ELSE 0 END), 0) AS wins,
+      COALESCE(SUM(CASE WHEN rp_change < 0 AND rp_change > -$kRankedOutlierThreshold
+                        THEN 1 ELSE 0 END), 0) AS losses''';
+
+  /// Window summary for [uid] across [seasonId] (null = lifetime), via SQL.
+  Future<RankedSummary> summaryFor(String uid, {String? seasonId}) async {
+    final db = await _open();
+    final (where, args) = _rankedScope(uid, seasonId);
+    final agg = (await db.rawQuery(
+      'SELECT $_aggCols FROM $table WHERE $where',
+      args,
+    )).first;
+    final games = (agg['games'] as num).toInt();
+    if (games == 0) return RankedSummary.empty;
+    // Newest ranked match supplies current RP / rank image.
+    final latest = await db.rawQuery(
+      'SELECT cumulative_rp, rank_img FROM $table WHERE $where '
+      'ORDER BY end_ms DESC LIMIT 1',
+      args,
+    );
+    final newest = latest.isEmpty ? null : latest.first;
+    return RankedSummary(
+      games: games,
+      netRp: (agg['net_rp'] as num).toInt(),
+      currentRp: (newest?['cumulative_rp'] as num?)?.toInt() ?? 0,
+      latestRankImg: newest?['rank_img'] as String? ?? '',
+      totalKills: (agg['kills'] as num).toInt(),
+      totalDamage: (agg['damage'] as num).toInt(),
+      totalLengthSecs: (agg['length_secs'] as num).toInt(),
+      wins: (agg['wins'] as num).toInt(),
+      losses: (agg['losses'] as num).toInt(),
+    );
+  }
+
+  /// Per-legend breakdown for [uid] across [seasonId] (null = lifetime), sorted
+  /// by total RP descending — matching [legendBreakdowns].
+  Future<List<LegendBreakdown>> legendBreakdownsFor(
+    String uid, {
+    String? seasonId,
+  }) async {
+    final db = await _open();
+    final (where, args) = _rankedScope(uid, seasonId);
+    final rows = await db.rawQuery(
+      'SELECT legend, $_aggCols FROM $table WHERE $where '
+      'GROUP BY legend ORDER BY net_rp DESC',
+      args,
+    );
+    return [
+      for (final r in rows)
+        LegendBreakdown(
+          legend: r['legend'] as String? ?? 'Unknown',
+          games: (r['games'] as num).toInt(),
+          totalRp: (r['net_rp'] as num).toInt(),
+          totalKills: (r['kills'] as num).toInt(),
+          totalDamage: (r['damage'] as num).toInt(),
+          totalLengthSecs: (r['length_secs'] as num).toInt(),
+          wins: (r['wins'] as num).toInt(),
+          losses: (r['losses'] as num).toInt(),
+        ),
+    ];
+  }
+
+  /// Per-map breakdown for [uid] across [seasonId] (null = lifetime), sorted by
+  /// games descending — matching [mapBreakdowns].
+  Future<List<MapBreakdown>> mapBreakdownsFor(
+    String uid, {
+    String? seasonId,
+  }) async {
+    final db = await _open();
+    final (where, args) = _rankedScope(uid, seasonId);
+    final rows = await db.rawQuery(
+      'SELECT map_key, $_aggCols FROM $table WHERE $where '
+      'GROUP BY map_key ORDER BY games DESC',
+      args,
+    );
+    return [
+      for (final r in rows)
+        MapBreakdown(
+          mapKey: r['map_key'] as String? ?? 'UNKNOWN',
+          displayName: rankedMapName(r['map_key'] as String? ?? 'UNKNOWN'),
+          games: (r['games'] as num).toInt(),
+          totalRp: (r['net_rp'] as num).toInt(),
+          totalKills: (r['kills'] as num).toInt(),
+          totalDamage: (r['damage'] as num).toInt(),
+          totalLengthSecs: (r['length_secs'] as num).toInt(),
+          wins: (r['wins'] as num).toInt(),
+          losses: (r['losses'] as num).toInt(),
+        ),
+    ];
+  }
+
+  /// Time-of-day performance for [uid] across [seasonId] (null = lifetime).
+  /// Unlike the RP progression chart or rank-progress header, "which hour do I
+  /// play best" isn't season-relative — it only needs each match's start time
+  /// and RP change, so it's a good Lifetime candidate. Kept scalable with a
+  /// narrow projection (2 columns, no trackers/legend/map strings — the
+  /// expensive part of a full row) instead of hydrating full matches; reuses
+  /// [timeOfDayBuckets] so the bucketing logic isn't duplicated in SQL.
+  Future<List<HourBucket>> timeOfDayBucketsFor(
+    String uid, {
+    String? seasonId,
+  }) async {
+    final db = await _open();
+    final (where, args) = _rankedScope(uid, seasonId);
+    final rows = await db.rawQuery(
+      'SELECT start_ms, rp_change FROM $table WHERE $where',
+      args,
+    );
+    final matches = [
+      for (final r in rows)
+        RankedMatch.fromStoredMap({
+          'start_ms': r['start_ms'],
+          'rp_change': r['rp_change'],
+          // _rankedScope already guarantees BATTLE_ROYALE + rp_change != 0.
+          'game_mode': 'BATTLE_ROYALE',
+        }),
+    ];
+    return timeOfDayBuckets(matches);
+  }
+
+  /// Ranked matches for one legend across [seasonId] (null = lifetime), newest
+  /// first — the lazy drill-down query the Lifetime Legends tab uses on tap
+  /// instead of filtering a whole in-memory history.
+  Future<List<RankedMatch>> matchesForLegend(
+    String uid,
+    String legend, {
+    String? seasonId,
+  }) async {
+    final db = await _open();
+    final (where, args) = _rankedScope(uid, seasonId);
+    final rows = await db.rawQuery(
+      'SELECT * FROM $table WHERE $where AND legend = ? ORDER BY start_ms DESC',
+      [...args, legend],
+    );
+    return rows.map(RankedMatch.fromStoredMap).toList();
+  }
+
+  /// Ranked matches for one map across [seasonId] (null = lifetime), newest
+  /// first — the lazy drill-down query the Lifetime Maps tab uses on tap.
+  Future<List<RankedMatch>> matchesForMap(
+    String uid,
+    String mapKey, {
+    String? seasonId,
+  }) async {
+    final db = await _open();
+    final (where, args) = _rankedScope(uid, seasonId);
+    final rows = await db.rawQuery(
+      'SELECT * FROM $table WHERE $where AND map_key = ? ORDER BY start_ms DESC',
+      [...args, mapKey],
+    );
     return rows.map(RankedMatch.fromStoredMap).toList();
   }
 

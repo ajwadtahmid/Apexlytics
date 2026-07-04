@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../constants/ranked_map_constants.dart';
 import '../../../models/ranked_match.dart';
-import '../../../utils/formatting/format.dart' show formatNumber, formatDuration;
+import '../../../utils/formatting/format.dart'
+    show formatNumber, formatDuration;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -68,12 +69,16 @@ class _RankBadge extends StatelessWidget {
 // ── Legends tab ─────────────────────────────────────────────────────────────
 
 class RankedLegendBreakdown extends StatefulWidget {
-  final List<RankedMatch> matches; // ranked
+  final List<LegendBreakdown> rows;
+  // The entity's ranked matches for the drill-down — resolved lazily so the
+  // Lifetime tab can query one legend on tap instead of holding all history.
+  final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
 
   const RankedLegendBreakdown({
     super.key,
-    required this.matches,
+    required this.rows,
+    required this.matchesFor,
     required this.onRefresh,
   });
 
@@ -86,9 +91,14 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
 
   @override
   Widget build(BuildContext context) {
-    final rows = legendBreakdowns(widget.matches);
+    final rows = [...widget.rows];
     _applySort(
-        rows, _sort, (r) => r.totalRp, (r) => r.games, (r) => r.avgRpPerGame);
+      rows,
+      _sort,
+      (r) => r.totalRp,
+      (r) => r.games,
+      (r) => r.avgRpPerGame,
+    );
 
     return RefreshIndicator(
       color: AppTheme.accent,
@@ -96,7 +106,10 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
-          _SortBar(selected: _sort, onTap: () => setState(() => _sort = _nextSort(_sort))),
+          _SortBar(
+            selected: _sort,
+            onTap: () => setState(() => _sort = _nextSort(_sort)),
+          ),
           const SizedBox(height: AppTheme.sm),
           for (var i = 0; i < rows.length; i++)
             Padding(
@@ -112,23 +125,26 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
     );
   }
 
-  void _openHistory(BuildContext context, LegendBreakdown row) {
-    final games = widget.matches.where((m) => m.legend == row.legend).toList()
+  Future<void> _openHistory(BuildContext context, LegendBreakdown row) async {
+    final games = await widget.matchesFor(row.legend)
       ..sort((a, b) => b.endTime.compareTo(a.endTime));
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => RankedEntityHistoryScreen(
-        title: row.legend,
-        subtitle:
-            '${row.games} ranked games · ${_signedAvg(row.avgRpPerGame)} RP/game',
-        matches: games,
-        onRefresh: widget.onRefresh,
-        groupLabel: 'map',
-        grouping: MatchGrouping(
-          keyOf: (m) => m.mapKey,
-          nameOf: (m) => rankedMapName(m.mapKey),
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RankedEntityHistoryScreen(
+          title: row.legend,
+          subtitle:
+              '${row.games} ranked games · ${_signedAvg(row.avgRpPerGame)} RP/game',
+          matches: games,
+          onRefresh: widget.onRefresh,
+          groupLabel: 'map',
+          grouping: MatchGrouping(
+            keyOf: (m) => m.mapKey,
+            nameOf: (m) => rankedMapName(m.mapKey),
+          ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -136,7 +152,11 @@ class _LegendCard extends StatelessWidget {
   final int rank;
   final LegendBreakdown row;
   final VoidCallback onTap;
-  const _LegendCard({required this.rank, required this.row, required this.onTap});
+  const _LegendCard({
+    required this.rank,
+    required this.row,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -144,90 +164,98 @@ class _LegendCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.surface2),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          // Full-height portrait on the left (Stack sizes to the content child).
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: 96,
-            child: LegendAssetImage(
-              imageKey: _legendImageKey(row.legend),
-              displayName: row.legend,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 96),
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      _RankBadge(rank: rank),
-                      const SizedBox(width: AppTheme.sm),
-                      Expanded(
-                        child: Text(
-                          row.legend,
-                          style: const TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: AppTheme.sm),
-                      _RpPill(totalRp: row.totalRp),
-                    ],
-                  ),
-                  const SizedBox(height: AppTheme.sm),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: AppTheme.sm),
-                          child: _AvgRpChip(avgRp: row.avgRpPerGame),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(right: AppTheme.sm),
-                          child: WinLossStat(
-                              wins: row.wins, losses: row.losses),
-                        ),
-                        _chip('Total Kills', formatNumber(row.totalKills)),
-                        _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
-                        _chip('Total Dmg', formatNumber(row.totalDamage)),
-                        _chip('Avg Dmg', formatNumber(row.avgDamage.round())),
-                        _chip('Total Time', formatDuration(row.totalLengthSecs)),
-                        _chip('Avg Time', formatDuration(row.avgLengthSecs.round())),
-                        _chip('Games', '${row.games}'),
-                      ],
-                    ),
-                  ),
-                ],
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.surface2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
+            // Full-height portrait on the left (Stack sizes to the content child).
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 96,
+              child: LegendAssetImage(
+                imageKey: _legendImageKey(row.legend),
+                displayName: row.legend,
               ),
             ),
-          ),
-        ],
-      ),
+            Padding(
+              padding: const EdgeInsets.only(left: 96),
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        _RankBadge(rank: rank),
+                        const SizedBox(width: AppTheme.sm),
+                        Expanded(
+                          child: Text(
+                            row.legend,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: AppTheme.sm),
+                        _RpPill(totalRp: row.totalRp),
+                      ],
+                    ),
+                    const SizedBox(height: AppTheme.sm),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: AppTheme.sm),
+                            child: _AvgRpChip(avgRp: row.avgRpPerGame),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(right: AppTheme.sm),
+                            child: WinLossStat(
+                              wins: row.wins,
+                              losses: row.losses,
+                            ),
+                          ),
+                          _chip('Total Kills', formatNumber(row.totalKills)),
+                          _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
+                          _chip('Total Dmg', formatNumber(row.totalDamage)),
+                          _chip('Avg Dmg', formatNumber(row.avgDamage.round())),
+                          _chip(
+                            'Total Time',
+                            formatDuration(row.totalLengthSecs),
+                          ),
+                          _chip(
+                            'Avg Time',
+                            formatDuration(row.avgLengthSecs.round()),
+                          ),
+                          _chip('Games', '${row.games}'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _chip(String label, String value, {bool highlight = false}) => Padding(
-        padding: const EdgeInsets.only(right: AppTheme.sm),
-        child: StatDisplay(label: label, value: value, highlight: highlight),
-      );
+    padding: const EdgeInsets.only(right: AppTheme.sm),
+    child: StatDisplay(label: label, value: value, highlight: highlight),
+  );
 }
 
 /// Avg RP chip in the same neutral box as the other stat chips — only the
@@ -249,11 +277,22 @@ class _AvgRpChip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Avg RP', style: TextStyle(color: AppTheme.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+          const Text(
+            'Avg RP',
+            style: TextStyle(
+              color: AppTheme.muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 3),
           Text(
             _signedAvg(avgRp),
-            style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -290,12 +329,16 @@ class _RpPill extends StatelessWidget {
 // ── Maps tab ────────────────────────────────────────────────────────────────
 
 class RankedMapBreakdown extends StatefulWidget {
-  final List<RankedMatch> matches; // ranked
+  final List<MapBreakdown> rows;
+  // The map's ranked matches for the drill-down — resolved lazily so the
+  // Lifetime tab can query one map on tap instead of holding all history.
+  final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
 
   const RankedMapBreakdown({
     super.key,
-    required this.matches,
+    required this.rows,
+    required this.matchesFor,
     required this.onRefresh,
   });
 
@@ -308,9 +351,14 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
 
   @override
   Widget build(BuildContext context) {
-    final all = mapBreakdowns(widget.matches);
+    final all = [...widget.rows];
     _applySort(
-        all, _sort, (r) => r.totalRp, (r) => r.games, (r) => r.avgRpPerGame);
+      all,
+      _sort,
+      (r) => r.totalRp,
+      (r) => r.games,
+      (r) => r.avgRpPerGame,
+    );
     // Keep "Unknown" but always pin it to the bottom, regardless of sort.
     final known = all.where((r) => !isUnknownMapKey(r.mapKey)).toList();
     final unknown = all.where((r) => isUnknownMapKey(r.mapKey)).toList();
@@ -322,7 +370,10 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
-          _SortBar(selected: _sort, onTap: () => setState(() => _sort = _nextSort(_sort))),
+          _SortBar(
+            selected: _sort,
+            onTap: () => setState(() => _sort = _nextSort(_sort)),
+          ),
           const SizedBox(height: AppTheme.sm),
           for (var i = 0; i < rows.length; i++)
             Padding(
@@ -338,23 +389,26 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
     );
   }
 
-  void _openHistory(BuildContext context, MapBreakdown row) {
-    final games = widget.matches.where((m) => m.mapKey == row.mapKey).toList()
+  Future<void> _openHistory(BuildContext context, MapBreakdown row) async {
+    final games = await widget.matchesFor(row.mapKey)
       ..sort((a, b) => b.endTime.compareTo(a.endTime));
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => RankedEntityHistoryScreen(
-        title: row.displayName,
-        subtitle:
-            '${row.games} ranked games · ${_signedAvg(row.avgRpPerGame)} RP/game',
-        matches: games,
-        onRefresh: widget.onRefresh,
-        groupLabel: 'legend',
-        grouping: MatchGrouping(
-          keyOf: (m) => m.legend,
-          nameOf: (m) => m.legend,
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RankedEntityHistoryScreen(
+          title: row.displayName,
+          subtitle:
+              '${row.games} ranked games · ${_signedAvg(row.avgRpPerGame)} RP/game',
+          matches: games,
+          onRefresh: widget.onRefresh,
+          groupLabel: 'legend',
+          grouping: MatchGrouping(
+            keyOf: (m) => m.legend,
+            nameOf: (m) => m.legend,
+          ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -380,10 +434,12 @@ class _MapCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (asset != null)
-              Image.asset(asset,
-                  fit: BoxFit.cover,
-                  cacheWidth: 800,
-                  errorBuilder: (_, _, _) => Container(color: AppTheme.surface2))
+              Image.asset(
+                asset,
+                fit: BoxFit.cover,
+                cacheWidth: 800,
+                errorBuilder: (_, _, _) => Container(color: AppTheme.surface2),
+              )
             else
               Container(color: AppTheme.surface2),
             const DecoratedBox(
@@ -428,18 +484,43 @@ class _MapCard extends StatelessWidget {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _MapStat(label: 'Avg RP', value: _signedAvg(row.avgRpPerGame), color: rpColor),
+                        _MapStat(
+                          label: 'Avg RP',
+                          value: _signedAvg(row.avgRpPerGame),
+                          color: rpColor,
+                        ),
                         Padding(
                           padding: const EdgeInsets.only(right: AppTheme.md),
                           child: WinLossStat(
-                              wins: row.wins, losses: row.losses, onImage: true),
+                            wins: row.wins,
+                            losses: row.losses,
+                            onImage: true,
+                          ),
                         ),
-                        _MapStat(label: 'Total Kills', value: formatNumber(row.totalKills)),
-                        _MapStat(label: 'Avg Kills', value: row.avgKills.toStringAsFixed(1)),
-                        _MapStat(label: 'Total Dmg', value: formatNumber(row.totalDamage)),
-                        _MapStat(label: 'Avg Dmg', value: formatNumber(row.avgDamage.round())),
-                        _MapStat(label: 'Total Time', value: formatDuration(row.totalLengthSecs)),
-                        _MapStat(label: 'Avg Time', value: formatDuration(row.avgLengthSecs.round())),
+                        _MapStat(
+                          label: 'Total Kills',
+                          value: formatNumber(row.totalKills),
+                        ),
+                        _MapStat(
+                          label: 'Avg Kills',
+                          value: row.avgKills.toStringAsFixed(1),
+                        ),
+                        _MapStat(
+                          label: 'Total Dmg',
+                          value: formatNumber(row.totalDamage),
+                        ),
+                        _MapStat(
+                          label: 'Avg Dmg',
+                          value: formatNumber(row.avgDamage.round()),
+                        ),
+                        _MapStat(
+                          label: 'Total Time',
+                          value: formatDuration(row.totalLengthSecs),
+                        ),
+                        _MapStat(
+                          label: 'Avg Time',
+                          value: formatDuration(row.avgLengthSecs.round()),
+                        ),
                         _MapStat(label: 'Games', value: '${row.games}'),
                       ],
                     ),
@@ -521,7 +602,10 @@ class _SortBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        const Text('Sort:', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+        const Text(
+          'Sort:',
+          style: TextStyle(color: AppTheme.muted, fontSize: 12),
+        ),
         const SizedBox(width: 4),
         GestureDetector(
           onTap: onTap,

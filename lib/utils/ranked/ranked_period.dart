@@ -18,6 +18,15 @@ import '../formatting/season_utils.dart';
 /// must agree on what "unknown" looks like on disk.
 const kUnknownSplitId = kUnknownSeasonId;
 
+/// Sentinel id for the synthetic "Lifetime" bucket — every split combined.
+/// Never stored on a row; it maps to a null season scope (all splits) in the
+/// SQL aggregate queries.
+const kLifetimeSplitId = '__lifetime__';
+
+/// Whether [splitId] is the synthetic Lifetime scope (aggregated in SQL, no
+/// per-match load).
+bool isLifetimeSplit(String? splitId) => splitId == kLifetimeSplitId;
+
 class RankedSplitBucket {
   final String id; // SeasonMeta.id, or [kUnknownSplitId]
   final String displayName; // "S29 Split 1" or "Unknown"
@@ -52,14 +61,16 @@ List<RankedSplitBucket> buildSplitBuckets(
       hasUnknown = true;
       continue;
     }
-    real.add(RankedSplitBucket(
-      id: entry.key,
-      // Metadata may be momentarily missing (e.g. the local season cache was
-      // cleared after this id was assigned) — fall back to the raw id rather
-      // than lose the bucket entirely.
-      displayName: seasons[entry.key]?.displayName ?? entry.key,
-      season: seasons[entry.key],
-    ));
+    real.add(
+      RankedSplitBucket(
+        id: entry.key,
+        // Metadata may be momentarily missing (e.g. the local season cache was
+        // cleared after this id was assigned) — fall back to the raw id rather
+        // than lose the bucket entirely.
+        displayName: seasons[entry.key]?.displayName ?? entry.key,
+        season: seasons[entry.key],
+      ),
+    );
   }
 
   real.sort((a, b) {
@@ -71,18 +82,33 @@ List<RankedSplitBucket> buildSplitBuckets(
   });
 
   if (hasUnknown) {
-    real.add(const RankedSplitBucket(id: kUnknownSplitId, displayName: 'Unknown'));
+    real.add(
+      const RankedSplitBucket(id: kUnknownSplitId, displayName: 'Unknown'),
+    );
+  }
+
+  // Offer Lifetime only when it aggregates more than one bucket — with a single
+  // split it would just duplicate that split.
+  if (real.length >= 2) {
+    real.insert(
+      0,
+      const RankedSplitBucket(id: kLifetimeSplitId, displayName: 'Lifetime'),
+    );
   }
   return real;
 }
 
-/// The split id that a [selectedId] resolves to: itself when it's a real bucket,
-/// otherwise the newest (first) split. Empty string when there are no splits.
+/// The split id that a [selectedId] resolves to: itself when it's a real bucket
+/// (Lifetime included), otherwise the newest *real* split. Lifetime is never the
+/// default — it's opt-in via the picker. Empty string when there are no splits.
 /// Callers use this to decide *which* split's matches to load before building
 /// the view.
 String effectiveSplitId(List<RankedSplitBucket> splits, String? selectedId) {
   if (splits.isEmpty) return '';
-  return splits.any((b) => b.id == selectedId) ? selectedId! : splits.first.id;
+  if (splits.any((b) => b.id == selectedId)) return selectedId!;
+  return splits
+      .firstWhere((b) => b.id != kLifetimeSplitId, orElse: () => splits.first)
+      .id;
 }
 
 /// The 7-day week windows for [bucket]'s split, or empty when the split has no
@@ -92,8 +118,10 @@ List<WeekRange> weeksForBucket(RankedSplitBucket bucket) =>
 
 List<RankedMatch> matchesInWeek(List<RankedMatch> matches, WeekRange week) =>
     matches
-        .where((m) =>
-            !m.endTime.isBefore(week.start) && m.endTime.isBefore(week.end))
+        .where(
+          (m) =>
+              !m.endTime.isBefore(week.start) && m.endTime.isBefore(week.end),
+        )
         .toList();
 
 /// Resolved view of the ranked period: which splits are available, the
@@ -145,16 +173,15 @@ RankedView resolveRankedView({
   final effId = effectiveSplitId(splits, selectedSplitId);
   final bucket = splits.firstWhere((b) => b.id == effId);
   final weeks = weeksForBucket(bucket);
-  final effWeek =
-      (weekIndex >= 0 && weekIndex < weeks.length) ? weekIndex : -1;
+  final effWeek = (weekIndex >= 0 && weekIndex < weeks.length) ? weekIndex : -1;
 
   // [splitMatches] already belongs to this split, so ranked/history split is
   // just the pubs filter — no per-match season check needed.
   final ranked = splitMatches.where((m) => m.isRanked).toList();
-  final filtered =
-      effWeek < 0 ? ranked : matchesInWeek(ranked, weeks[effWeek]);
-  final history =
-      effWeek < 0 ? splitMatches : matchesInWeek(splitMatches, weeks[effWeek]);
+  final filtered = effWeek < 0 ? ranked : matchesInWeek(ranked, weeks[effWeek]);
+  final history = effWeek < 0
+      ? splitMatches
+      : matchesInWeek(splitMatches, weeks[effWeek]);
 
   return RankedView(
     splits: splits,

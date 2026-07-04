@@ -7,6 +7,7 @@ import '../constants/prefs_keys.dart';
 import '../models/ranked_match.dart';
 import '../models/season_meta.dart';
 import '../utils/app_logger.dart';
+import '../utils/ranked/ranked_aggregates.dart';
 import '../utils/ranked/ranked_period.dart';
 import '../utils/storage/ranked_history_store.dart';
 import '../utils/storage/season_storage.dart';
@@ -21,8 +22,8 @@ import 'settings_provider.dart';
 /// network failures keep the last cached set.
 final approvedUidsProvider =
     NotifierProvider<ApprovedUidsNotifier, Set<String>>(
-  ApprovedUidsNotifier.new,
-);
+      ApprovedUidsNotifier.new,
+    );
 
 class ApprovedUidsNotifier extends Notifier<Set<String>> {
   static const _kRevalidateInterval = Duration(hours: 6);
@@ -45,7 +46,9 @@ class ApprovedUidsNotifier extends Notifier<Set<String>> {
   /// Keeps the existing cached set on failure.
   Future<void> refresh() async {
     try {
-      final fresh = await ref.read(approvedUidsServiceProvider).getApprovedUids();
+      final fresh = await ref
+          .read(approvedUidsServiceProvider)
+          .getApprovedUids();
       final prefs = ref.read(sharedPreferencesProvider);
       await prefs.setString(
         PrefsKeys.approvedUidsCache,
@@ -104,8 +107,8 @@ class RankedPeriod {
 
 final rankedPeriodProvider =
     NotifierProvider<RankedPeriodNotifier, RankedPeriod>(
-  RankedPeriodNotifier.new,
-);
+      RankedPeriodNotifier.new,
+    );
 
 class RankedPeriodNotifier extends Notifier<RankedPeriod> {
   @override
@@ -127,48 +130,72 @@ class RankedPeriodNotifier extends Notifier<RankedPeriod> {
 /// A fetch failure is swallowed when persisted history exists (graceful
 /// offline/stale) and only rethrown when there's nothing to show, so the view
 /// can surface a retry.
-final rankedSyncProvider = FutureProvider.autoDispose.family<void, String>(
-  (ref, uid) async {
-    final store = ref.watch(rankedHistoryStoreProvider);
-    final seasons = ref.watch(rankedSeasonsProvider);
-    try {
-      final fresh = await ref.watch(gamesServiceProvider).getMatches(uid);
-      await store.upsertAll(uid, fresh, seasons: seasons);
-    } catch (e) {
-      if (await store.count(uid) == 0) rethrow;
-      log.w('games fetch failed; serving persisted history', error: e);
-      return;
-    }
-    // Re-read from prefs rather than reusing the watched `seasons` above: other
-    // screens (e.g. the stats tab) call upsertSeason() directly against prefs
-    // without going through this provider, so a season learned there during
-    // the same session wouldn't otherwise be reflected here until relaunch.
-    final latestSeasons = loadAllSeasonsSync(ref.read(sharedPreferencesProvider));
-    await store.backfillSeasonIds(latestSeasons);
-  },
-);
+final rankedSyncProvider = FutureProvider.autoDispose.family<void, String>((
+  ref,
+  uid,
+) async {
+  final store = ref.watch(rankedHistoryStoreProvider);
+  final seasons = ref.watch(rankedSeasonsProvider);
+  try {
+    final fresh = await ref.watch(gamesServiceProvider).getMatches(uid);
+    await store.upsertAll(uid, fresh, seasons: seasons);
+  } catch (e) {
+    if (await store.count(uid) == 0) rethrow;
+    log.w('games fetch failed; serving persisted history', error: e);
+    return;
+  }
+  // Re-read from prefs rather than reusing the watched `seasons` above: other
+  // screens (e.g. the stats tab) call upsertSeason() directly against prefs
+  // without going through this provider, so a season learned there during
+  // the same session wouldn't otherwise be reflected here until relaunch.
+  final latestSeasons = loadAllSeasonsSync(ref.read(sharedPreferencesProvider));
+  await store.backfillSeasonIds(latestSeasons);
+  // Drain the kills/damage backlog left by the v2 → v3 column migration.
+  await store.backfillKillsDamage();
+});
 
 /// The split buckets that drive the picker for [uid], built from a cheap ranked
 /// `COUNT` per split — no match hydration. Re-runs after each [rankedSyncProvider].
-final rankedSplitsProvider =
-    FutureProvider.autoDispose.family<List<RankedSplitBucket>, String>(
-  (ref, uid) async {
-    await ref.watch(rankedSyncProvider(uid).future);
-    final store = ref.watch(rankedHistoryStoreProvider);
-    final seasons = ref.watch(rankedSeasonsProvider);
-    final counts = await store.rankedSeasonCounts(uid);
-    return buildSplitBuckets(counts, seasons);
-  },
-);
+final rankedSplitsProvider = FutureProvider.autoDispose
+    .family<List<RankedSplitBucket>, String>((ref, uid) async {
+      await ref.watch(rankedSyncProvider(uid).future);
+      final store = ref.watch(rankedHistoryStoreProvider);
+      final seasons = ref.watch(rankedSeasonsProvider);
+      final counts = await store.rankedSeasonCounts(uid);
+      return buildSplitBuckets(counts, seasons);
+    });
 
 /// Loads just one split's matches (pubs included), keyed by uid + split id, so
 /// only the selected split is ever held in memory — never the whole history.
 /// Re-runs after each [rankedSyncProvider].
 final rankedSplitMatchesProvider = FutureProvider.autoDispose
-    .family<List<RankedMatch>, ({String uid, String splitId})>(
-  (ref, arg) async {
-    await ref.watch(rankedSyncProvider(arg.uid).future);
-    final store = ref.watch(rankedHistoryStoreProvider);
-    return store.getBySeason(arg.uid, arg.splitId);
-  },
-);
+    .family<List<RankedMatch>, ({String uid, String splitId})>((
+      ref,
+      arg,
+    ) async {
+      await ref.watch(rankedSyncProvider(arg.uid).future);
+      final store = ref.watch(rankedHistoryStoreProvider);
+      return store.getBySeason(arg.uid, arg.splitId);
+    });
+
+/// The Lifetime (all-splits) aggregates, computed entirely in SQL so no matches
+/// are hydrated no matter how large the history. Feeds the Lifetime Overview /
+/// Legends / Maps tabs. Re-runs after each [rankedSyncProvider].
+typedef RankedLifetimeAggregates = ({
+  RankedSummary summary,
+  List<LegendBreakdown> legends,
+  List<MapBreakdown> maps,
+  List<HourBucket> timeOfDay,
+});
+
+final rankedLifetimeAggregatesProvider = FutureProvider.autoDispose
+    .family<RankedLifetimeAggregates, String>((ref, uid) async {
+      await ref.watch(rankedSyncProvider(uid).future);
+      final store = ref.watch(rankedHistoryStoreProvider);
+      return (
+        summary: await store.summaryFor(uid),
+        legends: await store.legendBreakdownsFor(uid),
+        maps: await store.mapBreakdownsFor(uid),
+        timeOfDay: await store.timeOfDayBucketsFor(uid),
+      );
+    });

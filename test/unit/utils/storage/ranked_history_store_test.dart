@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/utils/formatting/season_utils.dart';
+import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:apexlytics/utils/storage/ranked_history_store.dart';
 
 void main() {
@@ -19,29 +20,38 @@ void main() {
   SeasonMeta season(String id, int startSecs, int endSecs) =>
       SeasonMeta.fromApi(id: id, startSeconds: startSecs, endSeconds: endSecs);
 
-  RankedMatch match(String uid, int startSecs,
-          {String legend = 'Axle', int rp = 10}) =>
-      RankedMatch.fromJson({
-        'uid': uid,
-        'name': 'Tester',
-        'legendPlayed': legend,
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': startSecs,
-        'gameEndTimestamp': startSecs + 600,
-        'gameData': [
-          {'key': 'kills', 'value': 3, 'name': 'BR Kills'},
-        ],
-        'BRScoreChange': rp,
-        'BRScore': 1000,
-        'map': 'olympus_rotation',
-      });
+  RankedMatch match(
+    String uid,
+    int startSecs, {
+    String legend = 'Axle',
+    int rp = 10,
+    String mapKey = 'olympus_rotation',
+  }) => RankedMatch.fromJson({
+    'uid': uid,
+    'name': 'Tester',
+    'legendPlayed': legend,
+    'gameMode': 'BATTLE_ROYALE',
+    'gameLengthSecs': 600,
+    'gameStartTimestamp': startSecs,
+    'gameEndTimestamp': startSecs + 600,
+    'gameData': [
+      {'key': 'kills', 'value': 3, 'name': 'BR Kills'},
+      {'key': 'damage', 'value': 1000, 'name': 'BR Damage'},
+    ],
+    'BRScoreChange': rp,
+    'BRScore': 1000,
+    'map': mapKey,
+  });
 
   test('persists matches and returns them newest first', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);
 
-    await store.upsertAll('1', [match('1', 100), match('1', 300), match('1', 200)]);
+    await store.upsertAll('1', [
+      match('1', 100),
+      match('1', 300),
+      match('1', 200),
+    ]);
 
     final all = await store.getAll('1');
     expect(all.length, 3);
@@ -72,20 +82,26 @@ void main() {
     expect((await store.getAll('1')).single.uid, '1');
   });
 
-  test('export rows import into a fresh store (single-file migration)', () async {
-    final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-    await source.upsertAll('1', [match('1', 100, legend: 'Wraith'), match('1', 200)]);
-    final rows = await source.exportRows();
-    await source.close();
+  test(
+    'export rows import into a fresh store (single-file migration)',
+    () async {
+      final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      await source.upsertAll('1', [
+        match('1', 100, legend: 'Wraith'),
+        match('1', 200),
+      ]);
+      final rows = await source.exportRows();
+      await source.close();
 
-    final restored = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-    addTearDown(restored.close);
-    await restored.importRows(rows);
+      final restored = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(restored.close);
+      await restored.importRows(rows);
 
-    final all = await restored.getAll('1');
-    expect(all.length, 2);
-    expect(all.any((m) => m.legend == 'Wraith'), true);
-  });
+      final all = await restored.getAll('1');
+      expect(all.length, 2);
+      expect(all.any((m) => m.legend == 'Wraith'), true);
+    },
+  );
 
   test('stamps season_id on upsert and enumerates via seasonCounts', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
@@ -106,24 +122,26 @@ void main() {
     expect(counts['br_ranked_s1_s2'], 1);
   });
 
-  test('rankedSeasonCounts counts ranked-only and folds NULL into Unknown',
-      () async {
-    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-    addTearDown(store.close);
+  test(
+    'rankedSeasonCounts counts ranked-only and folds NULL into Unknown',
+    () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
 
-    final seasons = {'s1': season('br_ranked_s1_s1', 0, 1000)};
-    await store.upsertAll('1', [
-      match('1', 100), // end 700_000ms → s1 (ranked)
-      match('1', 300), // → s1 (ranked)
-      match('1', 200, rp: 0), // pub in s1 — excluded
-    ], seasons: seasons);
-    // Written with no season metadata → season_id left NULL.
-    await store.upsertAll('1', [match('1', 5000)]);
+      final seasons = {'s1': season('br_ranked_s1_s1', 0, 1000)};
+      await store.upsertAll('1', [
+        match('1', 100), // end 700_000ms → s1 (ranked)
+        match('1', 300), // → s1 (ranked)
+        match('1', 200, rp: 0), // pub in s1 — excluded
+      ], seasons: seasons);
+      // Written with no season metadata → season_id left NULL.
+      await store.upsertAll('1', [match('1', 5000)]);
 
-    final counts = await store.rankedSeasonCounts('1');
-    expect(counts['br_ranked_s1_s1'], 2); // pub not counted
-    expect(counts[kUnknownSeasonId], 1); // NULL folded into Unknown
-  });
+      final counts = await store.rankedSeasonCounts('1');
+      expect(counts['br_ranked_s1_s1'], 2); // pub not counted
+      expect(counts[kUnknownSeasonId], 1); // NULL folded into Unknown
+    },
+  );
 
   test('getBySeason returns one split; Unknown includes NULL rows', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
@@ -186,18 +204,20 @@ void main() {
     expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 1);
   });
 
-  test('backfillSeasonIds classifies rows written without season metadata',
-      () async {
-    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-    addTearDown(store.close);
+  test(
+    'backfillSeasonIds classifies rows written without season metadata',
+    () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
 
-    // No seasons passed → season_id left NULL (omitted from seasonCounts).
-    await store.upsertAll('1', [match('1', 100), match('1', 300)]);
-    expect(await store.seasonCounts('1'), isEmpty);
+      // No seasons passed → season_id left NULL (omitted from seasonCounts).
+      await store.upsertAll('1', [match('1', 100), match('1', 300)]);
+      expect(await store.seasonCounts('1'), isEmpty);
 
-    await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 1000)});
-    expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 2);
-  });
+      await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 1000)});
+      expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 2);
+    },
+  );
 
   test('backfillSeasonIds reclassifies rows previously stamped Unknown once '
       'their season becomes known', () async {
@@ -219,19 +239,20 @@ void main() {
     expect(counts[kUnknownSeasonId], isNull);
   });
 
-  test('migrates a v1 database by adding season_id (rows preserved, NULL)',
-      () async {
-    final dir = await Directory.systemTemp.createTemp('rhs_mig');
-    addTearDown(() => dir.delete(recursive: true));
-    final path = p.join(dir.path, 'ranked_history.db');
+  test(
+    'migrates a v1 database by adding season_id (rows preserved, NULL)',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('rhs_mig');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = p.join(dir.path, 'ranked_history.db');
 
-    // Build a v1-schema database (no season_id column) and seed one row.
-    final v1 = await databaseFactory.openDatabase(
-      path,
-      options: OpenDatabaseOptions(
-        version: 1,
-        onCreate: (db, _) async {
-          await db.execute('''
+      // Build a v1-schema database (no season_id column) and seed one row.
+      final v1 = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, _) async {
+            await db.execute('''
             CREATE TABLE ranked_matches (
               id TEXT PRIMARY KEY, uid TEXT NOT NULL, player_name TEXT,
               legend TEXT, game_mode TEXT, map_key TEXT, rp_change INTEGER,
@@ -240,19 +261,217 @@ void main() {
               trackers TEXT
             )
           ''');
-        },
-      ),
-    );
-    await v1.insert('ranked_matches', match('1', 100).toStoredMap());
-    await v1.close();
+          },
+        ),
+      );
+      await v1.insert('ranked_matches', match('1', 100).toStoredMap());
+      await v1.close();
 
-    // Reopen through the store (version 2) → triggers onUpgrade.
-    final store = RankedHistoryStore(overridePath: path);
+      // Reopen through the store (version 2) → triggers onUpgrade.
+      final store = RankedHistoryStore(overridePath: path);
+      addTearDown(store.close);
+      expect(await store.count('1'), 1); // row survived the migration
+      expect(
+        await store.seasonCounts('1'),
+        isEmpty,
+      ); // season_id NULL until backfill
+
+      await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 1000)});
+      expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 1);
+    },
+  );
+
+  test('upsertAll denormalizes kills/damage into columns', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);
-    expect(await store.count('1'), 1); // row survived the migration
-    expect(await store.seasonCounts('1'), isEmpty); // season_id NULL until backfill
 
-    await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 1000)});
-    expect((await store.seasonCounts('1'))['br_ranked_s1_s1'], 1);
+    await store.upsertAll('1', [match('1', 100)]);
+
+    // exportRows does SELECT * — the raw column values, not the model getters
+    // (which derive from trackers regardless of the column).
+    final row = (await store.exportRows()).single;
+    expect(row['kills'], 3);
+    expect(row['damage'], 1000);
+  });
+
+  test(
+    'migrates a v2 database by adding kills/damage, backfilled from trackers',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('rhs_mig3');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = p.join(dir.path, 'ranked_history.db');
+
+      // Build a v2-schema database (season_id present, no kills/damage columns).
+      final v2 = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: (db, _) async {
+            await db.execute('''
+            CREATE TABLE ranked_matches (
+              id TEXT PRIMARY KEY, uid TEXT NOT NULL, player_name TEXT,
+              legend TEXT, game_mode TEXT, map_key TEXT, rp_change INTEGER,
+              cumulative_rp INTEGER, rank_img TEXT, length_secs INTEGER,
+              start_ms INTEGER, end_ms INTEGER, is_party_full INTEGER,
+              trackers TEXT, season_id TEXT
+            )
+          ''');
+          },
+        ),
+      );
+      await v2.insert('ranked_matches', match('1', 100).toStoredMap());
+      await v2.close();
+
+      // Reopen through the store (version 3) → onUpgrade adds the columns NULL.
+      final store = RankedHistoryStore(overridePath: path);
+      addTearDown(store.close);
+      expect((await store.exportRows()).single['kills'], isNull);
+
+      await store.backfillKillsDamage();
+      final row = (await store.exportRows()).single;
+      expect(row['kills'], 3);
+      expect(row['damage'], 1000);
+    },
+  );
+
+  group('SQL aggregation parity with the Dart aggregates', () {
+    void expectSummaryEq(RankedSummary a, RankedSummary b) {
+      expect(a.games, b.games);
+      expect(a.netRp, b.netRp);
+      expect(a.currentRp, b.currentRp);
+      expect(a.totalKills, b.totalKills);
+      expect(a.totalDamage, b.totalDamage);
+      expect(a.totalLengthSecs, b.totalLengthSecs);
+      expect(a.wins, b.wins);
+      expect(a.losses, b.losses);
+    }
+
+    Future<RankedHistoryStore> seeded() async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      final seasons = {
+        's1': season('br_ranked_s1_s1', 0, 1000),
+        's2': season('br_ranked_s1_s2', 1000, 2000),
+      };
+      await store.upsertAll('1', [
+        match('1', 100, legend: 'Axle', rp: 40), // s1, olympus, win
+        match('1', 200, legend: 'Axle', rp: -20), // s1, olympus, loss
+        match(
+          '1',
+          300,
+          legend: 'Bangalore',
+          mapKey: 'storm_point_rotation',
+          rp: 60,
+        ), // s1
+        match('1', 350, legend: 'Axle', rp: 1500), // s1, reset outlier
+        match(
+          '1',
+          250,
+          legend: 'Bangalore',
+          mapKey: 'storm_point_rotation',
+          rp: 0,
+        ), // pub
+        match('1', 1100, legend: 'Axle', rp: 15), // s2, olympus, win
+        match('1', 1200, legend: 'Bangalore', rp: -30), // s2, olympus, loss
+      ], seasons: seasons);
+      return store;
+    }
+
+    test('lifetime summary/legends/maps match the Dart path', () async {
+      final store = await seeded();
+      addTearDown(store.close);
+      final ranked = rankedOnly(await store.getAll('1'));
+
+      expectSummaryEq(await store.summaryFor('1'), summarize(ranked));
+
+      final sqlLegends = await store.legendBreakdownsFor('1');
+      final dartLegends = {
+        for (final l in legendBreakdowns(ranked)) l.legend: l,
+      };
+      expect(sqlLegends.length, dartLegends.length);
+      for (final s in sqlLegends) {
+        final d = dartLegends[s.legend]!;
+        expect(s.games, d.games);
+        expect(s.totalRp, d.totalRp);
+        expect(s.totalKills, d.totalKills);
+        expect(s.totalDamage, d.totalDamage);
+        expect(s.totalLengthSecs, d.totalLengthSecs);
+        expect(s.wins, d.wins);
+        expect(s.losses, d.losses);
+      }
+      // Highest-RP legend sorts first (Axle 35 > Bangalore 30).
+      expect(sqlLegends.first.legend, 'Axle');
+
+      final sqlMaps = await store.mapBreakdownsFor('1');
+      final dartMaps = {for (final m in mapBreakdowns(ranked)) m.mapKey: m};
+      expect(sqlMaps.length, dartMaps.length);
+      for (final s in sqlMaps) {
+        final d = dartMaps[s.mapKey]!;
+        expect(s.displayName, d.displayName);
+        expect(s.games, d.games);
+        expect(s.totalRp, d.totalRp);
+        expect(s.wins, d.wins);
+        expect(s.losses, d.losses);
+      }
+      // Most-played map sorts first (olympus 5 > storm point 1).
+      expect(sqlMaps.first.mapKey, 'olympus_rotation');
+    });
+
+    test('per-split summary matches the Dart path for that split', () async {
+      final store = await seeded();
+      addTearDown(store.close);
+      final s2 = rankedOnly(await store.getBySeason('1', 'br_ranked_s1_s2'));
+      expectSummaryEq(
+        await store.summaryFor('1', seasonId: 'br_ranked_s1_s2'),
+        summarize(s2),
+      );
+    });
+
+    test('empty scope returns the empty summary', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      expectSummaryEq(await store.summaryFor('nobody'), RankedSummary.empty);
+    });
+
+    test('matchesForLegend / matchesForMap return one ranked entity', () async {
+      final store = await seeded();
+      addTearDown(store.close);
+
+      final axle = await store.matchesForLegend('1', 'Axle');
+      expect(axle.every((m) => m.legend == 'Axle' && m.isRanked), true);
+      expect(axle.length, 4); // 3 real + 1 reset outlier, all ranked
+
+      final storm = await store.matchesForMap('1', 'storm_point_rotation');
+      expect(storm.every((m) => m.mapKey == 'storm_point_rotation'), true);
+      expect(storm.length, 1); // the pub (0 RP) is excluded
+    });
+
+    test(
+      'timeOfDayBucketsFor (lifetime and per-split) matches the Dart path',
+      () async {
+        final store = await seeded();
+        addTearDown(store.close);
+
+        final allRanked = rankedOnly(await store.getAll('1'));
+        final sqlLifetime = await store.timeOfDayBucketsFor('1');
+        final dartLifetime = timeOfDayBuckets(allRanked);
+        expect(
+          sqlLifetime.map((b) => (b.hourLocal, b.games, b.netRp)).toList(),
+          dartLifetime.map((b) => (b.hourLocal, b.games, b.netRp)).toList(),
+        );
+
+        final s1Ranked = rankedOnly(
+          await store.getBySeason('1', 'br_ranked_s1_s1'),
+        );
+        final sqlSplit = await store.timeOfDayBucketsFor(
+          '1',
+          seasonId: 'br_ranked_s1_s1',
+        );
+        final dartSplit = timeOfDayBuckets(s1Ranked);
+        expect(
+          sqlSplit.map((b) => (b.hourLocal, b.games, b.netRp)).toList(),
+          dartSplit.map((b) => (b.hourLocal, b.games, b.netRp)).toList(),
+        );
+      },
+    );
   });
 }

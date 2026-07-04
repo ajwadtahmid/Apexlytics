@@ -1,24 +1,25 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import '../../../models/ranked_match.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 
 /// When the player performs best: a bar per active local hour. Bar height shows
 /// how often that hour is played; colour shows whether RP is net gained (green)
-/// or lost (red) in that hour.
+/// or lost (red) in that hour. Takes precomputed [buckets] so it works off
+/// either an in-memory split's matches or the SQL Lifetime scope — the latter
+/// never hydrates full matches, just a lightweight start-time/RP projection.
 class RankedTimeOfDayChart extends StatelessWidget {
-  final List<RankedMatch> matches;
-  const RankedTimeOfDayChart({super.key, required this.matches});
+  final List<HourBucket> buckets;
+  const RankedTimeOfDayChart({super.key, required this.buckets});
 
   @override
   Widget build(BuildContext context) {
-    final buckets = timeOfDayBuckets(matches);
     if (buckets.length < 2) return const SizedBox.shrink();
 
-    final maxGames =
-        buckets.map((b) => b.games).reduce((a, b) => a > b ? a : b);
+    final maxGames = buckets
+        .map((b) => b.games)
+        .reduce((a, b) => a > b ? a : b);
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
@@ -59,18 +60,23 @@ class RankedTimeOfDayChart extends StatelessWidget {
                         '${b.games} games\n'
                         '$sign${b.avgRpPerGame.toStringAsFixed(1)} RP/game',
                         const TextStyle(
-                            color: AppTheme.textPrimary, fontSize: 11),
+                          color: AppTheme.textPrimary,
+                          fontSize: 11,
+                        ),
                       );
                     },
                   ),
                 ),
                 titlesData: FlTitlesData(
-                  leftTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -85,7 +91,9 @@ class RankedTimeOfDayChart extends StatelessWidget {
                           child: Text(
                             _hourLabel(buckets[i].hourLocal),
                             style: const TextStyle(
-                                color: AppTheme.muted, fontSize: 9),
+                              color: AppTheme.muted,
+                              fontSize: 9,
+                            ),
                           ),
                         );
                       },
