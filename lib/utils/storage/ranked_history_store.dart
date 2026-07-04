@@ -21,7 +21,15 @@ import '../ranked/ranked_aggregates.dart';
 class RankedHistoryStore {
   static const _dbName = 'ranked_history.db';
   static const table = 'ranked_matches';
-  static const _version = 3;
+  static const _version = 4;
+
+  // Predicates for the two lazy backfills' "rows still needing work" scope.
+  // Each is used verbatim by both a partial index and its backfill query — they
+  // must stay byte-identical, or SQLite won't apply the index and the backfill
+  // falls back to a full-table scan. Kept as constants so the two can't drift.
+  static const _needsKillsDamage = 'kills IS NULL OR damage IS NULL';
+  static const _needsSeasonId =
+      "season_id IS NULL OR season_id = '$kUnknownSeasonId'";
 
   final String? _overridePath;
   Database? _db;
@@ -62,6 +70,7 @@ class RankedHistoryStore {
         await db.execute(
           'CREATE INDEX idx_uid_season ON $table (uid, season_id)',
         );
+        await _createBackfillIndexes(db);
       },
       onUpgrade: (db, oldVersion, _) async {
         // v1 → v2: add the derived season/split column + its index. Existing
@@ -80,9 +89,31 @@ class RankedHistoryStore {
           await db.execute('ALTER TABLE $table ADD COLUMN kills INTEGER');
           await db.execute('ALTER TABLE $table ADD COLUMN damage INTEGER');
         }
+        // v3 → v4: partial indexes over just the rows each lazy backfill still
+        // has to touch, so those passes stop full-scanning the table on every
+        // sync once the backlog is drained.
+        if (oldVersion < 4) {
+          await _createBackfillIndexes(db);
+        }
       },
     );
     return _db!;
+  }
+
+  /// Partial indexes scoped to the "still needs backfilling" rows. SQLite drops
+  /// a row from a partial index the moment an UPDATE makes it stop matching the
+  /// predicate, so once a backfill fills every legacy row its index is empty and
+  /// the backfill's scan touches nothing — no per-sync full table scan, and no
+  /// app-side "already done" bookkeeping to maintain or reset.
+  Future<void> _createBackfillIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_needs_kills_damage '
+      'ON $table (id) WHERE $_needsKillsDamage',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_needs_season_id '
+      'ON $table (id) WHERE $_needsSeasonId',
+    );
   }
 
   /// Mobile's native sqflite factory returns a guaranteed-existing app
@@ -189,11 +220,12 @@ class RankedHistoryStore {
   Future<void> backfillSeasonIds(Map<String, SeasonMeta> seasons) async {
     if (seasons.isEmpty) return;
     final db = await _open();
+    // Uses [_needsSeasonId] verbatim so SQLite can serve it from the matching
+    // partial index instead of scanning every row.
     final rows = await db.query(
       table,
       columns: ['id', 'end_ms', 'season_id'],
-      where: 'season_id IS NULL OR season_id = ?',
-      whereArgs: [kUnknownSeasonId],
+      where: _needsSeasonId,
     );
     if (rows.isEmpty) return;
     final batch = db.batch();
@@ -221,10 +253,12 @@ class RankedHistoryStore {
   /// each launch, like [backfillSeasonIds].
   Future<void> backfillKillsDamage() async {
     final db = await _open();
+    // Uses [_needsKillsDamage] verbatim so SQLite can serve it from the matching
+    // partial index instead of scanning every row.
     final rows = await db.query(
       table,
       columns: ['id', 'trackers'],
-      where: 'kills IS NULL OR damage IS NULL',
+      where: _needsKillsDamage,
     );
     if (rows.isEmpty) return;
     final batch = db.batch();

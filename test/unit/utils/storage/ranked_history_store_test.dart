@@ -474,4 +474,47 @@ void main() {
       },
     );
   });
+
+  group('lazy backfills are served by partial indexes, not a full scan', () {
+    late Directory tmpDir;
+    late String dbPath;
+
+    setUp(() {
+      tmpDir = Directory.systemTemp.createTempSync('ranked_idx');
+      dbPath = p.join(tmpDir.path, 'ranked.db');
+    });
+    tearDown(() => tmpDir.deleteSync(recursive: true));
+
+    // The whole reason the backfill predicates are shared constants is so their
+    // partial indexes stay applicable. If a predicate ever drifts from its index
+    // the query silently falls back to scanning every row — this asserts the
+    // planner actually searches the index instead.
+    Future<String> planFor(String where) async {
+      final db = await databaseFactoryFfi.openDatabase(dbPath);
+      try {
+        final plan = await db.rawQuery(
+          'EXPLAIN QUERY PLAN SELECT id FROM ${RankedHistoryStore.table} '
+          'WHERE $where',
+        );
+        return plan.map((r) => r['detail']).join(' | ');
+      } finally {
+        await db.close();
+      }
+    }
+
+    test('kills/damage and season-id backfills both use their index', () async {
+      final store = RankedHistoryStore(overridePath: dbPath);
+      await store.upsertAll('1', [match('1', 100), match('1', 200)]);
+      await store.close(); // flush schema + rows to the file for a 2nd connection
+
+      expect(
+        await planFor('kills IS NULL OR damage IS NULL'),
+        contains('idx_needs_kills_damage'),
+      );
+      expect(
+        await planFor("season_id IS NULL OR season_id = '$kUnknownSeasonId'"),
+        contains('idx_needs_season_id'),
+      );
+    });
+  });
 }
