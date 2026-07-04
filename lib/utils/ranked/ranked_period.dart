@@ -12,6 +12,7 @@ library;
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
 import '../formatting/season_utils.dart';
+import 'ranked_aggregates.dart' show rankedOnly;
 
 /// Catch-all bucket id for matches whose split metadata isn't known. Shares
 /// its value with [kUnknownSeasonId] — the store and this UI-facing bucketing
@@ -176,8 +177,9 @@ RankedView resolveRankedView({
   final effWeek = (weekIndex >= 0 && weekIndex < weeks.length) ? weekIndex : -1;
 
   // [splitMatches] already belongs to this split, so ranked/history split is
-  // just the pubs filter — no per-match season check needed.
-  final ranked = splitMatches.where((m) => m.isRanked).toList();
+  // just the pubs filter — no per-match season check needed. [rankedOnly] is
+  // the shared filter+newest-first sort the aggregates assume as their input.
+  final ranked = rankedOnly(splitMatches);
   final filtered = effWeek < 0 ? ranked : matchesInWeek(ranked, weeks[effWeek]);
   final history = effWeek < 0
       ? splitMatches

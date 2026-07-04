@@ -36,6 +36,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   ProviderSubscription? _settingsSub;
   Timer? _rotationRefreshTimer;
 
+  // Small grace period added to a rotation's remaining time before refetching,
+  // so the server has actually flipped the rotation by the time we ask for it
+  // (avoids racing the boundary and pulling the same, not-yet-rotated data).
+  static const _kRotationFlipBuffer = Duration(seconds: 15);
+
   @override
   void initState() {
     super.initState();
@@ -120,7 +125,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     _rotationRefreshTimer = Timer(
-      Duration(seconds: soonestSecs + 15),
+      Duration(seconds: soonestSecs) + _kRotationFlipBuffer,
       () => ref.invalidate(mapRotationProvider),
     );
   }

@@ -33,9 +33,6 @@ _Sort _nextSort(_Sort s) => switch (s) {
   _Sort.avgRp => _Sort.totalRp,
 };
 
-String _legendImageKey(String legend) =>
-    legend.toLowerCase().replaceAll(' ', '_');
-
 String _signedAvg(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}';
 
 /// Leaderboard rank chip shown beside a legend/map name. [onImage] uses a dark
@@ -179,7 +176,7 @@ class _LegendCard extends StatelessWidget {
               bottom: 0,
               width: 96,
               child: LegendAssetImage(
-                imageKey: _legendImageKey(row.legend),
+                imageKey: legendImageKey(row.legend),
                 displayName: row.legend,
               ),
             ),

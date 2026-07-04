@@ -130,10 +130,6 @@ class _LegendCard extends StatelessWidget {
   final VoidCallback? onTap;
   const _LegendCard({required this.legend, this.onTap});
 
-  String get _imageKey => legend.name.toLowerCase() == 'global'
-      ? 'career'
-      : legend.name.toLowerCase().replaceAll(' ', '_');
-
   @override
   Widget build(BuildContext context) {
     final info = kLegendsByName[legend.name.toLowerCase()];
@@ -164,7 +160,7 @@ class _LegendCard extends StatelessWidget {
               bottom: 0,
               width: 100,
               child: LegendAssetImage(
-                imageKey: _imageKey,
+                imageKey: legendImageKey(legend.name),
                 displayName: legendDisplayName(legend.name),
               ),
             ),

@@ -100,9 +100,6 @@ class RankedOverviewHighlights extends StatelessWidget {
   }
 }
 
-String _legendImageKey(String legend) =>
-    legend.toLowerCase().replaceAll(' ', '_');
-
 class _SectionLabel extends StatelessWidget {
   final String text;
   const _SectionLabel(this.text);
@@ -143,7 +140,7 @@ class _CompactLegend extends StatelessWidget {
               width: 44,
               height: 44,
               child: LegendAssetImage(
-                imageKey: _legendImageKey(breakdown.legend),
+                imageKey: legendImageKey(breakdown.legend),
                 displayName: breakdown.legend,
                 fallbackFontSize: 18,
               ),

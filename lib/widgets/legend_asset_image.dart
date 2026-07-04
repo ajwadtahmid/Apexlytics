@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 import '../utils/theme.dart';
 
+/// Maps a legend display name to its portrait asset key under `assets/legends/`
+/// — lowercased with spaces as underscores. The synthetic "Global" career
+/// aggregate has no legend portrait, so it maps to the `career` image.
+String legendImageKey(String name) {
+  final lower = name.toLowerCase();
+  return lower == 'global' ? 'career' : lower.replaceAll(' ', '_');
+}
+
 /// Renders a legend portrait from assets with a two-level fallback:
 ///   1. assets/legends/{imageKey}.webp
 ///   2. assets/legends/placeholder.webp

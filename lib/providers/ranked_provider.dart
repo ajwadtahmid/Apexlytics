@@ -178,9 +178,12 @@ final rankedSplitMatchesProvider = FutureProvider.autoDispose
       return store.getBySeason(arg.uid, arg.splitId);
     });
 
-/// The Lifetime (all-splits) aggregates, computed entirely in SQL so no matches
-/// are hydrated no matter how large the history. Feeds the Lifetime Overview /
-/// Legends / Maps tabs. Re-runs after each [rankedSyncProvider].
+/// The Lifetime (all-splits) aggregates. Summary/legends/maps are pure SQL
+/// `GROUP BY` sums — no matches hydrated regardless of history size. Time-of-day
+/// can't be grouped in SQL without risking wrong local-hour/DST bucketing, so it
+/// hydrates a narrow two-column (start time + RP) projection instead — the only
+/// part that scales with match count. Feeds the Lifetime Overview / Legends /
+/// Maps tabs. Re-runs after each [rankedSyncProvider].
 typedef RankedLifetimeAggregates = ({
   RankedSummary summary,
   List<LegendBreakdown> legends,
