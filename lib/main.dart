@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -55,9 +56,17 @@ void main() async {
     return;
   }
 
+  final packageInfo = await PackageInfo.fromPlatform();
+
   await SentryFlutter.init(
     (options) {
       options.dsn = dsn;
+      // Ties every event to the exact app version/build so a reported crash
+      // can be checked against a fix's release instead of guessed at from
+      // commit timestamps.
+      options.release =
+          'apexlytics@${packageInfo.version}+${packageInfo.buildNumber}';
+      options.dist = packageInfo.buildNumber;
       // Never send IP addresses, device identifiers, or user identity.
       options.sendDefaultPii = false;
       options.maxBreadcrumbs = 50;

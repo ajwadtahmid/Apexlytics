@@ -49,16 +49,22 @@ class NotificationService {
     windows: WindowsNotificationDetails(),
   );
 
+  // The plugin resolves an Android icon name via getIdentifier(name,
+  // "drawable", package) — it must live under an unqualified (or every)
+  // drawable/ folder, or a device whose density split doesn't get delivered
+  // that resource sees invalid_icon and initialize() throws.
+  //
+  // ic_launcher_foreground is reachable from AndroidManifest's app icon
+  // (mipmap-anydpi-v26/ic_launcher.xml → @drawable/ic_launcher_foreground),
+  // so it gets the same delivery guarantees Android gives the launcher icon
+  // itself — a meaningfully different protection than our own custom
+  // ic_notification, which is only ever referenced dynamically from Dart.
+  static const _primaryAndroidIcon = 'ic_notification';
+  static const _fallbackAndroidIcon = 'ic_launcher_foreground';
+
   static Future<void> init() async {
     if (_initialized) return;
     if (!_supported) return;
-    // Bare resource name (no '@drawable/' prefix) is the plugin's documented
-    // form and resolves via getIdentifier(). The icon lives in the unqualified
-    // drawable/ folder (plus density variants) so it ships in the base APK and
-    // is always present — a density-only copy got split out of some Play
-    // App Bundle installs, making initialize() throw invalid_icon and leaving
-    // the whole service uninitialised (no notifications ever scheduled).
-    const androidSettings = AndroidInitializationSettings('ic_notification');
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -73,15 +79,36 @@ class NotificationService {
       // Stable GUID identifying this app's notification activation callback.
       guid: 'b8e7d3a2-9f1c-4e6b-8a7d-2c5f0e1a4b3c',
     );
-    await _plugin.initialize(
-      settings: const InitializationSettings(
-        android: androidSettings,
+
+    Future<void> initializeWith(String androidIcon) => _plugin.initialize(
+      settings: InitializationSettings(
+        android: AndroidInitializationSettings(androidIcon),
         iOS: darwinSettings,
         macOS: darwinSettings,
         linux: linuxSettings,
         windows: windowsSettings,
       ),
     );
+
+    // Bare resource name (no '@drawable/' prefix) is the plugin's documented
+    // form. The icon lives in the unqualified drawable/ folder (plus density
+    // variants) so it ships in the base APK and is always present — a
+    // density-only copy previously got split out of some Play App Bundle
+    // installs, making initialize() throw invalid_icon and leaving the whole
+    // service uninitialised (no notifications ever scheduled). Retry once
+    // with a guaranteed-present fallback icon instead of leaving the service
+    // permanently dead for the rest of the session if that ever recurs — from
+    // this bug returning, an OEM stripping resources, or any other cause.
+    try {
+      await initializeWith(_primaryAndroidIcon);
+    } catch (e) {
+      log.w(
+        'NotificationService: $_primaryAndroidIcon unavailable, '
+        'retrying with $_fallbackAndroidIcon',
+        error: e,
+      );
+      await initializeWith(_fallbackAndroidIcon);
+    }
     _initialized = true;
     log.i('NotificationService initialised');
   }
