@@ -141,5 +141,17 @@ void main() {
       row['season_id'] = 'br_ranked_s29_s2';
       expect(RankedMatch.fromStoredMap(row).seasonId, 'br_ranked_s29_s2');
     });
+
+    test('fromStoredMap tolerates a corrupt trackers blob (no throw)', () {
+      // A hand-edited / foreign backup imported verbatim could carry malformed
+      // JSON here; hydrating it must degrade to no trackers, not crash the read.
+      final row = RankedMatch.fromJson(brMatch()).toStoredMap();
+      row['trackers'] = '{not valid json';
+      final restored = RankedMatch.fromStoredMap(row);
+      expect(restored.trackers, isEmpty);
+      expect(restored.kills, 0);
+      expect(restored.damage, 0);
+      expect(restored.legend, 'Axle'); // the rest of the row still hydrates
+    });
   });
 }

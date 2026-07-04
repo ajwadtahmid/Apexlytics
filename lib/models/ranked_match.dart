@@ -183,11 +183,21 @@ class RankedMatch {
     final trackers = <MatchTracker>[];
     final raw = m['trackers'];
     if (raw is String && raw.isNotEmpty) {
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        for (final e in decoded) {
-          if (e is Map<String, dynamic>) trackers.add(MatchTracker.fromJson(e));
+      // A malformed blob (e.g. a hand-edited or foreign backup imported
+      // verbatim) must not take down every read that hydrates this row — a bad
+      // trackers value degrades to no trackers, mirroring how listFromJson
+      // skips malformed rows rather than throwing.
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final e in decoded) {
+            if (e is Map<String, dynamic>) {
+              trackers.add(MatchTracker.fromJson(e));
+            }
+          }
         }
+      } on FormatException {
+        // Leave trackers empty.
       }
     }
     return RankedMatch(

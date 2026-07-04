@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -31,9 +32,11 @@ const _staticBackupKeys = {
   PrefsKeys.notifyPubsMapRotation,
   PrefsKeys.notifyRankedMapRotation,
   PrefsKeys.notifyMixtapeMapRotation,
+  PrefsKeys.notifyWildcardMapRotation,
   PrefsKeys.rankedNotifyMinutes,
   PrefsKeys.pubsNotifyMinutes,
   PrefsKeys.mixtapeNotifyMinutes,
+  PrefsKeys.wildcardNotifyMinutes,
   PrefsKeys.favoriteRankedMapNames,
   PrefsKeys.favoritePubsMapNames,
   PrefsKeys.defaultTab,
@@ -60,6 +63,12 @@ bool _include(String key) {
   }
   return false;
 }
+
+/// Whether [key] is captured by backup export/import. Exposed for tests that
+/// guard against a newly-added persisted setting silently escaping backups —
+/// the failure mode that dropped the Wildcard notification settings.
+@visibleForTesting
+bool backupIncludesKey(String key) => _include(key);
 
 Map<String, dynamic> _collect(SharedPreferences prefs) {
   final result = <String, dynamic>{};
