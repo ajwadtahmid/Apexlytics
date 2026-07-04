@@ -473,8 +473,9 @@ class RankedHistoryStore {
   /// play best" isn't season-relative — it only needs each match's start time
   /// and RP change, so it's a good Lifetime candidate. Kept scalable with a
   /// narrow projection (2 columns, no trackers/legend/map strings — the
-  /// expensive part of a full row) instead of hydrating full matches; reuses
-  /// [timeOfDayBuckets] so the bucketing logic isn't duplicated in SQL.
+  /// expensive part of a full row) fed straight into
+  /// [timeOfDayBucketsFromRankedRows], so no [RankedMatch] is hydrated and the
+  /// bucketing logic isn't duplicated in SQL.
   Future<List<HourBucket>> timeOfDayBucketsFor(
     String uid, {
     String? seasonId,
@@ -485,16 +486,14 @@ class RankedHistoryStore {
       'SELECT start_ms, rp_change FROM $table WHERE $where',
       args,
     );
-    final matches = [
+    // Bucket straight from the two projected columns — no RankedMatch per row.
+    return timeOfDayBucketsFromRankedRows([
       for (final r in rows)
-        RankedMatch.fromStoredMap({
-          'start_ms': r['start_ms'],
-          'rp_change': r['rp_change'],
-          // _rankedScope already guarantees BATTLE_ROYALE + rp_change != 0.
-          'game_mode': 'BATTLE_ROYALE',
-        }),
-    ];
-    return timeOfDayBuckets(matches);
+        (
+          (r['start_ms'] as num?)?.toInt() ?? 0,
+          (r['rp_change'] as num?)?.toInt() ?? 0,
+        ),
+    ]);
   }
 
   /// Ranked matches for one legend across [seasonId] (null = lifetime), newest

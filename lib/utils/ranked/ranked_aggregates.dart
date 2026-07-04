@@ -590,13 +590,35 @@ class HourBucket {
 /// Buckets ranked matches by local hour-of-day (from each match's start time).
 /// Only hours with at least one game are returned, ordered 0→23. Assumes
 /// [matches] is already ranked-only filtered.
-List<HourBucket> timeOfDayBuckets(List<RankedMatch> matches) {
+List<HourBucket> timeOfDayBuckets(List<RankedMatch> matches) =>
+    _bucketByHour(matches.map((m) => (m.startTime, m.effectiveRpChange)));
+
+/// Buckets ranked rows given only their raw UTC start-millis and RP change —
+/// the counterpart to [timeOfDayBuckets] for the SQL projection, so the store
+/// can build the Lifetime time-of-day chart without hydrating a full
+/// [RankedMatch] per row. Callers must pass already-ranked rows; RP-reset
+/// outliers are neutralized here to match [RankedMatch.effectiveRpChange].
+List<HourBucket> timeOfDayBucketsFromRankedRows(
+  Iterable<(int startMsUtc, int rpChange)> rows,
+) =>
+    _bucketByHour(rows.map((r) {
+      final (startMs, rp) = r;
+      final effectiveRp = rp.abs() >= kRankedOutlierThreshold ? 0 : rp;
+      return (
+        DateTime.fromMillisecondsSinceEpoch(startMs, isUtc: true),
+        effectiveRp,
+      );
+    }));
+
+/// Shared core: tallies (UTC start time, effective RP) pairs into per-local-hour
+/// buckets. Only hours with at least one game are returned, ordered 0→23.
+List<HourBucket> _bucketByHour(Iterable<(DateTime, int)> entries) {
   final games = <int, int>{};
   final rp = <int, int>{};
-  for (final m in matches) {
-    final hour = m.startTime.toLocal().hour;
+  for (final (start, effectiveRp) in entries) {
+    final hour = start.toLocal().hour;
     games[hour] = (games[hour] ?? 0) + 1;
-    rp[hour] = (rp[hour] ?? 0) + m.effectiveRpChange;
+    rp[hour] = (rp[hour] ?? 0) + effectiveRp;
   }
   final hours = games.keys.toList()..sort();
   return [
