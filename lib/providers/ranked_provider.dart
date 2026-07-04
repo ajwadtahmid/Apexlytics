@@ -178,6 +178,40 @@ final rankedSplitMatchesProvider = FutureProvider.autoDispose
       return store.getBySeason(arg.uid, arg.splitId);
     });
 
+/// The resolved view for one split plus its overview aggregates, computed once
+/// per (matches × selected week) rather than on every widget rebuild. The
+/// aggregates are O(matches), so recomputing them in `build()` — which the
+/// 10-min refresh timer, tab switches and ancestor rebuilds all trigger — was
+/// wasted work; caching them here means they only recompute when the loaded
+/// matches or the week selection actually change.
+typedef RankedSplitView = ({
+  RankedView view,
+  RankedSummary summary,
+  List<LegendBreakdown> legends,
+  List<MapBreakdown> maps,
+});
+
+final rankedSplitViewProvider = FutureProvider.autoDispose
+    .family<RankedSplitView, ({String uid, String splitId})>((ref, arg) async {
+      final splits = await ref.watch(rankedSplitsProvider(arg.uid).future);
+      final matches = await ref.watch(rankedSplitMatchesProvider(arg).future);
+      final weekIndex =
+          ref.watch(rankedPeriodProvider.select((p) => p.weekIndex));
+      final view = resolveRankedView(
+        splits: splits,
+        splitMatches: matches,
+        selectedSplitId: arg.splitId,
+        weekIndex: weekIndex,
+      );
+      final filtered = view.filtered;
+      return (
+        view: view,
+        summary: summarize(filtered),
+        legends: legendBreakdowns(filtered),
+        maps: mapBreakdowns(filtered),
+      );
+    });
+
 /// The Lifetime (all-splits) aggregates. Summary/legends/maps are pure SQL
 /// `GROUP BY` sums — no matches hydrated regardless of history size. Time-of-day
 /// can't be grouped in SQL without risking wrong local-hour/DST bucketing, so it

@@ -136,23 +136,17 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
                   );
             }
 
-            // Otherwise load only the selected split's matches.
-            final matchesAsync = ref.watch(
-              rankedSplitMatchesProvider((uid: widget.uid, splitId: effId)),
-            );
-            return matchesAsync.when(
-              loading: _spinner,
-              error: (e, _) => _errorState(e),
-              data: (splitMatches) {
-                final view = resolveRankedView(
-                  splits: splits,
-                  splitMatches: splitMatches,
-                  selectedSplitId: effId,
-                  weekIndex: period.weekIndex,
+            // Otherwise load only the selected split's matches (and its
+            // aggregates, memoized in the provider rather than recomputed here).
+            return ref
+                .watch(
+                  rankedSplitViewProvider((uid: widget.uid, splitId: effId)),
+                )
+                .when(
+                  loading: _spinner,
+                  error: (e, _) => _errorState(e),
+                  data: _splitTabs,
                 );
-                return _splitTabs(view);
-              },
-            );
           },
         ),
       ),
@@ -194,11 +188,12 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
     );
   }
 
-  Widget _splitTabs(RankedView view) {
+  Widget _splitTabs(RankedSplitView data) {
+    final view = data.view;
     final filtered = view.filtered;
-    final summary = summarize(filtered);
-    final legends = legendBreakdowns(filtered);
-    final maps = mapBreakdowns(filtered);
+    final summary = data.summary;
+    final legends = data.legends;
+    final maps = data.maps;
 
     // For a split the matches are already in memory — the drill-down just
     // filters them (wrapped in a Future to share the widgets' lazy signature).
