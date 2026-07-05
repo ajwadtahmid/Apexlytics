@@ -15,6 +15,7 @@ import 'screens/search/search_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'utils/app_logger.dart';
+import 'utils/onboarding.dart';
 import 'utils/theme.dart';
 
 class ApexLegendsApp extends StatelessWidget {
@@ -53,6 +54,9 @@ class _AppShellState extends ConsumerState<_AppShell>
     // out" on Android.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FlutterNativeSplash.remove();
+      // The render tree now exists, so pushing the tour is safe (see the
+      // hit-test note above). Shows once on first launch, then never again.
+      unawaited(showOnboardingIfNeeded(context, ref));
     });
     unawaited(Future(() {
       final defaultTab = ref.read(playerSettingsProvider).defaultTab;

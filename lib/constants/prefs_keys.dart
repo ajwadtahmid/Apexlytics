@@ -30,6 +30,10 @@ class PrefsKeys {
   static const searchFavorites = 'search_favorites';
   static const uidSearchWarningShown = 'uid_search_warning_shown';
 
+  /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the
+  /// current version means the orientation tour is shown once on next launch.
+  static const onboardingVersion = 'onboarding_version';
+
   /// Cached `/approved-uids` allowlist (JSON list of UID strings). Read
   /// synchronously on launch so the gated Ranked tab appears without a network
   /// round-trip; refreshed in the background.

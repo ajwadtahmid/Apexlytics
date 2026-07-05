@@ -17,7 +17,12 @@ import 'rp_snapshot_storage.dart';
 // v2 adds the `ranked_history` section. v1 backups (prefs only) still import.
 const int _kBackupVersion = 2;
 
-const _excludedKeys = {PrefsKeys.uidSearchWarningShown};
+const _excludedKeys = {
+  PrefsKeys.uidSearchWarningShown,
+  // Device-local first-run state: a restored backup on a fresh install should
+  // still show the orientation tour once, and shouldn't suppress it elsewhere.
+  PrefsKeys.onboardingVersion,
+};
 
 const _excludedPrefixes = ['api_cache:', 'api_cache_ts:'];
 

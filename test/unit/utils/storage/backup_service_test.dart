@@ -36,6 +36,7 @@ void main() {
       // Server-derived / device-local state must not travel between devices.
       expect(backupIncludesKey(PrefsKeys.approvedUidsCache), isFalse);
       expect(backupIncludesKey(PrefsKeys.uidSearchWarningShown), isFalse);
+      expect(backupIncludesKey(PrefsKeys.onboardingVersion), isFalse);
       expect(backupIncludesKey('api_cache:whatever'), isFalse);
     });
   });
