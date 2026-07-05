@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../models/map_rotation.dart';
 import '../utils/app_logger.dart';
@@ -151,6 +152,20 @@ class NotificationService {
     }
     log.i('Notification permission granted=$granted');
     return granted;
+  }
+
+  /// Whether the OS actually lets notifications through right now — distinct
+  /// from [requestPermissions], which only fires the one-time prompt. Used to
+  /// detect a user revoking permission after the fact (Settings app, OEM
+  /// battery/notification managers, etc.) so the in-app toggle can stop
+  /// silently lying about whether alerts will fire.
+  ///
+  /// Desktop has no runtime permission model, so it must never gate anything
+  /// there — mirrors [_supportsImmediate] treating desktop separately.
+  static Future<bool> notificationsEnabled() async {
+    if (!_supportsScheduled) return true;
+    final status = await Permission.notification.status;
+    return status.isGranted;
   }
 
   /// Mobile platforms hold scheduled alerts at the OS level and support

@@ -4,6 +4,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/map_provider.dart';
 import 'providers/navigation_provider.dart';
+import 'providers/notification_provider.dart';
 import 'providers/player_provider.dart';
 import 'providers/predator_provider.dart';
 import 'providers/server_provider.dart';
@@ -87,6 +88,9 @@ class _AppShellState extends ConsumerState<_AppShell>
       // Re-validate the approved-UID allowlist on resume so a revoked/granted
       // UID flips the Ranked tab promptly.
       ref.read(approvedUidsProvider.notifier).refresh();
+      // Same idea for the OS notification permission — catches a toggle
+      // flipped in system settings while the app was backgrounded.
+      ref.invalidate(notificationsEnabledProvider);
     }
   }
 
