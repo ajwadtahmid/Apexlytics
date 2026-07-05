@@ -2,14 +2,13 @@ import 'dart:async' show unawaited;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../constants/api_constants.dart';
 import '../../providers/api_provider.dart';
-import '../../utils/notifications.dart';
+import '../../utils/onboarding.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
+import 'about_screen.dart';
 import 'widgets/cache_settings_section.dart';
 import 'widgets/general_settings_section.dart';
 import 'widgets/notification_settings_section.dart';
@@ -99,49 +98,23 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: AppTheme.md),
 
-          // ── Credits ─────────────────────────────────────
-          const SectionLabel(label: 'Credits', icon: Icons.info_outline),
-          const SettingsCard(
+          // ── About ─────────────────────────────────────
+          const SectionLabel(label: 'About', icon: Icons.info_outline),
+          SettingsCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                LinkRow(
-                  label: 'apexlegendsstatus.com',
-                  subtitle: 'Server status. You can check this website for more information.',
-                  url: ApiConstants.apexStatusUrl,
+                ActionRow(
+                  icon: Icons.explore_outlined,
+                  label: 'Take the tour',
+                  onTap: () => unawaited(openOnboarding(context)),
                 ),
-                Divider(color: AppTheme.surface2, height: 24),
-                LinkRow(
-                  label: 'apexlegendsapi.com',
-                  subtitle: 'Player stats & legend data are provided by this API.',
-                  url: ApiConstants.apexApiUrl,
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: AppTheme.xl),
-          Center(
-            child: Column(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    final version = ref.read(packageInfoProvider).whenOrNull(data: (info) => info.version) ?? '—';
-                    Clipboard.setData(ClipboardData(text: version));
-                    context.showMessage('Version copied', duration: const Duration(seconds: 2));
-                  },
-                  child: Text(
-                    'Version ${ref.watch(packageInfoProvider).whenOrNull(data: (info) => info.version) ?? '—'}',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-                  ),
-                ),
-                const SizedBox(height: AppTheme.xs),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: AppTheme.lg),
-                  child: Text(
-                    'Apexlytics is an unofficial companion app. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+                const Divider(color: AppTheme.surface2, height: 24),
+                ActionRow(
+                  icon: Icons.info_outline,
+                  label: 'About Apexlytics',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
                   ),
                 ),
               ],

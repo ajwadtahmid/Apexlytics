@@ -6,6 +6,14 @@ class ApiConstants {
   static const String eaNewsUrl =
       'https://www.ea.com/games/apex-legends/apex-legends/news';
 
+  static const String privacyPolicyUrl =
+      'https://ajwadtahmid.github.io/privacy-policies/Apexlytics.html';
+  static const String releaseNotesUrl =
+      'https://github.com/ajwadtahmid/Apexlytics/releases';
+  static const String playStoreUrl =
+      'https://play.google.com/store/apps/details?id=com.ajwadtahmid.apexlytics';
+  static const String appStoreUrl = 'https://apps.apple.com/app/id6778521764';
+
   static const String alsProfileBaseUrl =
       'https://apexlegendsstatus.com/profile/uid';
   static const List<String> platforms = ['PC', 'PS4', 'X1', 'SWITCH'];
