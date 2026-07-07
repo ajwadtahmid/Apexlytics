@@ -34,6 +34,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Not read by any code — its only purpose is to give
+             ic_notification_fallback a static XML reference, the same way
+             ic_launcher_foreground gets one from the adaptive-icon XML. That
+             makes AAPT2 compile a verified resource ID for it at build time,
+             instead of it existing only as a Dart string resolved via the
+             notifications plugin's runtime Resources.getIdentifier() lookup —
+             see NotificationService for why that distinction matters. -->
+        <meta-data
+            android:name="com.ajwadtahmid.apexlytics.NOTIFICATION_FALLBACK_ICON"
+            android:resource="@drawable/ic_notification_fallback" />
         <receiver android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false"

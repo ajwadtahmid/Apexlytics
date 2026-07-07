@@ -51,17 +51,23 @@ class NotificationService {
   );
 
   // The plugin resolves an Android icon name via getIdentifier(name,
-  // "drawable", package) — it must live under an unqualified (or every)
-  // drawable/ folder, or a device whose density split doesn't get delivered
-  // that resource sees invalid_icon and initialize() throws.
+  // "drawable", package) — a runtime string lookup, done both here and again
+  // every time a notification is actually built (incl. ones rebuilt by
+  // ScheduledNotificationBootReceiver after a reboot). It must live under an
+  // unqualified (or every) drawable/ folder, or a device whose density split
+  // doesn't get delivered that resource sees invalid_icon and this throws.
   //
-  // ic_launcher_foreground is reachable from AndroidManifest's app icon
-  // (mipmap-anydpi-v26/ic_launcher.xml → @drawable/ic_launcher_foreground),
-  // so it gets the same delivery guarantees Android gives the launcher icon
-  // itself — a meaningfully different protection than our own custom
-  // ic_notification, which is only ever referenced dynamically from Dart.
+  // ic_notification_fallback is pixel-identical to ic_notification (same
+  // silhouette) but also gets a static reference from a no-op AndroidManifest
+  // meta-data entry, so AAPT2 compiles a verified resource ID for it — the
+  // same guarantee Android gives ic_launcher_foreground via the adaptive-icon
+  // XML, rather than depending solely on the runtime lookup succeeding twice.
+  // ic_launcher_foreground itself was tried here previously: it resolves
+  // reliably, but it's the adaptive launcher icon's full-bleed art (fully
+  // opaque, no transparency), so Android's alpha-only status-bar rendering
+  // painted the whole square white instead of a shape.
   static const _primaryAndroidIcon = 'ic_notification';
-  static const _fallbackAndroidIcon = 'ic_launcher_foreground';
+  static const _fallbackAndroidIcon = 'ic_notification_fallback';
 
   static Future<void> init() async {
     if (_initialized) return;
@@ -92,14 +98,9 @@ class NotificationService {
     );
 
     // Bare resource name (no '@drawable/' prefix) is the plugin's documented
-    // form. The icon lives in the unqualified drawable/ folder (plus density
-    // variants) so it ships in the base APK and is always present — a
-    // density-only copy previously got split out of some Play App Bundle
-    // installs, making initialize() throw invalid_icon and leaving the whole
-    // service uninitialised (no notifications ever scheduled). Retry once
-    // with a guaranteed-present fallback icon instead of leaving the service
-    // permanently dead for the rest of the session if that ever recurs — from
-    // this bug returning, an OEM stripping resources, or any other cause.
+    // form. Retry once with the fallback icon (see above) instead of leaving
+    // the service permanently uninitialised for the rest of the session if
+    // the primary icon's lookup ever fails again.
     try {
       await initializeWith(_primaryAndroidIcon);
     } catch (e) {
@@ -133,14 +134,12 @@ class NotificationService {
     if (android != null) {
       granted = await android.requestNotificationsPermission() ?? false;
     } else if (ios != null) {
-      granted = await ios.requestPermissions(
-            alert: true,
-            badge: true,
-            sound: true,
-          ) ??
+      granted =
+          await ios.requestPermissions(alert: true, badge: true, sound: true) ??
           false;
     } else if (macos != null) {
-      granted = await macos.requestPermissions(
+      granted =
+          await macos.requestPermissions(
             alert: true,
             badge: true,
             sound: true,
@@ -379,13 +378,16 @@ class NotificationService {
         final unit = minutesBefore == 1 ? 'minute' : 'minutes';
         final String body;
         if (i == 0) {
-          body = '$modeLabel: ${_mapDisplay(nextMap)} starts in $minutesBefore $unit';
+          body =
+              '$modeLabel: ${_mapDisplay(nextMap)} starts in $minutesBefore $unit';
         } else if (mapName != null) {
           body = '$modeLabel: $mapName starts in $minutesBefore $unit';
         } else {
           body = '$modeLabel: Next map starts in $minutesBefore $unit';
         }
-        alerts.add(PlannedAlert(id: idBase + i, body: body, notifyAt: notifyAt));
+        alerts.add(
+          PlannedAlert(id: idBase + i, body: body, notifyAt: notifyAt),
+        );
       }
 
       // Can't project further rotations without a known cadence.
