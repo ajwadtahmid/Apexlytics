@@ -32,6 +32,17 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# permission_handler_windows still builds against the deprecated /await +
+# <experimental/coroutine> MSVC extension. Newer MSVC toolsets turn that
+# deprecation into a hard error (static_assert STL1011) rather than a
+# warning; this is the suppression Microsoft's own error message names to
+# keep it compiling until permission_handler_windows migrates to
+# <coroutine>. Set project-wide (before add_subdirectory calls) since the
+# plugin's own CMakeLists.txt isn't ours to edit — remove once upstream
+# drops /await, or if MSVC actually removes the experimental headers this
+# stops working regardless.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
