@@ -334,6 +334,140 @@ void main() {
     },
   );
 
+  group('netRpInWindow', () {
+    // Window spanning matches at t=2000s onwards (each match ends 600s later).
+    final windowStart = DateTime.fromMillisecondsSinceEpoch(1500 * 1000);
+    final windowEnd = DateTime.fromMillisecondsSinceEpoch(9000 * 1000);
+
+    /// A match carrying an explicit running total, so the completeness chain
+    /// (`cum == prevCum + rpChange`) can be set up or deliberately broken.
+    RankedMatch chained(int startSecs, {required int rp, required int cum}) =>
+        RankedMatch.fromJson({
+          'uid': '1',
+          'name': 'Tester',
+          'legendPlayed': 'Axle',
+          'gameMode': 'BATTLE_ROYALE',
+          'gameLengthSecs': 600,
+          'gameStartTimestamp': startSecs,
+          'gameEndTimestamp': startSecs + 600,
+          'gameData': const [],
+          'BRScoreChange': rp,
+          'BRScore': cum,
+          'map': 'olympus_rotation',
+        });
+
+    Future<RankedHistoryStore> storeWith(List<RankedMatch> matches) async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', matches);
+      return store;
+    }
+
+    test('sums RP over an unbroken chain', () async {
+      final store = await storeWith([
+        chained(100, rp: 50, cum: 1000), // anchor, before the window
+        chained(2000, rp: 205, cum: 1205),
+        chained(3000, rp: -13, cum: 1192),
+      ]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1192),
+        192,
+      );
+    });
+
+    test('counts only RP earned after a rank reset', () async {
+      final store = await storeWith([
+        chained(100, rp: 50, cum: 12085), // anchor: end of the previous split
+        chained(2000, rp: 0, cum: 12085),
+        chained(2500, rp: 0, cum: 4420), // ← reset
+        chained(3000, rp: 205, cum: 4625),
+        chained(3500, rp: -13, cum: 4612),
+      ]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 4612),
+        192,
+      );
+    });
+
+    test('returns null when history does not reach back to the start', () async {
+      final store = await storeWith([chained(2000, rp: 205, cum: 1205)]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1205),
+        isNull,
+      );
+    });
+
+    test('returns null when the chain is broken mid-window', () async {
+      final store = await storeWith([
+        chained(100, rp: 50, cum: 1000),
+        chained(2000, rp: 205, cum: 1205),
+        // A gap: the running total jumped by more than this row's rp_change.
+        chained(3000, rp: 20, cum: 1600),
+      ]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1600),
+        isNull,
+      );
+    });
+
+    test('returns null when the newest row is behind the live RP', () async {
+      final store = await storeWith([
+        chained(100, rp: 50, cum: 6000),
+        chained(2000, rp: 315, cum: 6315),
+      ]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 6758),
+        isNull,
+      );
+    });
+
+    test('returns null for a uid with no history at all', () async {
+      final store = await storeWith([chained(100, rp: 50, cum: 1000)]);
+      expect(
+        await store.netRpInWindow(
+          'nobody',
+          windowStart,
+          windowEnd,
+          currentRp: 1000,
+        ),
+        isNull,
+      );
+    });
+
+    test('returns null when the window holds no matches', () async {
+      final store = await storeWith([chained(100, rp: 50, cum: 1000)]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1000),
+        isNull,
+      );
+    });
+
+    test('counts pubs as chain links without adding RP', () async {
+      final store = await storeWith([
+        chained(100, rp: 50, cum: 1000),
+        chained(2000, rp: 205, cum: 1205),
+        chained(2500, rp: 0, cum: 1205), // pubs — no RP movement
+        chained(3000, rp: -13, cum: 1192),
+      ]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1192),
+        192,
+      );
+    });
+
+    test('is scoped to the requested uid', () async {
+      final store = await storeWith([
+        chained(100, rp: 50, cum: 1000),
+        chained(2000, rp: 205, cum: 1205),
+      ]);
+      await store.upsertAll('2', [match('2', 2000, rp: 999)]);
+      expect(
+        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1205),
+        205,
+      );
+    });
+  });
+
   group('SQL aggregation parity with the Dart aggregates', () {
     void expectSummaryEq(RankedSummary a, RankedSummary b) {
       expect(a.games, b.games);

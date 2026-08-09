@@ -335,6 +335,7 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           ? pushToLegendStack(legend, prefs)
           : loadLegendStack(prefs),
     ).wait;
+    final historyNetRp = await _historyNetRpThisWeek();
     if (mounted) {
       setState(() {
         snapshots = snaps;
@@ -345,9 +346,23 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           snaps,
           widget.stats.rankedSeason,
           widget.stats.rankScore,
+          historyNetRp: historyNetRp,
         );
       });
     }
+  }
+
+  Future<int?> _historyNetRpThisWeek() async {
+    final week = currentWeekRange(widget.stats.rankedSeason);
+    if (week == null) return null;
+    return ref.read(
+      weeklyNetRpProvider((
+        uid: widget.stats.uid,
+        start: week.start,
+        end: week.end,
+        currentRp: widget.stats.rankScore,
+      )).future,
+    );
   }
 
   @override
@@ -373,7 +388,11 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           ],
           PlayerInfoCard(stats: stats, rpDelta: rpDelta),
           const SizedBox(height: AppTheme.md),
-          RankedInfoCard(myRp: stats.rankScore, platform: widget.platform),
+          RankedInfoCard(
+            myRp: stats.rankScore,
+            platform: widget.platform,
+            season: stats.rankedSeason,
+          ),
           const SizedBox(height: AppTheme.md),
           GraphCard(
             snapshots: snapshots,

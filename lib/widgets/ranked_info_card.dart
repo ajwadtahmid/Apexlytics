@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/api_constants.dart';
 import '../constants/rank_constants.dart';
+import '../models/season_meta.dart';
 import '../providers/predator_provider.dart';
 import '../utils/formatting/format.dart';
+import '../utils/formatting/season_utils.dart' show splitContext;
 import '../utils/formatting/rank_utils.dart' show rankIndex, rankAssetPathByTier;
 import '../utils/theme.dart';
 import 'surface_card.dart';
@@ -11,10 +13,20 @@ import 'surface_card.dart';
 class RankedInfoCard extends ConsumerWidget {
   final int myRp;
   final String platform;
-  const RankedInfoCard({super.key, required this.myRp, required this.platform});
+
+  /// Drives the split context line; null hides that row.
+  final SeasonMeta? season;
+
+  const RankedInfoCard({
+    super.key,
+    required this.myRp,
+    required this.platform,
+    this.season,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final splitLabel = splitContextLabel(splitContext(season));
     final predAsync = ref.watch(predatorProvider);
     final predVal = predAsync.when(
       data: (result) => result.data.forPlatform(platform)?.minRp,
@@ -152,6 +164,13 @@ class RankedInfoCard extends ConsumerWidget {
                 style: const TextStyle(color: kPredatorColor, fontSize: 13),
               ),
             ),
+          if (splitLabel.isNotEmpty) ...[
+            const SizedBox(height: AppTheme.sm),
+            Text(
+              splitLabel,
+              style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+            ),
+          ],
         ],
       ),
     );

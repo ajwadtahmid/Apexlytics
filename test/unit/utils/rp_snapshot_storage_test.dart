@@ -4,8 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:apexlytics/utils/storage/rp_snapshot_storage.dart';
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
+import 'package:apexlytics/models/season_meta.dart';
 
 import '../../helpers.dart';
+
+/// A ranked split window; only the id matters for snapshot stamping.
+SeasonMeta _split(String id) =>
+    SeasonMeta.fromApi(id: id, startSeconds: 1000, endSeconds: 999999);
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -81,6 +86,76 @@ void main() {
       final snaps = loadSnapshotsSync(prefs);
       expect(snaps.length, 2);
       expect(snaps.last.rp, 2500);
+    });
+
+    test('stamps the current split id onto the snapshot', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await appendSnapshot(
+        buildStats(rankScore: 4420, rankedSeason: _split('br_ranked_s30_s1')),
+        prefs,
+      );
+      expect(loadSnapshotsSync(prefs).single.seasonId, 'br_ranked_s30_s1');
+    });
+
+    test('leaves the split id null when the season is unknown', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await appendSnapshot(buildStats(rankScore: 4420), prefs);
+      expect(loadSnapshotsSync(prefs).single.seasonId, isNull);
+    });
+
+    test('appends across a split change even when RP is unchanged', () async {
+      // This entry is what marks where the reset fell in the stream, so dedup
+      // must not swallow it just because the RP number happens to repeat.
+      final prefs = await SharedPreferences.getInstance();
+      await appendSnapshot(
+        buildStats(rankScore: 4420, rankedSeason: _split('br_ranked_s29_s2')),
+        prefs,
+      );
+      await appendSnapshot(
+        buildStats(rankScore: 4420, rankedSeason: _split('br_ranked_s30_s1')),
+        prefs,
+      );
+      final snaps = loadSnapshotsSync(prefs);
+      expect(snaps.length, 2);
+      expect(snaps.last.seasonId, 'br_ranked_s30_s1');
+    });
+
+    test('still deduplicates within the same split', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final stats = buildStats(
+        rankScore: 4420,
+        rankedSeason: _split('br_ranked_s30_s1'),
+      );
+      await appendSnapshot(stats, prefs);
+      await appendSnapshot(stats, prefs);
+      expect(loadSnapshotsSync(prefs).length, 1);
+    });
+
+    test('rejects a 0 reading once RP has been earned', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await appendSnapshot(buildStats(rankScore: 11998), prefs);
+      await appendSnapshot(buildStats(rankScore: 0), prefs);
+      final snaps = loadSnapshotsSync(prefs);
+      expect(snaps.length, 1);
+      expect(snaps.single.rp, 11998);
+    });
+
+    test('records 0 for a player who has never earned RP', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await appendSnapshot(buildStats(rankScore: 0), prefs);
+      expect(loadSnapshotsSync(prefs).single.rp, 0);
+    });
+
+    test('legacy entries without a split id still load', () async {
+      SharedPreferences.setMockInitialValues({
+        'stat_snapshots': jsonEncode([
+          {'ts': DateTime.now().millisecondsSinceEpoch, 'rp': 12085},
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final snap = loadSnapshotsSync(prefs).single;
+      expect(snap.rp, 12085);
+      expect(snap.seasonId, isNull);
     });
 
     test('stores snapshot under uid-specific key', () async {

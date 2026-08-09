@@ -51,10 +51,13 @@ mixin SnapshotStateMixin {
   /// Returns whether a new/changed season was learned, so a
   /// [ConsumerState] caller can invalidate anything caching the season
   /// list elsewhere (e.g. the ranked breakdown's split picker).
+  /// [historyNetRp] comes from `weeklyNetRpProvider`; null falls back to the
+  /// snapshot-derived delta. See [computeWeekDelta].
   Future<bool> appendSnapshotState(
     SharedPreferences prefs,
-    PlayerStats stats,
-  ) async {
+    PlayerStats stats, {
+    int? historyNetRp,
+  }) async {
     if (!mounted) return false;
     final season = stats.rankedSeason;
     final seasonChanged =
@@ -66,7 +69,12 @@ mixin SnapshotStateMixin {
     setState(() {
       snapshots = snaps;
       allSeasons = loadAllSeasonsSync(prefs);
-      rpDelta = computeWeekDelta(snaps, stats.rankedSeason, stats.rankScore);
+      rpDelta = computeWeekDelta(
+        snaps,
+        stats.rankedSeason,
+        stats.rankScore,
+        historyNetRp: historyNetRp,
+      );
     });
     return seasonChanged;
   }

@@ -163,6 +163,7 @@ class _GraphCardState extends State<GraphCard> {
       widget.snapshots,
       week,
       currentRp: isCurrentSeason ? widget.currentRp : null,
+      scopeStart: season.start,
     );
     final allSeasonsSorted = _effectiveAllSeasons.values.toList()
       ..sort((a, b) => b.start.compareTo(a.start));

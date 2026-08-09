@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'season_utils.dart' show SplitContext;
 
 final _rpFormat = NumberFormat('#,###');
 
@@ -19,6 +20,28 @@ String timeAgo(DateTime timestamp) {
 String capitalize(String s) {
   if (s.isEmpty) return s;
   return s[0].toUpperCase() + s.substring(1);
+}
+
+/// One-line split orientation: 'Week 2 of 6 · Split ends in ~36 days'.
+///
+/// Days truncate (the final day reads '~0 days'); below a day the unit steps
+/// to hours, then minutes. Null [ctx] yields an empty string.
+String splitContextLabel(SplitContext? ctx) {
+  if (ctx == null) return '';
+  final week = 'Week ${ctx.week} of ${ctx.totalWeeks}';
+  if (ctx.ended) return '$week · Split ended';
+
+  final r = ctx.remaining;
+  final String left;
+  if (r.inDays >= 1) {
+    left = '${r.inDays} ${r.inDays == 1 ? 'day' : 'days'}';
+  } else if (r.inHours >= 1) {
+    left = '${r.inHours} ${r.inHours == 1 ? 'hour' : 'hours'}';
+  } else {
+    final mins = r.inMinutes < 1 ? 1 : r.inMinutes;
+    left = '$mins ${mins == 1 ? 'minute' : 'minutes'}';
+  }
+  return '$week · Split ends in ~$left';
 }
 
 /// Formats a duration in seconds into a compact label, scaling the unit so big

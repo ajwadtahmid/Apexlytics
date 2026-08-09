@@ -40,11 +40,11 @@ List<WeekRange> computeWeeks(SeasonMeta season) {
 
 /// Index of the week [DateTime.now()] falls in, or the last week if the season
 /// has ended. Returns 0 if weeks is empty.
-int currentWeekIndex(List<WeekRange> weeks) {
+int currentWeekIndex(List<WeekRange> weeks, {DateTime? now}) {
   if (weeks.isEmpty) return 0;
-  final now = DateTime.now();
+  final at = now ?? DateTime.now();
   for (var i = 0; i < weeks.length; i++) {
-    if (!now.isBefore(weeks[i].start) && now.isBefore(weeks[i].end)) return i;
+    if (!at.isBefore(weeks[i].start) && at.isBefore(weeks[i].end)) return i;
   }
   // Season ended — default to last week.
   return weeks.length - 1;
@@ -61,6 +61,20 @@ List<StatSnapshot> snapshotsForWeek(
             s.timestamp.isBefore(week.end))
         .toList();
 
+/// Timestamp just after a reset that landed inside [week], else null. A reset in
+/// an earlier week needs no handling — the pre-week baseline is already
+/// post-reset.
+DateTime? _resetInsideWeek(
+  List<StatSnapshot> all,
+  WeekRange week,
+  DateTime? splitStart,
+) {
+  final idx = lastResetIndex(all, splitStart: splitStart);
+  if (idx == null) return null;
+  final at = all[idx].timestamp;
+  return (!at.isBefore(week.start) && at.isBefore(week.end)) ? at : null;
+}
+
 /// RP gained during [week].
 ///
 /// Baseline = last snapshot before [week.start], or the first snapshot inside
@@ -68,19 +82,46 @@ List<StatSnapshot> snapshotsForWeek(
 /// Top = [currentRp] when this is the live week (non-null), otherwise the last
 /// snapshot inside the week.
 /// Returns 0 for empty weeks, null when there is no data at all.
+///
+/// [scopeStart] is the owning split's start; candidates before it are ignored,
+/// so week 1 is never measured against the previous split's final RP. A reset
+/// landing inside [week] rebases as well — [scopeStart] alone can't catch that,
+/// because the API's split start runs ahead of the actual reset.
+///
+/// Returns 0 rather than guess a baseline from a single in-week reading. A
+/// pre-week baseline in the same split is trustworthy and used as normal.
 int? weekDelta(
-  List<StatSnapshot> all,
+  List<StatSnapshot> rawAll,
   WeekRange week, {
   int? currentRp,
+  DateTime? scopeStart,
 }) {
-  final before = all.where((s) => s.timestamp.isBefore(week.start)).toList();
-  final inWeek = snapshotsForWeek(all, week);
+  final all = trustedSnapshots(rawAll);
+
+  final resetAt = _resetInsideWeek(all, week, scopeStart);
+  final DateTime? floor;
+  if (scopeStart == null) {
+    floor = resetAt;
+  } else if (resetAt == null) {
+    floor = scopeStart;
+  } else {
+    floor = resetAt.isAfter(scopeStart) ? resetAt : scopeStart;
+  }
+  bool inScope(StatSnapshot s) =>
+      floor == null || !s.timestamp.isBefore(floor);
+
+  final before = all
+      .where((s) => s.timestamp.isBefore(week.start) && inScope(s))
+      .toList();
+  final inWeek = snapshotsForWeek(all, week).where(inScope).toList();
 
   final int? baseline;
   if (before.isNotEmpty) {
     baseline = before.last.rp;
-  } else if (inWeek.isNotEmpty) {
+  } else if (inWeek.length >= 2) {
     baseline = inWeek.first.rp;
+  } else if (inWeek.isNotEmpty) {
+    return 0;
   } else {
     return null;
   }
@@ -97,20 +138,84 @@ int? weekDelta(
   return top - baseline;
 }
 
+/// The week [DateTime.now()] falls in for [season] (the last week once it has
+/// ended), or null when there's no season to divide.
+WeekRange? currentWeekRange(SeasonMeta? season) {
+  if (season == null) return null;
+  final weeks = computeWeeks(season);
+  if (weeks.isEmpty) return null;
+  return weeks[currentWeekIndex(weeks)];
+}
+
+/// Where the player sits inside a split, derived from the API's split bounds.
+class SplitContext {
+  /// 1-based, clamped to [totalWeeks] once the split has ended.
+  final int week;
+  final int totalWeeks;
+
+  /// [Duration.zero] once the split has ended.
+  final Duration remaining;
+
+  const SplitContext({
+    required this.week,
+    required this.totalWeeks,
+    required this.remaining,
+  });
+
+  bool get ended => remaining == Duration.zero;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SplitContext &&
+          week == other.week &&
+          totalWeeks == other.totalWeeks &&
+          remaining == other.remaining;
+
+  @override
+  int get hashCode => Object.hash(week, totalWeeks, remaining);
+}
+
+/// [SplitContext] for [season], or null when there is no season to divide.
+SplitContext? splitContext(SeasonMeta? season, {DateTime? now}) {
+  if (season == null) return null;
+  final weeks = computeWeeks(season);
+  if (weeks.isEmpty) return null;
+  final at = now ?? DateTime.now();
+  return SplitContext(
+    week: currentWeekIndex(weeks, now: at) + 1,
+    totalWeeks: weeks.length,
+    remaining: at.isBefore(season.end)
+        ? season.end.difference(at)
+        : Duration.zero,
+  );
+}
+
 /// RP gained this week, considering the current season and snapshots.
 ///
 /// If a ranked season exists, computes the delta for the current week within
 /// that season. Otherwise falls back to a 24-hour delta.
+///
+/// [historyNetRp] is the same week from local match history, or null when it
+/// can't cover the window. It wins when available — see
+/// [RankedHistoryStore.netRpInWindow] for why that source is the reliable one.
 int? computeWeekDelta(
   List<StatSnapshot> snaps,
   SeasonMeta? season,
-  int currentRp,
-) {
+  int currentRp, {
+  int? historyNetRp,
+}) {
   if (season != null) {
     final weeks = computeWeeks(season);
     if (weeks.isNotEmpty) {
+      if (historyNetRp != null) return historyNetRp;
       final idx = currentWeekIndex(weeks);
-      return weekDelta(snaps, weeks[idx], currentRp: currentRp);
+      return weekDelta(
+        snaps,
+        weeks[idx],
+        currentRp: currentRp,
+        scopeStart: season.start,
+      );
     }
   }
   return computeDelta(snaps, currentRp);

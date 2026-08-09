@@ -41,14 +41,24 @@ Future<void> appendSnapshot(
 }) async {
   final snapshots = _parseSnapshots(prefs.getString(PrefsKeys.snapshotKeyFor(uid)));
   final now = DateTime.now();
+  final seasonId = stats.rankedSeason?.id;
 
+  // Keeps a mid-rollover `rankScore: 0` from planting a fake reset floor. See
+  // [trustedSnapshots], which does the same for entries already on disk.
+  if (stats.rankScore == 0 && snapshots.any((s) => s.rp > 0)) return;
+
+  // Dedup covers the split too — that entry marks where the reset fell, so it
+  // must survive even when RP lands on the same number.
   if (snapshots.isNotEmpty &&
       deduplicateRp &&
-      snapshots.last.rp == stats.rankScore) {
+      snapshots.last.rp == stats.rankScore &&
+      snapshots.last.seasonId == seasonId) {
     return;
   }
 
-  snapshots.add(StatSnapshot(timestamp: now, rp: stats.rankScore));
+  snapshots.add(
+    StatSnapshot(timestamp: now, rp: stats.rankScore, seasonId: seasonId),
+  );
 
   await prefs.setString(
     PrefsKeys.snapshotKeyFor(uid),

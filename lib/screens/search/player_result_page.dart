@@ -12,6 +12,7 @@ import '../../providers/search_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/formatting/search_utils.dart';
+import '../../utils/formatting/season_utils.dart';
 import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
@@ -303,7 +304,23 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
   // next app launch — invalidate it so the ranked split picker picks it up
   // this session too.
   Future<void> _appendSnapshot(SharedPreferences prefs) async {
-    final changed = await appendSnapshotState(prefs, widget.stats);
+    final week = currentWeekRange(widget.stats.rankedSeason);
+    final historyNetRp = week == null
+        ? null
+        : await ref.read(
+            weeklyNetRpProvider((
+              uid: widget.stats.uid,
+              start: week.start,
+              end: week.end,
+              currentRp: widget.stats.rankScore,
+            )).future,
+          );
+    if (!mounted) return;
+    final changed = await appendSnapshotState(
+      prefs,
+      widget.stats,
+      historyNetRp: historyNetRp,
+    );
     if (changed && mounted) ref.invalidate(rankedSeasonsProvider);
   }
 
@@ -351,6 +368,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
           RankedInfoCard(
             myRp: widget.stats.rankScore,
             platform: widget.stats.platform,
+            season: widget.stats.rankedSeason,
           ),
           const SizedBox(height: AppTheme.md),
           GraphCard(

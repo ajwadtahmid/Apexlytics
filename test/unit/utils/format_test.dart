@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/utils/formatting/format.dart';
+import 'package:apexlytics/utils/formatting/season_utils.dart' show SplitContext;
 
 void main() {
   group('formatNumber', () {
@@ -47,6 +48,71 @@ void main() {
     test('days and hours over 24h', () {
       expect(formatDuration(90061), '1d 1h');
       expect(formatDuration(8 * 3600), '8h 0m');
+    });
+  });
+
+  group('splitContextLabel', () {
+    SplitContext ctx(int week, int total, Duration remaining) =>
+        SplitContext(week: week, totalWeeks: total, remaining: remaining);
+
+    test('week and days remaining', () {
+      expect(
+        splitContextLabel(ctx(2, 6, const Duration(days: 37))),
+        'Week 2 of 6 · Split ends in ~37 days',
+      );
+    });
+
+    test('truncates part-days, matching in-game display', () {
+      expect(
+        splitContextLabel(ctx(1, 6, const Duration(days: 36, hours: 22))),
+        'Week 1 of 6 · Split ends in ~36 days',
+      );
+    });
+
+    test('steps to hours rather than reading 0 days under 24h', () {
+      expect(
+        splitContextLabel(ctx(6, 6, const Duration(hours: 23))),
+        'Week 6 of 6 · Split ends in ~23 hours',
+      );
+    });
+
+    test('singular day', () {
+      expect(
+        splitContextLabel(ctx(6, 6, const Duration(days: 1))),
+        'Week 6 of 6 · Split ends in ~1 day',
+      );
+    });
+
+    test('falls to hours inside the last day', () {
+      expect(
+        splitContextLabel(ctx(6, 6, const Duration(hours: 14))),
+        'Week 6 of 6 · Split ends in ~14 hours',
+      );
+    });
+
+    test('falls to minutes inside the last hour', () {
+      expect(
+        splitContextLabel(ctx(6, 6, const Duration(minutes: 20))),
+        'Week 6 of 6 · Split ends in ~20 minutes',
+      );
+    });
+
+    test('never reads zero on the final approach', () {
+      expect(
+        splitContextLabel(ctx(6, 6, const Duration(seconds: 5))),
+        'Week 6 of 6 · Split ends in ~1 minute',
+      );
+    });
+
+    test('ended split', () {
+      expect(
+        splitContextLabel(ctx(6, 6, Duration.zero)),
+        'Week 6 of 6 · Split ended',
+      );
+    });
+
+    test('empty string when there is no split', () {
+      expect(splitContextLabel(null), '');
     });
   });
 }

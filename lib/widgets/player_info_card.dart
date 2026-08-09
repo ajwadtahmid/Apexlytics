@@ -16,7 +16,7 @@ class PlayerInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final delta = rpDelta;
-    final showDelta = delta != null && delta != 0;
+    final showDelta = delta != null;
     final deltaColor = (delta ?? 0) >= 0 ? AppTheme.green : AppTheme.red;
     final deltaAbs = (delta ?? 0).abs();
     final deltaSign = (delta ?? 0) >= 0 ? '+' : '-';

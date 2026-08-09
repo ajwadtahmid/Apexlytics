@@ -542,6 +542,71 @@ class RankedHistoryStore {
     return rows.map(RankedMatch.fromStoredMap).toList();
   }
 
+  /// Net ranked RP for [uid] from matches ending in `[start, end)`, or null when
+  /// local history demonstrably can't cover that window.
+  ///
+  /// A rank reset reaches the client as a silent `cumulative_rp` cliff with
+  /// `rp_change == 0` on every match across it, so summing per-match RP cannot
+  /// see a reset at all.
+  ///
+  /// `/games` serves a rolling 100-match window, so a player who outplays it
+  /// between app opens leaves a hole. Three conditions gate the answer, all
+  /// necessary:
+  ///
+  /// 1. Some row predates [start] — the window isn't merely where recording
+  ///    happened to begin.
+  /// 2. `cumulative_rp` chains unbroken: each row's running total equals the
+  ///    previous plus its own `rp_change`. Catches a hole in the middle.
+  /// 3. The newest row's `cumulative_rp` equals [currentRp]. Catches a hole at
+  ///    the end, which leaves the chain intact but the endpoint stale.
+  ///
+  /// The reset itself is the one tolerated break; the accumulator restarts
+  /// there, which is what makes this "RP earned since the reset".
+  Future<int?> netRpInWindow(
+    String uid,
+    DateTime start,
+    DateTime end, {
+    required int currentRp,
+  }) async {
+    final db = await _open();
+    final startMs = start.millisecondsSinceEpoch;
+
+    // Condition 1; also seeds the chain as prevCum below.
+    final anchor = await db.rawQuery(
+      'SELECT cumulative_rp FROM $table WHERE uid = ? AND end_ms < ? '
+      'ORDER BY end_ms DESC LIMIT 1',
+      [uid, startMs],
+    );
+    if (anchor.isEmpty) return null;
+
+    // Pubs included — they carry a cumulative_rp too, so skipping them would
+    // punch artificial holes in the chain.
+    final rows = await db.rawQuery(
+      'SELECT rp_change, cumulative_rp FROM $table '
+      "WHERE uid = ? AND game_mode = 'BATTLE_ROYALE' "
+      'AND end_ms >= ? AND end_ms < ? ORDER BY end_ms ASC',
+      [uid, startMs, end.millisecondsSinceEpoch],
+    );
+    if (rows.isEmpty) return null;
+
+    var prevCum = (anchor.first['cumulative_rp'] as num?)?.toInt() ?? 0;
+    var net = 0;
+    for (final r in rows) {
+      final change = (r['rp_change'] as num?)?.toInt() ?? 0;
+      final cum = (r['cumulative_rp'] as num?)?.toInt() ?? 0;
+      if (cum == prevCum + change) {
+        // Matches the neutralisation in [RankedMatch.effectiveRpChange].
+        if (change.abs() < kRankedOutlierThreshold) net += change;
+      } else if (change == 0 && cum < prevCum) {
+        net = 0; // the reset — start counting from the new floor
+      } else {
+        return null; // a hole in the chain
+      }
+      prevCum = cum;
+    }
+    return prevCum == currentRp ? net : null;
+  }
+
   Future<int> count(String uid) async {
     final db = await _open();
     final rows = await db.rawQuery(

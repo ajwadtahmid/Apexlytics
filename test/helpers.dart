@@ -1,4 +1,5 @@
 import 'package:apexlytics/models/player_stats.dart';
+import 'package:apexlytics/models/season_meta.dart';
 
 /// Builds a minimal [PlayerStats] for use in tests. Override only the fields
 /// you care about; everything else gets a sensible default.
@@ -11,8 +12,10 @@ PlayerStats buildStats({
   bool isOnline = false,
   bool isInGame = false,
   List<LegendStat>? legendStats,
+  SeasonMeta? rankedSeason,
 }) {
   return PlayerStats(
+    rankedSeason: rankedSeason,
     name: name,
     uid: uid,
     level: 100,
