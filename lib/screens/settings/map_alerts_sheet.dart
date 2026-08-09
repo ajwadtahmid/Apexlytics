@@ -79,18 +79,22 @@ class _MapAlertsSheetContentState
     Set<String> notifySet,
     bool showAll,
   ) {
+    // An empty proxy list means the backend hasn't been updated for the
+    // season yet — fall back to showing the full canonical map list instead
+    // of hiding everything behind the expand tile.
+    final effectiveShowAll = showAll || proxyMaps.isEmpty;
     final proxyNames = proxyMaps.map((m) => m.name).toSet();
     final result = [...proxyMaps.map((m) => m.name)];
     for (final m in kBattleRoyaleMaps) {
       if (proxyNames.contains(m.name)) continue;
-      if (showAll || notifySet.contains(m.name)) result.add(m.name);
+      if (effectiveShowAll || notifySet.contains(m.name)) result.add(m.name);
     }
     return result;
   }
 
   // Number of non-proxy, unselected maps still hidden behind the expand tile.
   int _hiddenCount(List<AppMap> proxyMaps, Set<String> notifySet, bool showAll) {
-    if (showAll) return 0;
+    if (showAll || proxyMaps.isEmpty) return 0;
     final proxyNames = proxyMaps.map((m) => m.name).toSet();
     return kBattleRoyaleMaps
         .where((m) => !proxyNames.contains(m.name) && !notifySet.contains(m.name))
