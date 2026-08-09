@@ -34,6 +34,10 @@ class RankedHistoryStore {
   final String? _overridePath;
   Database? _db;
 
+  // this._overridePath can't be a named parameter here — private identifiers
+  // aren't callable from outside the library, and `overridePath:` must stay
+  // public for existing callers.
+  // ignore: prefer_initializing_formals
   RankedHistoryStore({String? overridePath}) : _overridePath = overridePath;
 
   Future<Database> _open() async {
