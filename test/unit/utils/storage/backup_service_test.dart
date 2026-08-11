@@ -68,11 +68,13 @@ void main() {
         PrefsKeys.playerName: 'Aceu',
         PrefsKeys.statsRefreshMinutes: 30,
         PrefsKeys.compactLegendCards: true,
+        PrefsKeys.keepScreenOn: true,
       });
 
       expect(prefs.getString(PrefsKeys.playerName), 'Aceu');
       expect(prefs.getInt(PrefsKeys.statsRefreshMinutes), 30);
       expect(prefs.getBool(PrefsKeys.compactLegendCards), isTrue);
+      expect(prefs.getBool(PrefsKeys.keepScreenOn), isTrue);
     });
 
     test('skips keys not on the backup allowlist', () async {

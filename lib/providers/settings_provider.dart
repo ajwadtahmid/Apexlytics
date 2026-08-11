@@ -68,6 +68,7 @@ class PlayerSettings {
   final int activeProfileIndex;
   final int statsRefreshMinutes; // 0 = manual only
   final bool compactLegendCards;
+  final bool keepScreenOn;
   final bool notifyPubsMapRotation;
   final bool notifyRankedMapRotation;
   final bool notifyMixtapeMapRotation;
@@ -85,6 +86,7 @@ class PlayerSettings {
     this.activeProfileIndex = 0,
     this.statsRefreshMinutes = 0,
     this.compactLegendCards = false,
+    this.keepScreenOn = false,
     this.notifyPubsMapRotation = false,
     this.notifyRankedMapRotation = false,
     this.notifyMixtapeMapRotation = false,
@@ -117,6 +119,7 @@ class PlayerSettings {
           other.activeProfileIndex == activeProfileIndex &&
           other.statsRefreshMinutes == statsRefreshMinutes &&
           other.compactLegendCards == compactLegendCards &&
+          other.keepScreenOn == keepScreenOn &&
           other.notifyPubsMapRotation == notifyPubsMapRotation &&
           other.notifyRankedMapRotation == notifyRankedMapRotation &&
           other.notifyMixtapeMapRotation == notifyMixtapeMapRotation &&
@@ -136,6 +139,7 @@ class PlayerSettings {
     activeProfileIndex,
     statsRefreshMinutes,
     compactLegendCards,
+    keepScreenOn,
     notifyPubsMapRotation,
     notifyRankedMapRotation,
     notifyMixtapeMapRotation,
@@ -154,6 +158,7 @@ class PlayerSettings {
     int? activeProfileIndex,
     int? statsRefreshMinutes,
     bool? compactLegendCards,
+    bool? keepScreenOn,
     bool? notifyPubsMapRotation,
     bool? notifyRankedMapRotation,
     bool? notifyMixtapeMapRotation,
@@ -171,6 +176,7 @@ class PlayerSettings {
       activeProfileIndex: activeProfileIndex ?? this.activeProfileIndex,
       statsRefreshMinutes: statsRefreshMinutes ?? this.statsRefreshMinutes,
       compactLegendCards: compactLegendCards ?? this.compactLegendCards,
+      keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       notifyPubsMapRotation:
           notifyPubsMapRotation ?? this.notifyPubsMapRotation,
       notifyRankedMapRotation:
@@ -272,6 +278,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       activeProfileIndex: activeIdx,
       statsRefreshMinutes: _prefs.getInt(PrefsKeys.statsRefreshMinutes) ?? 0,
       compactLegendCards: _prefs.getBool(PrefsKeys.compactLegendCards) ?? false,
+      keepScreenOn: _prefs.getBool(PrefsKeys.keepScreenOn) ?? false,
       notifyPubsMapRotation:
           _prefs.getBool(PrefsKeys.notifyPubsMapRotation) ?? false,
       notifyRankedMapRotation:
@@ -409,6 +416,9 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     (s) => s.copyWith(compactLegendCards: v),
   );
 
+  Future<void> setKeepScreenOn(bool v) =>
+      _setBool(PrefsKeys.keepScreenOn, v, (s) => s.copyWith(keepScreenOn: v));
+
   Future<void> setRankedNotifyMinutesBefore(int v) => _setInt(
     PrefsKeys.rankedNotifyMinutes,
     v,
@@ -495,6 +505,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       _prefs.remove(PrefsKeys.favoritePubsMapNames),
       _prefs.remove(PrefsKeys.statsRefreshMinutes),
       _prefs.remove(PrefsKeys.compactLegendCards),
+      _prefs.remove(PrefsKeys.keepScreenOn),
       _prefs.remove(PrefsKeys.defaultTab),
     ]);
     state = state.copyWith(
@@ -512,6 +523,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       favoritePubsMapNames: [],
       statsRefreshMinutes: 0,
       compactLegendCards: false,
+      keepScreenOn: false,
       defaultTab: 0,
     );
   }

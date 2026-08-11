@@ -34,6 +34,7 @@ const _staticBackupKeys = {
   PrefsKeys.playerPlatform,
   PrefsKeys.statsRefreshMinutes,
   PrefsKeys.compactLegendCards,
+  PrefsKeys.keepScreenOn,
   PrefsKeys.notifyPubsMapRotation,
   PrefsKeys.notifyRankedMapRotation,
   PrefsKeys.notifyMixtapeMapRotation,

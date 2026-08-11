@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'providers/map_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/notification_provider.dart';
@@ -73,11 +74,31 @@ class _AppShellState extends ConsumerState<_AppShell>
             .setTab(appTabForDefault(next.defaultTab)));
       }
     });
+    _applyWakelock(ref.read(playerSettingsProvider).keepScreenOn);
+    ref.listenManual(
+      playerSettingsProvider.select((s) => s.keepScreenOn),
+      (_, keepScreenOn) => _applyWakelock(keepScreenOn),
+    );
     unawaited(_runStartupSequence());
+  }
+
+  /// Holds the screen awake while the app is in the foreground. No lifecycle
+  /// handling is needed: Android scopes FLAG_KEEP_SCREEN_ON to the visible
+  /// window and iOS ignores `isIdleTimerDisabled` unless the app is active, so
+  /// the screen sleeps normally as soon as the user switches away.
+  void _applyWakelock(bool enabled) {
+    unawaited(
+      WakelockPlus.toggle(enable: enabled).catchError((Object e) {
+        // Unsupported platform or missing D-Bus (Linux/CI) — the setting is a
+        // convenience, so a failure here must never break app startup.
+        log.w('Wakelock toggle failed', error: e);
+      }),
+    );
   }
 
   @override
   void dispose() {
+    _applyWakelock(false);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

@@ -28,6 +28,8 @@ class StatsRefreshSection extends ConsumerWidget {
         ref.watch(playerSettingsProvider.select((s) => s.statsRefreshMinutes));
     final compactLegendCards =
         ref.watch(playerSettingsProvider.select((s) => s.compactLegendCards));
+    final keepScreenOn =
+        ref.watch(playerSettingsProvider.select((s) => s.keepScreenOn));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,6 +90,24 @@ class StatsRefreshSection extends ConsumerWidget {
                     value: compactLegendCards,
                     onChanged: (v) =>
                         ref.read(playerSettingsProvider.notifier).setCompactLegendCards(v),
+                    activeThumbColor: AppTheme.accent,
+                    activeTrackColor: AppTheme.accent.withAlpha(120),
+                  ),
+                ],
+              ),
+              const Divider(color: AppTheme.surface2, height: 24),
+              Row(
+                children: [
+                  const Icon(Icons.stay_current_portrait,
+                      color: AppTheme.textPrimary, size: 20),
+                  const SizedBox(width: AppTheme.sm),
+                  const Expanded(
+                    child: Text('Keep screen on', style: TextStyle(fontSize: 14)),
+                  ),
+                  Switch(
+                    value: keepScreenOn,
+                    onChanged: (v) =>
+                        ref.read(playerSettingsProvider.notifier).setKeepScreenOn(v),
                     activeThumbColor: AppTheme.accent,
                     activeTrackColor: AppTheme.accent.withAlpha(120),
                   ),
