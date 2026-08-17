@@ -193,7 +193,16 @@ class _StatsViewState extends ConsumerState<_StatsView> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(name),
+              // Flexible so a long name (e.g. a Twitch-style handle) shrinks
+              // and ellipsizes instead of overflowing the AppBar — a bare
+              // Text here has no width limit and renders the overflow stripes.
+              Flexible(
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
               const SizedBox(width: AppTheme.xs),
               const Icon(
                 Icons.keyboard_arrow_down,

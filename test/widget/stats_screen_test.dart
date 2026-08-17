@@ -28,10 +28,10 @@ class _FakeStatsNotifier extends MyPlayerStatsNotifier {
   Future<void> softRefresh() async {}
 }
 
-Future<SharedPreferences> _prefsWithProfile() async {
+Future<SharedPreferences> _prefsWithProfile({String name = 'TestPlayer'}) async {
   SharedPreferences.setMockInitialValues({
     'player_profiles': jsonEncode([
-      {'name': 'TestPlayer', 'uid': 'uid123', 'platform': 'PC'},
+      {'name': name, 'uid': 'uid123', 'platform': 'PC'},
     ]),
     'active_profile_index': 0,
   });
@@ -98,5 +98,31 @@ void main() {
 
     expect(find.byType(StaleBanner), findsOneWidget);
     expect(find.textContaining('Last synced'), findsOneWidget);
+  });
+
+  testWidgets('a long player name ellipsizes instead of overflowing the AppBar',
+      (tester) async {
+    // Width chosen deliberately: narrow enough that the unfixed AppBar
+    // overflows by 156px with this name (verified), but wide enough to stay
+    // clear of unrelated, pre-existing overflow in PlayerInfoCard/
+    // RankedInfoCard's fixed-width rows that a narrower surface also trips —
+    // this test is only about the AppBar title.
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final prefs = await _prefsWithProfile(name: 'Twitch.tv/ChaoticMuch');
+
+    await tester.pumpWidget(
+      _app(prefs, result: ApiResult<PlayerStats?>(buildStats())),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+
+    final text = tester.widget<Text>(find.text('Twitch.tv/ChaoticMuch'));
+    expect(text.overflow, TextOverflow.ellipsis);
+    expect(text.maxLines, 1);
   });
 }
