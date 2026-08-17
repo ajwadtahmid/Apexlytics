@@ -64,7 +64,15 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
     if (value && !_searchByUid) {
       await showUidWarningIfNeeded(context, ref);
     }
-    if (mounted) setState(() => _searchByUid = value);
+    if (!mounted) return;
+    setState(() {
+      _searchByUid = value;
+      // inputFormatters only filter *future* edits — whatever's already typed
+      // (e.g. a name, or the stored profile name this form pre-fills with)
+      // isn't retroactively cleaned, so drop it explicitly rather than let it
+      // be submitted as a UID untouched.
+      if (value && !isDigitsOnly(_controller.text)) _controller.clear();
+    });
   }
 
   Future<void> _submit() async {
@@ -74,6 +82,11 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
       setState(
         () => _error = _searchByUid ? 'Enter a player UID.' : 'Enter a player name.',
       );
+      return;
+    }
+    if (_searchByUid && !isDigitsOnly(query)) {
+      // Formatters should already guarantee this — belt and suspenders.
+      setState(() => _error = 'UID must contain digits only.');
       return;
     }
     setState(() {
@@ -122,6 +135,8 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
           controller: _controller,
           onSubmitted: (_) => _submit(),
           textInputAction: TextInputAction.done,
+          keyboardType: _searchByUid ? TextInputType.number : TextInputType.text,
+          inputFormatters: _searchByUid ? uidOnlyInputFormatters : null,
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
             hintText: _searchByUid ? 'Numeric UID' : 'In-game name',

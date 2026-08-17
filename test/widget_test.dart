@@ -3,11 +3,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:apexlytics/app.dart';
+import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/search/search_screen.dart';
 import 'package:apexlytics/services/api_service.dart';
 import 'package:apexlytics/widgets/player_lookup_form.dart';
+
+/// Prefs with the one-time UID-search warning dialog already dismissed, so
+/// tapping the toggle in a test doesn't need to also handle that dialog.
+Future<SharedPreferences> _prefsUidWarningSeen() async {
+  SharedPreferences.setMockInitialValues({
+    PrefsKeys.uidSearchWarningShown: true,
+  });
+  return SharedPreferences.getInstance();
+}
 
 /// Wraps [widget] in the minimal scaffolding needed for Riverpod + Material.
 Widget _wrap(Widget widget, SharedPreferences prefs) {
@@ -100,6 +110,47 @@ void main() {
       await tester.pump();
       expect(find.text('PC'), findsWidgets);
     });
+
+    testWidgets('UID mode strips non-digit characters as they are typed',
+        (tester) async {
+      final uidPrefs = await _prefsUidWarningSeen();
+      await tester.pumpWidget(
+        _wrap(const PlayerLookupForm(submitLabel: 'Find Player'), uidPrefs),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'abc123');
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, '123');
+    });
+
+    testWidgets('switching to UID mode clears an existing non-digit value',
+        (tester) async {
+      final uidPrefs = await _prefsUidWarningSeen();
+      await tester.pumpWidget(
+        _wrap(
+          const PlayerLookupForm(
+            submitLabel: 'Update',
+            initialName: 'Aceu',
+            initialPlatform: 'PC',
+          ),
+          uidPrefs,
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Aceu'), findsOneWidget);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, isEmpty);
+    });
   });
 
   group('SearchScreen', () {
@@ -158,6 +209,39 @@ void main() {
 
       // Verify we're still on SearchScreen (no navigation happened)
       expect(find.byType(SearchScreen), findsOneWidget);
+    });
+
+    testWidgets('UID mode strips non-digit characters as they are typed',
+        (tester) async {
+      final uidPrefs = await _prefsUidWarningSeen();
+      final apiService = ApiService(uidPrefs);
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(uidPrefs),
+          apiServiceProvider.overrideWithValue(apiService),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: const SearchScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'abc123');
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, '123');
     });
   });
 }

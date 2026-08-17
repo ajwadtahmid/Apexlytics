@@ -31,12 +31,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (value && !_searchByUid) {
       await showUidWarningIfNeeded(context, ref);
     }
-    if (mounted) setState(() => _searchByUid = value);
+    if (!mounted) return;
+    setState(() {
+      _searchByUid = value;
+      // inputFormatters only filter *future* edits — drop any non-digit text
+      // already typed rather than let it be searched as a UID untouched.
+      if (value && !isDigitsOnly(_controller.text)) _controller.clear();
+    });
   }
 
   void _search([String? query, String? platform]) {
     final q = (query ?? _controller.text).trim();
     if (q.isEmpty) return;
+    if (_searchByUid && !isDigitsOnly(q)) {
+      // Formatters should already guarantee this — belt and suspenders.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('UID must contain digits only.')),
+      );
+      return;
+    }
     context.pushPage(
       PlayerResultPage(query: q, platform: platform ?? _platform, searchByUid: _searchByUid),
     );
@@ -109,6 +122,8 @@ class _SearchBar extends StatelessWidget {
             controller: controller,
             onSubmitted: (_) => onSearch(),
             textInputAction: TextInputAction.search,
+            keyboardType: searchByUid ? TextInputType.number : TextInputType.text,
+            inputFormatters: searchByUid ? uidOnlyInputFormatters : null,
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: 'Name or UID…',
