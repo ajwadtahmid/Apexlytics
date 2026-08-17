@@ -50,8 +50,9 @@ int clampStatsRefreshMinutes(int minutes) {
 
 // ── Player profile ────────────────────────────────────────────────────────────
 
-/// A single saved player account (name + UID + platform). Up to 3 profiles are
-/// stored under one app installation via [PlayerSettingsNotifier].
+/// A single saved player account (name + UID + platform). Up to
+/// [PlayerSettingsNotifier.maxProfileCount] profiles are stored under one app
+/// installation.
 class PlayerProfile {
   final String name;
   final String uid;
@@ -95,7 +96,7 @@ class PlayerProfile {
 /// through [PlayerSettingsNotifier] which writes each change to [SharedPreferences]
 /// before updating state — no setting is lost on a hot-restart or process kill.
 class PlayerSettings {
-  final List<PlayerProfile> profiles; // max 3
+  final List<PlayerProfile> profiles; // capped at maxProfileCount
   final int activeProfileIndex;
   final int statsRefreshMinutes; // 0 = manual only
   final bool compactLegendCards;
@@ -233,7 +234,7 @@ class PlayerSettings {
 }
 
 class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
-  static const int maxProfileCount = 3;
+  static const int maxProfileCount = 5;
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 

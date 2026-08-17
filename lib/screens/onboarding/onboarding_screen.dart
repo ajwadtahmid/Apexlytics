@@ -41,7 +41,7 @@ const _pages = <_OnboardingPage>[
     title: 'See your progress',
     body:
         'Add your player profile to track your legends, weapons, and career '
-        'stats. Save up to 3 profiles and switch between them anytime.',
+        'stats. Save up to 5 profiles and switch between them anytime.',
     tip:
         'Tip: equip the Apex Kills and Apex Damage trackers for legends you '
         'play. Stats only update for trackers that are equipped.',

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -151,6 +152,63 @@ void main() {
       addTearDown(container.dispose);
 
       expect(container.read(playerSettingsProvider).defaultTab, 3);
+    });
+
+    group('profile cap', () {
+      String profileJson(int count) => jsonEncode([
+            for (var i = 0; i < count; i++)
+              {'name': 'P$i', 'uid': '100000000000$i', 'platform': 'PC'},
+          ]);
+
+      test('addProfile fills up to the cap and then refuses', () async {
+        final container = await makeContainer();
+        addTearDown(container.dispose);
+        final notifier = container.read(playerSettingsProvider.notifier);
+
+        for (var i = 0; i < PlayerSettingsNotifier.maxProfileCount; i++) {
+          await notifier.addProfile('P$i', '100000000000$i', 'PC');
+        }
+        expect(
+          container.read(playerSettingsProvider).profiles.length,
+          PlayerSettingsNotifier.maxProfileCount,
+        );
+
+        await notifier.addProfile('overflow', '1999999999999', 'PC');
+        expect(
+          container.read(playerSettingsProvider).profiles.length,
+          PlayerSettingsNotifier.maxProfileCount,
+          reason: 'the cap must hold',
+        );
+        expect(
+          container
+              .read(playerSettingsProvider)
+              .profiles
+              .any((p) => p.name == 'overflow'),
+          isFalse,
+        );
+      });
+
+      test('stored profiles beyond the cap are truncated on read', () async {
+        final container = await makeContainer({
+          'player_profiles':
+              profileJson(PlayerSettingsNotifier.maxProfileCount + 3),
+        });
+        addTearDown(container.dispose);
+
+        expect(
+          container.read(playerSettingsProvider).profiles.length,
+          PlayerSettingsNotifier.maxProfileCount,
+        );
+      });
+
+      test('a profile set saved under the old cap of 3 still loads', () async {
+        final container = await makeContainer({'player_profiles': profileJson(3)});
+        addTearDown(container.dispose);
+
+        final profiles = container.read(playerSettingsProvider).profiles;
+        expect(profiles.length, 3);
+        expect(profiles.first.name, 'P0');
+      });
     });
 
     test('profiles list starts empty', () async {
