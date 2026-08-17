@@ -129,8 +129,9 @@ void main() {
       expect(field.controller!.text, '123');
     });
 
-    testWidgets('switching to UID mode clears an existing non-digit value',
-        (tester) async {
+    testWidgets(
+        'switching to UID mode with an existing name keeps the text and '
+        'shows an error', (tester) async {
       final uidPrefs = await _prefsUidWarningSeen();
       await tester.pumpWidget(
         _wrap(
@@ -148,8 +149,35 @@ void main() {
       await tester.tap(find.byType(Switch));
       await tester.pump();
 
+      // An accidental tap on the toggle must not wipe out a typed name.
       final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.controller!.text, isEmpty);
+      expect(field.controller!.text, 'Aceu');
+      expect(find.text('UID must contain digits only.'), findsOneWidget);
+    });
+
+    testWidgets('the digits-only error clears once the user edits the field',
+        (tester) async {
+      final uidPrefs = await _prefsUidWarningSeen();
+      await tester.pumpWidget(
+        _wrap(
+          const PlayerLookupForm(
+            submitLabel: 'Update',
+            initialName: 'Aceu',
+            initialPlatform: 'PC',
+          ),
+          uidPrefs,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(find.text('UID must contain digits only.'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '123');
+      await tester.pump();
+
+      expect(find.text('UID must contain digits only.'), findsNothing);
     });
   });
 
@@ -242,6 +270,42 @@ void main() {
 
       final field = tester.widget<TextField>(find.byType(TextField));
       expect(field.controller!.text, '123');
+    });
+
+    testWidgets(
+        'switching to UID mode with existing text keeps it and shows a '
+        'digits-only message', (tester) async {
+      final uidPrefs = await _prefsUidWarningSeen();
+      final apiService = ApiService(uidPrefs);
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(uidPrefs),
+          apiServiceProvider.overrideWithValue(apiService),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: const SearchScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.enterText(find.byType(TextField), 'Aceu');
+      await tester.pump();
+
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, 'Aceu');
+      expect(find.text('UID must contain digits only.'), findsOneWidget);
     });
   });
 }

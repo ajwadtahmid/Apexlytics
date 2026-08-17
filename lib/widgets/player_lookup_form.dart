@@ -67,11 +67,13 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
     if (!mounted) return;
     setState(() {
       _searchByUid = value;
-      // inputFormatters only filter *future* edits — whatever's already typed
-      // (e.g. a name, or the stored profile name this form pre-fills with)
-      // isn't retroactively cleaned, so drop it explicitly rather than let it
-      // be submitted as a UID untouched.
-      if (value && !isDigitsOnly(_controller.text)) _controller.clear();
+      // Flag it, don't touch it — a name someone typed out shouldn't vanish
+      // because of an accidental tap on the toggle. inputFormatters block new
+      // non-digit keystrokes going forward; anything already there just gets
+      // called out so the user can fix or clear it themselves.
+      _error = (value && !isDigitsOnly(_controller.text))
+          ? 'UID must contain digits only.'
+          : null;
     });
   }
 
@@ -134,6 +136,11 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
         TextField(
           controller: _controller,
           onSubmitted: (_) => _submit(),
+          // Clears the toggle-time "digits only" message as soon as the user
+          // starts fixing it, instead of leaving a stale error on screen.
+          onChanged: (_) {
+            if (_error != null) setState(() => _error = null);
+          },
           textInputAction: TextInputAction.done,
           keyboardType: _searchByUid ? TextInputType.number : TextInputType.text,
           inputFormatters: _searchByUid ? uidOnlyInputFormatters : null,

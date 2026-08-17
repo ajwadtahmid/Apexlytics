@@ -32,12 +32,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       await showUidWarningIfNeeded(context, ref);
     }
     if (!mounted) return;
-    setState(() {
-      _searchByUid = value;
-      // inputFormatters only filter *future* edits — drop any non-digit text
-      // already typed rather than let it be searched as a UID untouched.
-      if (value && !isDigitsOnly(_controller.text)) _controller.clear();
-    });
+    setState(() => _searchByUid = value);
+    // Flag it, don't touch it — an accidental tap on the toggle shouldn't
+    // wipe out whatever's already typed. inputFormatters block new non-digit
+    // keystrokes going forward; this just calls out anything already there.
+    if (value && !isDigitsOnly(_controller.text)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('UID must contain digits only.')),
+      );
+    }
   }
 
   void _search([String? query, String? platform]) {
