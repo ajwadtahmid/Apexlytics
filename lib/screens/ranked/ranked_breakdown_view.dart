@@ -151,48 +151,62 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
 
   /// What to say when there is no history yet.
   ///
-  /// The distinction is the whole point: a *queued* user only has to wait, but
-  /// an *untracked* user has to act — nothing is being recorded for them at all,
-  /// and every hour they don't act is history that can never be recovered.
+  /// The title carries the distinction: "Ready to record" means the user has
+  /// to act — nothing is being tracked at all. "Warming up" means tracking is
+  /// live and it's a matter of time. But every branch's *message* gives the
+  /// same instruction regardless of title, because "Warming up" alone still
+  /// reads as passive — the user has to keep the app (or an
+  /// apexlegendsstatus.com tab) open and finish a ranked match either way.
+  ///
+  /// `.value` rather than `.asData?.value` deliberately: during a refresh the
+  /// provider briefly has no `AsyncData`, and `asData` would drop straight to
+  /// the least informative branch on every retry — `.value` keeps the last
+  /// known outcome instead.
   Widget _emptyState() {
-    final outcome = ref.watch(rankedSyncProvider(widget.uid)).asData?.value;
+    final outcome = ref.watch(rankedSyncProvider(widget.uid)).value;
+    final recording = ref.watch(
+      playerSettingsProvider.select((s) => s.statsRefreshMinutes > 0),
+    );
 
-    if (outcome == RankedSyncOutcome.notTracked) {
-      final recording = ref.watch(
-        playerSettingsProvider.select((s) => s.statsRefreshMinutes > 0),
-      );
-      final polls =
-          ref.watch(gamesEligibilityProvider(widget.uid)).asData?.value;
-
+    // Nothing is being recorded for this UID at all — the only state that
+    // needs an action rather than just patience.
+    if (outcome == RankedSyncOutcome.notTracked && !recording) {
       return _MessageState(
         icon: Icons.radio_button_checked,
-        title: recording ? 'Warming up' : 'Not recording yet',
-        message: [
-          'Match history is only recorded while your profile is being polled '
-              '— so Apexlytics has to be open while you play.',
-          if (recording && polls != null)
-            'Polls recorded so far: ${polls.pollCount}. It takes a few before '
-                'matches start coming through.'
-          else
-            'Starting recording sets stats updates to every 5 minutes and '
-                'keeps the screen on.',
-          'Only matches played from now on can be recorded — earlier ones are '
-              'not recoverable.',
-        ].join('\n\n'),
-        actionLabel: recording ? null : 'Start recording',
-        onAction: recording ? null : _startRecording,
+        title: 'Ready to record',
+        message:
+            'Match history is only recorded while your profile is being '
+            'polled — so keep Apexlytics open (or a browser tab on '
+            'apexlegendsstatus.com) and finish a ranked match.\n\n'
+            'Only matches played from now on can be recorded — earlier ones '
+            'are not recoverable.',
+        actionLabel: 'Start recording',
+        onAction: _startRecording,
         onRetry: _refresh,
       );
     }
 
+    final polls = ref.watch(gamesEligibilityProvider(widget.uid)).value;
+    final pollProgress = recording && polls != null && polls.pollCount < 3
+        ? ' Polls recorded so far: ${polls.pollCount} of 3 — tracking starts '
+            'once that\'s reached.'
+        : '';
+    final statusNote = switch (outcome) {
+      RankedSyncOutcome.queued =>
+        ' The history server is busy right now, but nothing is lost — this '
+            'resolves on its own.',
+      RankedSyncOutcome.offline =>
+        ' Couldn\'t reach the server just now — showing the latest we have.',
+      _ => '', // synced with zero matches so far, cooldown, or still loading
+    };
+
     return _MessageState(
       icon: Icons.hourglass_empty,
       title: 'Warming up',
-      message: outcome == RankedSyncOutcome.queued
-          ? 'The history server is busy right now. Your matches will appear '
-              'here shortly — nothing is lost in the meantime.'
-          : 'Ranked history will appear here once a few matches have been '
-              'recorded. Check back soon.',
+      message:
+          'Keep Apexlytics open (or a browser tab on apexlegendsstatus.com) '
+          'while you play, and finish a ranked match — it\'ll appear here '
+          'once it ends.$pollProgress$statusNote',
       onRetry: _refresh,
     );
   }
