@@ -186,27 +186,29 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
       );
     }
 
-    final polls = ref.watch(gamesEligibilityProvider(widget.uid)).value;
-    final pollProgress = recording && polls != null && polls.pollCount < 3
-        ? ' Polls recorded so far: ${polls.pollCount} of 3 — tracking starts '
-            'once that\'s reached.'
-        : '';
-    final statusNote = switch (outcome) {
-      RankedSyncOutcome.queued =>
+    final (title, icon, statusNote) = switch (outcome) {
+      RankedSyncOutcome.queued => (
+        'Server busy',
+        Icons.cloud_queue,
         ' The history server is busy right now, but nothing is lost — this '
             'resolves on its own.',
-      RankedSyncOutcome.offline =>
+      ),
+      RankedSyncOutcome.offline => (
+        'Offline',
+        Icons.cloud_off,
         ' Couldn\'t reach the server just now — showing the latest we have.',
-      _ => '', // synced with zero matches so far, cooldown, or still loading
+      ),
+      // synced with zero matches so far, cooldown, or still loading
+      _ => ('Warming up', Icons.hourglass_empty, ''),
     };
 
     return _MessageState(
-      icon: Icons.hourglass_empty,
-      title: 'Warming up',
+      icon: icon,
+      title: title,
       message:
           'Keep Apexlytics open (or a browser tab on apexlegendsstatus.com) '
           'while you play, and finish a ranked match — it\'ll appear here '
-          'once it ends.$pollProgress$statusNote',
+          'once it ends.$statusNote',
       onRetry: _refresh,
     );
   }

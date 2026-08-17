@@ -112,12 +112,17 @@ final rankedSyncProvider = FutureProvider.autoDispose
   final nextSyncAt = prefs.getInt(PrefsKeys.gamesNextSync(uid)) ?? 0;
   if (DateTime.now().millisecondsSinceEpoch < nextSyncAt) {
     // Report the reason we're waiting rather than a generic "cooldown", so a
-    // user with nothing recorded keeps seeing the "keep the app open" guidance
-    // instead of it flickering away on the next tab switch.
+    // user with nothing recorded keeps seeing the "keep the app open" guidance,
+    // and a queued user keeps seeing "server busy", instead of it flickering
+    // to a less informative state on retry/tab switch.
     final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
-    return last == RankedSyncOutcome.notTracked.name
-        ? RankedSyncOutcome.notTracked
-        : RankedSyncOutcome.cooldown;
+    if (last == RankedSyncOutcome.notTracked.name) {
+      return RankedSyncOutcome.notTracked;
+    }
+    if (last == RankedSyncOutcome.queued.name) {
+      return RankedSyncOutcome.queued;
+    }
+    return RankedSyncOutcome.cooldown;
   }
 
   try {
