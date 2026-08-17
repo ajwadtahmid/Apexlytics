@@ -90,15 +90,9 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
         name = statsResult.data.name;
         uid = statsResult.data.uid;
       } else {
-        // nameToUid only returns the lookup result (may not be canonical).
-        // Fetch full stats to get the canonical display name.
-        final lookupResult = await ref
-            .read(playerServiceProvider)
-            .nameToUid(query, _platform);
-        if (!mounted) return;
         final statsResult = await ref
             .read(playerServiceProvider)
-            .getPlayerStatsByUid(lookupResult.uid, _platform);
+            .getPlayerStats(query, _platform);
         name = statsResult.data.name;
         uid = statsResult.data.uid;
       }
