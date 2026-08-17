@@ -24,6 +24,7 @@
   - [Name to UID](#10-name-to-uid)
 - [Error Codes](#error-codes)
 - [ApexLegendsStatus Render Proxy](#apexlegendsstatus-render-proxy)
+  - [Match History Budget](#match-history-budget)
 
 ---
 
@@ -302,6 +303,7 @@ A thin Express proxy that keeps the API key server-side and adds caching, rate l
 | `/maprotation` | 30 seconds |
 | `/servers` | 5 minutes |
 | `/predator` | 15 minutes |
+| `/games` | 6 hours (`GAMES_COOLDOWN_MS`) — same value as the per-UID cooldown, so the cached body and the "we have a fresh answer" flag expire together |
 
 ### Proxy Routes
 
@@ -316,8 +318,30 @@ A thin Express proxy that keeps the API key server-side and adds caching, rate l
 | `GET /servers` | `/servers` | Cached 5 min |
 | `GET /predator` | `/predator` | Cached 15 min |
 | `GET /leaderboard?platform=&legend=` | `/leaderboard` | Whitelist required. Optional: `key` |
-| `GET /games?uid=&mode=&start=&end=&limit=` | `/games` | Whitelist required. `mode` must be `BATTLE_ROYALE`, `ARENAS`, or `UNKNOWN` |
+| `GET /games?uid=&mode=&start=&end=&limit=&force=` | `/games` | **Open to all UIDs, budgeted.** See [Match History Budget](#match-history-budget). `mode` must be `BATTLE_ROYALE`, `ARENAS`, or `UNKNOWN`. `force=1` bypasses the eligibility gate |
+| `GET /games/capacity` | — | `{maxPerHour, used, free, windowResetsAt, waitlistDepth, locked}` |
+| `GET /games/eligibility?uid=` | — | `{eligible, lastPolledAt, pollCount}` — check before offering a sync |
+| `GET /priority-uids` | — | UIDs with preferential access to the budget |
+| `GET /approved-uids` | — | ⚠️ Deprecated alias for `/priority-uids`. Frozen until old app builds drain |
 | `GET /history?uid=&platform=&action=` | `/bridge?history=1` | Legacy match history. `action`: `info`, `get`, `delete`, `add` |
+
+### Match History Budget
+
+Upstream allows **5 unique players per hour** on `/games` — uniques, not requests, so once a UID has been fetched inside the hour every further request for it is free. `/games` is open to any UID, and the proxy rations that budget rather than gating on an allowlist.
+
+Tracking is **client-driven**: upstream only accumulates match data for a player while that player is being polled via `/bridge`. Keeping the app open (with a stats refresh interval set) or an apexlegendsstatus.com tab open both do this. History therefore accrues **forward only** — matches played before tracking started are unrecoverable.
+
+| Status | Meaning |
+| --- | --- |
+| `200` | Match array, exactly as upstream returns it. From upstream or the 6 h cache |
+| `202` | No fresh data. Body is `{status, uid, position?, reason?, retryAfterSeconds, windowResetsAt}` with `status` of `queued` or `not_tracked`. `Retry-After` is also set as a header |
+| `400` | `uid` missing or not 10–20 digits, or an unknown `mode` |
+
+> ⚠️ `202` is a **success** code: `res.ok` and Dio's default `validateStatus` both accept any 2xx. Clients must branch on `status == 200` explicitly, or a queued response walks into the match-history parser.
+
+`not_tracked` means nobody is polling that UID, so upstream has nothing recorded and a slot would be spent to learn that. The gate is soft — pass `force=1` to spend a slot anyway, which is required for users tracking themselves via an apexlegendsstatus.com tab, since that traffic never reaches this proxy. Priority UIDs skip the gate entirely; the proxy's own 4-minute poller guarantees their tracking.
+
+When the hour is exhausted, callers are ranked by distinct requesters plus a per-15-minute aging term, and only askers seen within `GAMES_ACTIVE_WINDOW_MS` compete — otherwise a client that has closed the app would hold a free slot hostage.
 
 ### Not Proxied
 
@@ -333,6 +357,22 @@ A thin Express proxy that keeps the API key server-side and adds caching, rate l
 | `CLIENT_TOKEN` | ❌ | Shared secret for `x-client-token` header. Without it, any caller can use the proxy |
 | `PORT` | ❌ | Server port, defaults to `3000` |
 | `ALLOWED_ORIGINS` | ❌ | Comma-separated list of allowed CORS origins |
+| `RATE_LIMIT_PER_MIN` | ❌ | Inbound requests per minute per IP, defaults to `60` |
+
+All `/games` budget knobs are optional and defaulted — nothing breaks if they are unset. A malformed value falls back to the default rather than refusing to start.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `GAMES_MAX_UNIQUE_PER_HOUR` | `5` | Raise only if the upstream cap is raised |
+| `PRIORITY_RESERVED_SLOTS` | `0` | Slots held back from public callers. `3` = strict (old app builds can never be queued), `0` = fully opportunistic |
+| `GAMES_COOLDOWN_MS` | `21600000` (6 h) | Unified per-UID cooldown and response cache |
+| `GAMES_PRIORITY_COOLDOWN_MS` | `300000` (5 min) | The same, for priority UIDs. Short because a repeat fetch for a UID already counted in the hour costs nothing against the uniques cap |
+| `GAMES_ACTIVE_WINDOW_MS` | `600000` (10 min) | Only askers seen this recently compete for a slot |
+| `GAMES_RETRY_DEFAULT_S` | `300` | `Retry-After` hint when not queued on capacity |
+| `COLD_START_PHANTOM_SLOTS` | `2` | Slots treated as spent after a restart, since the previous process's claims died with it and every deploy is a cold boot |
+| `GAMES_ELIGIBILITY_REQUIRED` | `1` | `0` disables the soft `not_tracked` gate |
+| `PUBLIC_MAX_NEW_UIDS_PER_IP_PER_HOUR` | `0` | Off. Pre-wired per-IP cap, enable only if abuse appears |
+| `GAMES_DRY_RUN` | `0` | Skip upstream and return an empty match array. At 5 uniques/hour, one honest end-to-end test costs the entire hour's real budget |
 
 ### Error Responses
 
@@ -341,6 +381,8 @@ The proxy never forwards raw upstream error payloads. All errors return:
 ```json
 { "error": "human-readable message" }
 ```
+
+…except `/games`, whose `202` is a documented non-error state carrying a JSON body rather than an `error` field. See [Match History Budget](#match-history-budget).
 
 | Scenario | Status | Message |
 | --- | --- | --- |

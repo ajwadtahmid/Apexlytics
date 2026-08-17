@@ -53,13 +53,15 @@ void main() {
       expect(find.text('Skip'), findsOneWidget);
       expect(find.text('Get started'), findsNothing);
 
-      // Advance through all four pages.
-      for (var i = 0; i < 3; i++) {
+      // Advance to the last page. Driven by the CTA rather than a hard-coded
+      // page count, so adding a page doesn't break this test — the bound is
+      // just a guard against an infinite loop if Next ever stops advancing.
+      for (var i = 0; i < 20 && find.text('Next').evaluate().isNotEmpty; i++) {
         await tester.tap(find.text('Next'));
         await tester.pumpAndSettle();
       }
 
-      expect(find.text('Scout friends and rivals'), findsOneWidget);
+      expect(find.text('Record your ranked history'), findsOneWidget);
       expect(find.text('Get started'), findsOneWidget);
 
       await tester.tap(find.text('Get started'));
@@ -121,8 +123,8 @@ void main() {
 
       expect(find.text('Welcome to Apexlytics'), findsOneWidget);
 
-      // Finish the tour: three Next taps + Get started.
-      for (var i = 0; i < 3; i++) {
+      // Finish the tour. Page count is deliberately not hard-coded here.
+      for (var i = 0; i < 20 && find.text('Next').evaluate().isNotEmpty; i++) {
         await tester.tap(find.text('Next'));
         await tester.pumpAndSettle();
       }

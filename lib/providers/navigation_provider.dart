@@ -1,16 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'ranked_provider.dart';
+import 'settings_provider.dart';
 
 /// Stable tab identities. The visible set (and therefore each tab's *position*)
-/// varies — Ranked only appears for approved UIDs — so the app tracks the
+/// varies — Ranked only appears once a profile is linked — so the app tracks the
 /// selected tab by identity, never by raw index. This keeps the stored
 /// `defaultTab` and navigation correct regardless of whether Ranked is present.
 enum AppTab { home, stats, ranked, search, settings }
 
 /// The ordered list of tabs currently visible. Ranked sits between My Stats and
-/// Search, and only for an approved active profile.
+/// Search.
+///
+/// It used to appear only for UIDs on a server-side allowlist. `/games` is now
+/// open to everyone, so the only remaining condition is having a profile to show
+/// a breakdown *for* — an empty Ranked tab on a fresh install helps nobody.
 final visibleTabsProvider = Provider<List<AppTab>>((ref) {
-  final rankedVisible = ref.watch(activeUidApprovedProvider);
+  final rankedVisible = ref.watch(
+    playerSettingsProvider.select((s) => s.isPlayerSet),
+  );
   return [
     AppTab.home,
     AppTab.stats,

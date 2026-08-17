@@ -8,18 +8,12 @@ class StatsRefreshSection extends ConsumerWidget {
   const StatsRefreshSection({super.key});
 
   static const _tabOptions = [(0, 'Home'), (1, 'My Stats'), (2, 'Search'), (3, 'Settings')];
-  static const _refreshOptions = [0, 10, 20, 30];
 
   static String _tabLabel(int tab) =>
       _tabOptions.firstWhere((t) => t.$1 == tab, orElse: () => (0, 'Home')).$2;
 
-  static String _refreshLabel(int minutes) => switch (minutes) {
-    0 => 'Manual',
-    10 => 'Every 10 min',
-    20 => 'Every 20 min',
-    30 => 'Every 30 min',
-    _ => 'Every $minutes min',
-  };
+  static String _refreshLabel(int minutes) =>
+      minutes <= 0 ? 'Manual' : 'Every $minutes min';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -134,16 +128,19 @@ class StatsRefreshSection extends ConsumerWidget {
   }
 
   Future<void> _pickRefreshInterval(BuildContext context, WidgetRef ref, int current) {
-    final currentIndex = _refreshOptions.indexOf(current);
+    // Clamping here as well as on read keeps the highlight honest even if the
+    // dialog is opened before a legacy value has been rewritten.
+    final currentIndex =
+        kStatsRefreshOptions.indexOf(clampStatsRefreshMinutes(current));
     return _showPickerDialog(
       context: context,
       title: 'Stats update frequency',
-      labels: _refreshOptions.map(_refreshLabel).toList(),
+      labels: kStatsRefreshOptions.map(_refreshLabel).toList(),
       currentIndex: currentIndex < 0 ? 0 : currentIndex,
       onSelect: (i) async {
         await ref
             .read(playerSettingsProvider.notifier)
-            .setStatsRefreshMinutes(_refreshOptions[i]);
+            .setStatsRefreshMinutes(kStatsRefreshOptions[i]);
       },
     );
   }

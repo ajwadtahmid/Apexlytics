@@ -22,10 +22,21 @@ class ApiConstants {
   static const String mapRotationVersion = '2';
 
   static const String gamesPath = '/games';
-  static const String approvedUidsPath = '/approved-uids';
+  static const String gamesEligibilityPath = '/games/eligibility';
 
   /// Rolling match-history window the `/games` endpoint serves per UID.
+  ///
+  /// History is only lost if 100+ ranked matches are played between syncs, which
+  /// is days-to-weeks of normal play — this is what makes an occasional top-up
+  /// enough, rather than needing a fetch per view.
   static const int gamesHistoryLimit = 100;
+
+  /// How long to wait before asking `/games` for the same UID again.
+  ///
+  /// Matches the backend's own per-UID cooldown: inside this window the server
+  /// answers from its cache, so an earlier client request can't return anything
+  /// newer anyway.
+  static const Duration gamesSyncCooldown = Duration(hours: 6);
 
   static const Map<String, String> platformLabels = {
     'PC': 'PC',

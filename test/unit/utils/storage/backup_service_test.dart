@@ -34,7 +34,8 @@ void main() {
 
     test('runtime caches and one-shot flags are excluded from backups', () {
       // Server-derived / device-local state must not travel between devices.
-      expect(backupIncludesKey(PrefsKeys.approvedUidsCache), isFalse);
+      expect(backupIncludesKey(PrefsKeys.gamesNextSync('1006838015507')), isFalse);
+      expect(backupIncludesKey(PrefsKeys.gamesLastOutcome('1006838015507')), isFalse);
       expect(backupIncludesKey(PrefsKeys.uidSearchWarningShown), isFalse);
       expect(backupIncludesKey(PrefsKeys.onboardingVersion), isFalse);
       expect(backupIncludesKey('api_cache:whatever'), isFalse);

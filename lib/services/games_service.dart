@@ -2,23 +2,91 @@ import '../constants/api_constants.dart';
 import '../models/ranked_match.dart';
 import 'api_service.dart';
 
-/// Fetches ranked match history from the gated `/games` endpoint.
+/// The result of a `/games` fetch.
 ///
-/// The endpoint is restricted to approved UIDs server-side; an unapproved UID
-/// yields a `403` that surfaces here as an [AppException]. The backend keeps the
-/// cache warm via its own cron, so the app only ever *reads* — never polls
-/// `/bridge` itself.
+/// The endpoint has two success shapes, and conflating them is the single
+/// easiest way to break this feature: `200` carries match data, `202` means the
+/// request was accepted but there is nothing fresh to give — either the hourly
+/// budget is exhausted or upstream isn't recording this player yet. Neither is
+/// an error, and neither should be shown as "0 matches".
+sealed class GamesResult {
+  const GamesResult();
+}
+
+/// Fresh match history from upstream.
+///
+/// An empty [matches] list is a valid answer, not a failure: it means tracking
+/// is active but no matches have been recorded in the window yet.
+class GamesMatches extends GamesResult {
+  final List<RankedMatch> matches;
+  const GamesMatches(this.matches);
+}
+
+/// The server accepted the request but has no fresh data (HTTP `202`).
+class GamesPending extends GamesResult {
+  /// `queued` — waiting for a slot in the hourly budget.
+  /// `not_tracked` — nobody is polling this UID, so nothing is being recorded.
+  final String status;
+
+  /// How long the server asked us to wait before trying again.
+  final Duration retryAfter;
+
+  const GamesPending({required this.status, required this.retryAfter});
+
+  /// True when no history is accruing at all — the user has to keep the app
+  /// (or an apexlegendsstatus.com tab) open before there is anything to fetch.
+  bool get isNotTracked => status == 'not_tracked';
+}
+
+/// Whether upstream is currently recording match history for a UID.
+typedef GamesEligibility = ({bool eligible, int? lastPolledAt, int pollCount});
+
+/// Reads ranked match history from the budgeted `/games` endpoint.
+///
+/// `/games` is open to every UID, but upstream only allows 5 unique players per
+/// hour, so the backend rations access and answers `202` when it can't serve.
+/// Match data only accrues while a player is being polled, which is what the
+/// app's stats-refresh timer does — history is therefore forward-only.
 class GamesService {
   final ApiService _api;
   GamesService(this._api);
 
-  Future<List<RankedMatch>> getMatches(String uid) async {
-    // Live match history — always fetch fresh; the backend cron is the cache.
-    final result = await _api.getList(
+  Future<GamesResult> getMatches(String uid) async {
+    // Live match history — always ask; the backend owns the caching and the
+    // per-UID cooldown, so there is nothing useful for the HTTP cache to do.
+    final response = await _api.getWithStatus(
       ApiConstants.gamesPath,
       params: {'uid': uid, 'limit': ApiConstants.gamesHistoryLimit},
-      noCache: true,
     );
-    return RankedMatch.listFromJson(result.data);
+
+    if (response.status == 200 && response.data is List) {
+      return GamesMatches(RankedMatch.listFromJson(response.data as List));
+    }
+
+    final body = response.data is Map ? response.data as Map : const {};
+    return GamesPending(
+      status: body['status']?.toString() ?? 'queued',
+      // Fall back to the server's own default rather than retrying immediately;
+      // a missing hint is not permission to hammer.
+      retryAfter: Duration(
+        seconds: (body['retryAfterSeconds'] as num?)?.toInt() ?? 300,
+      ),
+    );
+  }
+
+  /// Checks whether history is accruing *before* offering a sync, so the app can
+  /// say "keep the app open while you play" instead of spending a request to
+  /// discover there is nothing recorded.
+  Future<GamesEligibility> getEligibility(String uid) async {
+    final response = await _api.getWithStatus(
+      ApiConstants.gamesEligibilityPath,
+      params: {'uid': uid},
+    );
+    final body = response.data is Map ? response.data as Map : const {};
+    return (
+      eligible: body['eligible'] == true,
+      lastPolledAt: (body['lastPolledAt'] as num?)?.toInt(),
+      pollCount: (body['pollCount'] as num?)?.toInt() ?? 0,
+    );
   }
 }

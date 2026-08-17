@@ -35,11 +35,6 @@ class PrefsKeys {
   /// current version means the orientation tour is shown once on next launch.
   static const onboardingVersion = 'onboarding_version';
 
-  /// Cached `/approved-uids` allowlist (JSON list of UID strings). Read
-  /// synchronously on launch so the gated Ranked tab appears without a network
-  /// round-trip; refreshed in the background.
-  static const approvedUidsCache = 'approved_uids_cache';
-
   static const legendStats = 'legend_stats';
   static const legendVisitStack = 'legend_visit_stack';
   static const seasonHistory = 'season_history';
@@ -62,4 +57,15 @@ class PrefsKeys {
   /// is climbing toward). Absent = no goal set; the card falls back to tracking
   /// the next division automatically.
   static String rankGoalKeyFor(String uid) => 'rank_goal_$uid';
+
+  /// Earliest time (epoch ms) the app may ask `/games` for [uid] again.
+  ///
+  /// Persisted rather than held in memory because the cooldown outlives the
+  /// session: the backend serves the same cached body for 6 h, so re-asking on
+  /// every relaunch would be pure load for no new data.
+  static String gamesNextSync(String uid) => 'games_next_sync_$uid';
+
+  /// The last `RankedSyncOutcome` name recorded for [uid], so a request skipped
+  /// by [gamesNextSync] can still explain *why* it is waiting.
+  static String gamesLastOutcome(String uid) => 'games_last_outcome_$uid';
 }

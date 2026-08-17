@@ -68,9 +68,61 @@ void main() {
 
       await container
           .read(playerSettingsProvider.notifier)
-          .setStatsRefreshMinutes(30);
+          .setStatsRefreshMinutes(5);
 
-      expect(container.read(playerSettingsProvider).statsRefreshMinutes, 30);
+      expect(container.read(playerSettingsProvider).statsRefreshMinutes, 5);
+    });
+
+    group('stats refresh interval', () {
+      test('a fresh install inherits the 10-minute default', () async {
+        final container = await makeContainer();
+        addTearDown(container.dispose);
+
+        expect(
+          container.read(playerSettingsProvider).statsRefreshMinutes,
+          kDefaultStatsRefreshMinutes,
+        );
+      });
+
+      test('an explicit Manual choice survives the new default', () async {
+        final container = await makeContainer({'stats_refresh_minutes': 0});
+        addTearDown(container.dispose);
+
+        expect(container.read(playerSettingsProvider).statsRefreshMinutes, 0);
+      });
+
+      test('a retired interval is clamped and rewritten', () async {
+        final container = await makeContainer({'stats_refresh_minutes': 20});
+        addTearDown(container.dispose);
+
+        expect(container.read(playerSettingsProvider).statsRefreshMinutes, 15);
+
+        // The clamp is persisted, so the picker highlight and the stored value
+        // can't drift apart.
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getInt('stats_refresh_minutes'), 15);
+      });
+
+      test('a still-valid interval is left alone', () async {
+        final container = await makeContainer({'stats_refresh_minutes': 5});
+        addTearDown(container.dispose);
+
+        expect(container.read(playerSettingsProvider).statsRefreshMinutes, 5);
+      });
+
+      test('clampStatsRefreshMinutes snaps to the nearest offered option', () {
+        expect(clampStatsRefreshMinutes(0), 0);
+        expect(clampStatsRefreshMinutes(20), 15);
+        expect(clampStatsRefreshMinutes(30), 15);
+        expect(clampStatsRefreshMinutes(7), 5);
+        expect(clampStatsRefreshMinutes(8), 10);
+        // Never silently downgrades an active interval to "never poll".
+        expect(clampStatsRefreshMinutes(1), 5);
+        expect(clampStatsRefreshMinutes(-5), 0);
+        for (final option in kStatsRefreshOptions) {
+          expect(clampStatsRefreshMinutes(option), option);
+        }
+      });
     });
 
     test('setCompactLegendCards toggles value', () async {
@@ -121,14 +173,16 @@ void main() {
       final notifier = container.read(playerSettingsProvider.notifier);
 
       await notifier.setDefaultTab(2);
-      await notifier.setStatsRefreshMinutes(30);
+      await notifier.setStatsRefreshMinutes(5);
       await notifier.setCompactLegendCards(true);
       await notifier.setKeepScreenOn(true);
       await notifier.clear();
 
       final settings = container.read(playerSettingsProvider);
       expect(settings.defaultTab, 0);
-      expect(settings.statsRefreshMinutes, 0);
+      // Reset to the default rather than 0: the key is removed, so the next
+      // launch reads the default anyway.
+      expect(settings.statsRefreshMinutes, kDefaultStatsRefreshMinutes);
       expect(settings.compactLegendCards, isFalse);
       expect(settings.keepScreenOn, isFalse);
 

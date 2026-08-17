@@ -17,6 +17,37 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   );
 });
 
+// ── Stats refresh interval ────────────────────────────────────────────────────
+
+/// Selectable values for "Stats update frequency", in minutes. `0` = manual.
+///
+/// 5 min is the floor because upstream reconstructs match history by diffing
+/// consecutive `/bridge` polls: a short game can start and end inside a 10-min
+/// gap and never be recorded. Measured — 10 min mostly works but drops matches,
+/// 5 min is reliable. The ranked breakdown opt-in forces 5.
+const kStatsRefreshOptions = <int>[0, 5, 10, 15];
+
+/// Applied when the user has never opened the picker. Previously `0`, which
+/// meant a default install polled *never* and so accrued no match history.
+const kDefaultStatsRefreshMinutes = 10;
+
+/// Forced by the ranked-breakdown opt-in. 10 minutes mostly works but drops
+/// matches; this is the measured floor for reliable capture.
+const kRecordingRefreshMinutes = 5;
+
+/// Snaps a persisted interval onto [kStatsRefreshOptions].
+///
+/// Builds before this shipped stored `20`/`30`, which are no longer offered;
+/// left unclamped the picker highlights the first option ("Manual") while the
+/// settings row still reads "Every 20 min". Manual is a deliberate mode rather
+/// than a point on the scale, so a non-zero value never collapses to it.
+int clampStatsRefreshMinutes(int minutes) {
+  if (minutes <= 0) return 0;
+  return kStatsRefreshOptions
+      .where((o) => o > 0)
+      .reduce((a, b) => (minutes - a).abs() <= (minutes - b).abs() ? a : b);
+}
+
 // ── Player profile ────────────────────────────────────────────────────────────
 
 /// A single saved player account (name + UID + platform). Up to 3 profiles are
@@ -84,7 +115,7 @@ class PlayerSettings {
   const PlayerSettings({
     this.profiles = const [],
     this.activeProfileIndex = 0,
-    this.statsRefreshMinutes = 0,
+    this.statsRefreshMinutes = kDefaultStatsRefreshMinutes,
     this.compactLegendCards = false,
     this.keepScreenOn = false,
     this.notifyPubsMapRotation = false,
@@ -273,10 +304,29 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       );
     }
 
+    // Retire intervals that are no longer offered (20/30 → 15). Persisting the
+    // clamp keeps the stored value and the picker in agreement, and it's only
+    // written when it actually changes — so a user who never opened the picker
+    // stays keyless and keeps inheriting the default.
+    final storedRefresh = _prefs.getInt(PrefsKeys.statsRefreshMinutes);
+    final refreshMinutes = storedRefresh == null
+        ? kDefaultStatsRefreshMinutes
+        : clampStatsRefreshMinutes(storedRefresh);
+    if (storedRefresh != null && refreshMinutes != storedRefresh) {
+      unawaited(
+        _prefs
+            .setInt(PrefsKeys.statsRefreshMinutes, refreshMinutes)
+            .catchError((Object e) {
+              log.w('Stats refresh clamp persist failed', error: e);
+              return false;
+            }),
+      );
+    }
+
     return PlayerSettings(
       profiles: profiles,
       activeProfileIndex: activeIdx,
-      statsRefreshMinutes: _prefs.getInt(PrefsKeys.statsRefreshMinutes) ?? 0,
+      statsRefreshMinutes: refreshMinutes,
       compactLegendCards: _prefs.getBool(PrefsKeys.compactLegendCards) ?? false,
       keepScreenOn: _prefs.getBool(PrefsKeys.keepScreenOn) ?? false,
       notifyPubsMapRotation:
@@ -521,7 +571,9 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       wildcardNotifyMinutesBefore: 0,
       favoriteRankedMapNames: [],
       favoritePubsMapNames: [],
-      statsRefreshMinutes: 0,
+      // The key is removed above, so the next launch reads the default anyway —
+      // reset in-memory to the same value rather than to a stale 0.
+      statsRefreshMinutes: kDefaultStatsRefreshMinutes,
       compactLegendCards: false,
       keepScreenOn: false,
       defaultTab: 0,

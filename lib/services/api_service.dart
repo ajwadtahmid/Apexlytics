@@ -101,6 +101,33 @@ class ApiService {
         cacheNormalizer: (d) => d as List<dynamic>,
       );
 
+  /// Fetches [endpoint] and returns the HTTP status alongside the decoded body.
+  ///
+  /// [get] and [getList] deliberately hide the status code, which is correct for
+  /// every endpoint whose only success is `200`. `/games` is the exception: it
+  /// answers `202` to mean "request accepted, no fresh data — use what you have".
+  /// Dio's default `validateStatus` accepts any 2xx, and [getList]'s normalizer
+  /// turns an unrecognised map into an empty list, so without the status code a
+  /// queued response is indistinguishable from "this player has no matches".
+  ///
+  /// Never caches: the only caller passes `noCache` anyway, and storing a
+  /// transient queued envelope would be actively wrong.
+  Future<({int status, dynamic data})> getWithStatus(
+    String endpoint, {
+    Map<String, dynamic>? params,
+  }) async {
+    try {
+      final response = await _dio.get(endpoint, queryParameters: params);
+      final data = response.data;
+      if (data is Map && data.containsKey('error')) {
+        throw AppException(data['error'].toString());
+      }
+      return (status: response.statusCode ?? 0, data: data);
+    } on DioException catch (e) {
+      throw AppException(friendlyError(e));
+    }
+  }
+
   // Shared fetch-cache-fallback logic used by both [get] and [getList].
   // [normalizer] transforms the raw response body; [cacheNormalizer] casts
   // the stored cache payload. Only [DioException] triggers the fallback —

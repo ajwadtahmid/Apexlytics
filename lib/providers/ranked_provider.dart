@@ -1,11 +1,9 @@
-import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/api_constants.dart';
 import '../constants/prefs_keys.dart';
 import '../models/ranked_match.dart';
 import '../models/season_meta.dart';
+import '../services/games_service.dart';
 import '../utils/app_logger.dart';
 import '../utils/ranked/ranked_aggregates.dart';
 import '../utils/ranked/ranked_period.dart';
@@ -13,76 +11,6 @@ import '../utils/storage/ranked_history_store.dart';
 import '../utils/storage/season_storage.dart';
 import 'api_provider.dart';
 import 'settings_provider.dart';
-
-/// The server-side allowlist of UIDs permitted to view the ranked breakdown.
-///
-/// Backed by a SharedPreferences cache so the gated tab can be decided
-/// synchronously on launch (no pop-in after the first run). On every launch it
-/// refreshes from the backend and re-validates periodically while the app runs;
-/// network failures keep the last cached set.
-final approvedUidsProvider =
-    NotifierProvider<ApprovedUidsNotifier, Set<String>>(
-      ApprovedUidsNotifier.new,
-    );
-
-class ApprovedUidsNotifier extends Notifier<Set<String>> {
-  static const _kRevalidateInterval = Duration(hours: 6);
-  Timer? _timer;
-
-  @override
-  Set<String> build() {
-    final prefs = ref.watch(sharedPreferencesProvider);
-    final cached = _readCache(prefs);
-
-    // Refresh from the backend now, then re-validate periodically.
-    Future.microtask(refresh);
-    _timer = Timer.periodic(_kRevalidateInterval, (_) => refresh());
-    ref.onDispose(() => _timer?.cancel());
-
-    return cached;
-  }
-
-  /// Re-fetches the allowlist, updates the cache, and emits the new set.
-  /// Keeps the existing cached set on failure.
-  Future<void> refresh() async {
-    try {
-      final fresh = await ref
-          .read(approvedUidsServiceProvider)
-          .getApprovedUids();
-      final prefs = ref.read(sharedPreferencesProvider);
-      await prefs.setString(
-        PrefsKeys.approvedUidsCache,
-        jsonEncode(fresh.toList()),
-      );
-      if (!setEquals(fresh, state)) state = fresh;
-    } catch (e) {
-      log.d('Approved-UIDs refresh failed; keeping cache', error: e);
-    }
-  }
-
-  Set<String> _readCache(SharedPreferences prefs) {
-    final raw = prefs.getString(PrefsKeys.approvedUidsCache);
-    if (raw == null) return <String>{};
-    try {
-      final list = jsonDecode(raw) as List;
-      return list.map((e) => e.toString()).toSet();
-    } catch (_) {
-      return <String>{};
-    }
-  }
-}
-
-/// Whether [uid] may view the ranked breakdown. False for an empty UID.
-final isUidApprovedProvider = Provider.family<bool, String>((ref, uid) {
-  if (uid.isEmpty) return false;
-  return ref.watch(approvedUidsProvider).contains(uid);
-});
-
-/// Whether the *active profile* is approved — drives the Ranked tab's presence.
-final activeUidApprovedProvider = Provider<bool>((ref) {
-  final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
-  return ref.watch(isUidApprovedProvider(uid));
-});
 
 /// App-lifetime handle to the local ranked-history database.
 final rankedHistoryStoreProvider = Provider<RankedHistoryStore>((ref) {
@@ -121,28 +49,97 @@ class RankedPeriodNotifier extends Notifier<RankedPeriod> {
       state = RankedPeriod(splitId: state.splitId, weekIndex: index);
 }
 
+/// Why the ranked view is showing what it's showing.
+///
+/// The breakdown is served from the local store either way — this only explains
+/// *how current* that store is, so the view can distinguish "nothing recorded
+/// yet, keep the app open" from "you're up to date".
+enum RankedSyncOutcome {
+  /// Fresh match data was merged from `/games`.
+  synced,
+
+  /// Skipped the network: the last sync is still inside the cooldown, and the
+  /// server would only answer from its own cache anyway.
+  cooldown,
+
+  /// The server has no slot free right now. Purely a delay.
+  queued,
+
+  /// Nobody is polling this UID upstream, so no history is being recorded.
+  /// The only state that needs the user to *do* something.
+  notTracked,
+
+  /// The request failed, but persisted history is available to show.
+  offline,
+}
+
+/// Backoff after a failure when there's still history to display. Short, because
+/// this is a transient network problem rather than a budget decision.
+const _kOfflineRetry = Duration(minutes: 5);
+
 /// Syncs ranked history for [uid]: fetches the latest 100 from `/games`, merges
 /// them into the local store, and classifies any newly/legacy-unstamped rows.
 /// This is the write half — the split picker and per-split match loaders below
 /// depend on it so they re-run after each sync, but it deliberately loads *no*
 /// matches into memory itself.
 ///
+/// Requests are rate-limited per UID against a persisted deadline. The server
+/// already refuses to spend budget on a repeat request inside its 6 h cooldown,
+/// so asking more often can't return anything newer — it would only add load and
+/// waitlist churn. A `202` sets the deadline from the server's own `Retry-After`.
+///
 /// A fetch failure is swallowed when persisted history exists (graceful
 /// offline/stale) and only rethrown when there's nothing to show, so the view
 /// can surface a retry.
-final rankedSyncProvider = FutureProvider.autoDispose.family<void, String>((
-  ref,
-  uid,
-) async {
+final rankedSyncProvider = FutureProvider.autoDispose
+    .family<RankedSyncOutcome, String>((ref, uid) async {
   final store = ref.watch(rankedHistoryStoreProvider);
   final seasons = ref.watch(rankedSeasonsProvider);
+  final prefs = ref.watch(sharedPreferencesProvider);
+
+  Future<RankedSyncOutcome> remember(
+    RankedSyncOutcome outcome,
+    Duration wait,
+  ) async {
+    await prefs.setInt(
+      PrefsKeys.gamesNextSync(uid),
+      DateTime.now().add(wait).millisecondsSinceEpoch,
+    );
+    await prefs.setString(PrefsKeys.gamesLastOutcome(uid), outcome.name);
+    return outcome;
+  }
+
+  final nextSyncAt = prefs.getInt(PrefsKeys.gamesNextSync(uid)) ?? 0;
+  if (DateTime.now().millisecondsSinceEpoch < nextSyncAt) {
+    // Report the reason we're waiting rather than a generic "cooldown", so a
+    // user with nothing recorded keeps seeing the "keep the app open" guidance
+    // instead of it flickering away on the next tab switch.
+    final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
+    return last == RankedSyncOutcome.notTracked.name
+        ? RankedSyncOutcome.notTracked
+        : RankedSyncOutcome.cooldown;
+  }
+
   try {
-    final fresh = await ref.watch(gamesServiceProvider).getMatches(uid);
-    await store.upsertAll(uid, fresh, seasons: seasons);
+    final result = await ref.watch(gamesServiceProvider).getMatches(uid);
+    switch (result) {
+      case GamesPending(:final retryAfter, :final isNotTracked):
+        return await remember(
+          isNotTracked
+              ? RankedSyncOutcome.notTracked
+              : RankedSyncOutcome.queued,
+          retryAfter,
+        );
+      case GamesMatches(:final matches):
+        // An empty list is a valid answer — tracking is live, nothing recorded
+        // yet — so it still counts as a successful sync.
+        await store.upsertAll(uid, matches, seasons: seasons);
+        await remember(RankedSyncOutcome.synced, ApiConstants.gamesSyncCooldown);
+    }
   } catch (e) {
     if (await store.count(uid) == 0) rethrow;
     log.w('games fetch failed; serving persisted history', error: e);
-    return;
+    return remember(RankedSyncOutcome.offline, _kOfflineRetry);
   }
   // Re-read from prefs rather than reusing the watched `seasons` above: other
   // screens (e.g. the stats tab) call upsertSeason() directly against prefs
@@ -152,21 +149,47 @@ final rankedSyncProvider = FutureProvider.autoDispose.family<void, String>((
   await store.backfillSeasonIds(latestSeasons);
   // Drain the kills/damage backlog left by the v2 → v3 column migration.
   await store.backfillKillsDamage();
+  return RankedSyncOutcome.synced;
 });
+
+/// Whether the backend is currently seeing polls for [uid] — that is, whether
+/// history is actually accruing right now.
+///
+/// Costs nothing: no budget slot and no upstream call, since the backend already
+/// observes our own `/player` traffic. Used to give the recording opt-in visible
+/// feedback instead of asking the user to take it on faith. Null on failure, so
+/// a flaky network degrades to showing no progress rather than an error.
+final gamesEligibilityProvider = FutureProvider.autoDispose
+    .family<GamesEligibility?, String>((ref, uid) async {
+      if (uid.isEmpty) return null;
+      try {
+        return await ref.watch(gamesServiceProvider).getEligibility(uid);
+      } catch (e) {
+        log.d('Eligibility check failed', error: e);
+        return null;
+      }
+    });
 
 /// Net ranked RP for [uid] over a window, via [RankedHistoryStore.netRpInWindow].
 ///
-/// Null means "fall back to the RP snapshots": UID not approved for `/games`,
-/// sync failed with nothing persisted, or history has a hole. Never throws.
+/// Null means "fall back to the RP snapshots": not the active profile, sync
+/// failed with nothing persisted, or history has a hole. Never throws.
 /// `currentRp` is part of the cache key — [RankedHistoryStore.netRpInWindow]'s
 /// completeness check validates against it.
+///
+/// Restricted to the *active profile* rather than any UID. This provider is also
+/// rendered for search results, and history only exists for players somebody is
+/// actively polling — so letting it run for arbitrary searched UIDs would spend
+/// the hourly budget on players with nothing recorded, and fill the server's
+/// waitlist with entries nobody is waiting on.
 final weeklyNetRpProvider = FutureProvider.autoDispose
     .family<int?, ({String uid, DateTime start, DateTime end, int currentRp})>((
       ref,
       arg,
     ) async {
       if (arg.uid.isEmpty) return null;
-      if (!ref.watch(isUidApprovedProvider(arg.uid))) return null;
+      final activeUid = ref.watch(playerSettingsProvider.select((s) => s.uid));
+      if (arg.uid != activeUid) return null;
       try {
         await ref.watch(rankedSyncProvider(arg.uid).future);
         return await ref

@@ -61,6 +61,20 @@ const _pages = <_OnboardingPage>[
         'Search any player by name, compare stats side by side, and save '
         'favorites for quick access.',
   ),
+  _OnboardingPage(
+    icon: Icons.leaderboard_outlined,
+    title: 'Record your ranked history',
+    body:
+        'The Ranked tab breaks down every match — RP over time, your best '
+        'legends and maps, and how you play by time of day. Open it and tap '
+        'Start recording to begin.',
+    tip:
+        'Matches are only recorded while Apexlytics is open and in the '
+        'foreground, so turn on "Keep screen on" while you play.',
+    footnote:
+        'Recording starts from the moment you turn it on — matches played '
+        'before that cannot be recovered.',
+  ),
 ];
 
 /// Full-screen orientation tour. Purely presentational — [onDone] owns marking

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/ranked_match.dart';
 import '../../providers/ranked_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
@@ -18,7 +19,7 @@ import 'widgets/ranked_stats_card.dart';
 import 'widgets/ranked_summary_header.dart';
 import 'widgets/ranked_time_of_day_chart.dart';
 
-/// The ranked-breakdown content, hosted as the gated Ranked bottom-nav tab. It
+/// The ranked-breakdown content, hosted as the Ranked bottom-nav tab. It
 /// owns no Scaffold/AppBar and reads everything from providers, so it can be
 /// embedded anywhere (e.g. a future Search-result reuse) without change.
 class RankedBreakdownView extends ConsumerStatefulWidget {
@@ -34,8 +35,9 @@ class RankedBreakdownView extends ConsumerStatefulWidget {
 class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
   Timer? _refreshTimer;
 
-  // Refresh the view every 10 min while the app is open. The server cron is the
-  // authoritative collector; this only refreshes what's displayed.
+  // Re-check every 10 min while the tab is alive. This is cheap: the sync
+  // provider holds a persisted per-UID cooldown, so most ticks skip the network
+  // entirely and only re-read the local store.
   static const _kViewRefreshInterval = Duration(minutes: 10);
 
   @override
@@ -113,16 +115,7 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
             onRetry: _refresh,
           ),
           data: (splits) {
-            if (splits.isEmpty) {
-              return _MessageState(
-                icon: Icons.hourglass_empty,
-                title: 'Warming up',
-                message:
-                    'Ranked history will appear here once a few matches have '
-                    'been recorded. Check back soon.',
-                onRetry: _refresh,
-              );
-            }
+            if (splits.isEmpty) return _emptyState();
             final effId = shell!.effectiveSplitId;
 
             // Lifetime: every split aggregated in SQL — no matches hydrated.
@@ -155,6 +148,73 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
 
   Widget _spinner() =>
       const Center(child: CircularProgressIndicator(color: AppTheme.accent));
+
+  /// What to say when there is no history yet.
+  ///
+  /// The distinction is the whole point: a *queued* user only has to wait, but
+  /// an *untracked* user has to act — nothing is being recorded for them at all,
+  /// and every hour they don't act is history that can never be recovered.
+  Widget _emptyState() {
+    final outcome = ref.watch(rankedSyncProvider(widget.uid)).asData?.value;
+
+    if (outcome == RankedSyncOutcome.notTracked) {
+      final recording = ref.watch(
+        playerSettingsProvider.select((s) => s.statsRefreshMinutes > 0),
+      );
+      final polls =
+          ref.watch(gamesEligibilityProvider(widget.uid)).asData?.value;
+
+      return _MessageState(
+        icon: Icons.radio_button_checked,
+        title: recording ? 'Warming up' : 'Not recording yet',
+        message: [
+          'Match history is only recorded while your profile is being polled '
+              '— so Apexlytics has to be open while you play.',
+          if (recording && polls != null)
+            'Polls recorded so far: ${polls.pollCount}. It takes a few before '
+                'matches start coming through.'
+          else
+            'Starting recording sets stats updates to every 5 minutes and '
+                'keeps the screen on.',
+          'Only matches played from now on can be recorded — earlier ones are '
+              'not recoverable.',
+        ].join('\n\n'),
+        actionLabel: recording ? null : 'Start recording',
+        onAction: recording ? null : _startRecording,
+        onRetry: _refresh,
+      );
+    }
+
+    return _MessageState(
+      icon: Icons.hourglass_empty,
+      title: 'Warming up',
+      message: outcome == RankedSyncOutcome.queued
+          ? 'The history server is busy right now. Your matches will appear '
+              'here shortly — nothing is lost in the meantime.'
+          : 'Ranked history will appear here once a few matches have been '
+              'recorded. Check back soon.',
+      onRetry: _refresh,
+    );
+  }
+
+  /// The breakdown opt-in. Both settings are load-bearing rather than nice to
+  /// have: 5 minutes is the measured floor for reliable match capture (a short
+  /// game can start and end inside a 10-minute gap), and the poll timer only
+  /// fires in the foreground, so a sleeping screen stops recording.
+  Future<void> _startRecording() async {
+    final settings = ref.read(playerSettingsProvider.notifier);
+    await settings.setStatsRefreshMinutes(kRecordingRefreshMinutes);
+    await settings.setKeepScreenOn(true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Recording started — keep Apexlytics open while you play.',
+        ),
+      ),
+    );
+    await _refresh();
+  }
 
   Widget _errorState(Object e) => _MessageState(
     icon: Icons.lock_outline,
@@ -321,11 +381,18 @@ class _MessageState extends StatelessWidget {
   final String message;
   final Future<void> Function() onRetry;
 
+  /// Optional primary action shown above Retry, for states the user can
+  /// actually resolve rather than just wait out.
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
   const _MessageState({
     required this.icon,
     required this.title,
     required this.message,
     required this.onRetry,
+    this.actionLabel,
+    this.onAction,
   });
 
   @override
@@ -357,6 +424,16 @@ class _MessageState extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppTheme.md),
+            if (actionLabel != null && onAction != null) ...[
+              FilledButton(
+                onPressed: onAction,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.accent,
+                ),
+                child: Text(actionLabel!),
+              ),
+              const SizedBox(height: AppTheme.xs),
+            ],
             TextButton(
               onPressed: onRetry,
               child: const Text(

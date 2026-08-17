@@ -10,7 +10,6 @@ import 'providers/player_provider.dart';
 import 'providers/predator_provider.dart';
 import 'providers/server_provider.dart';
 import 'providers/settings_provider.dart';
-import 'providers/ranked_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/ranked/ranked_breakdown_view.dart';
 import 'screens/search/search_screen.dart';
@@ -106,11 +105,8 @@ class _AppShellState extends ConsumerState<_AppShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Re-validate the approved-UID allowlist on resume so a revoked/granted
-      // UID flips the Ranked tab promptly.
-      ref.read(approvedUidsProvider.notifier).refresh();
-      // Same idea for the OS notification permission — catches a toggle
-      // flipped in system settings while the app was backgrounded.
+      // Re-check the OS notification permission — catches a toggle flipped in
+      // system settings while the app was backgrounded.
       ref.invalidate(notificationsEnabledProvider);
     }
   }
@@ -191,8 +187,8 @@ class _AppShellState extends ConsumerState<_AppShell>
     final tabs = ref.watch(visibleTabsProvider);
     final currentTab = ref.watch(currentTabProvider);
 
-    // The selected tab may not be in the visible set (e.g. switched away from an
-    // approved profile while on Ranked) — fall back to the first tab.
+    // The selected tab may not be in the visible set (e.g. the profile was
+    // cleared while on Ranked) — fall back to the first tab.
     var index = tabs.indexOf(currentTab);
     if (index < 0) index = 0;
 
