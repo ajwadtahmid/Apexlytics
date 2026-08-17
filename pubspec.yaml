@@ -114,3 +114,8 @@ flutter:
     - assets/ranks/
     - assets/weapons/
     - assets/maps/
+
+dependency_overrides:
+  # 14.0.0 requires compileSdk 37, which AGP 8.13 can't resolve against the
+  # newer SDK platform package. Pin to the last version built against 36.
+  permission_handler_android: 13.0.1
