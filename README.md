@@ -53,6 +53,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - [Key Features](#key-features)
 - [Screenshots](#screenshots)
 - [Features](#features)
+- [Ranked Breakdown Guide](#ranked-breakdown-guide)
 - [Downloads](#downloads)
 - [Development](#development)
 - [Data & Privacy](#data--privacy)
@@ -71,7 +72,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Track Your Grind** — Look up any player's rank and legend statistics. Visualize your weekly RP gains with interactive graphs and compare head-to-head performance with other players across ranked seasons and splits.
 
-- **Ranked Breakdown** *(limited availability)* — A full deep-dive into your ranked performance: match history, RP chart, per-map and per-legend breakdown tables, time-of-day performance, and highlight cards for your best and worst maps. Currently available to a small number of users.
+- **Ranked Breakdown** — A full deep-dive into your ranked performance: match history, RP chart, per-map and per-legend breakdown tables, time-of-day performance, and highlight cards for your best and worst maps. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking works.
 
 - **Favorite Players & Compare** — Add players to your favorites and track their RP progression in real-time. Compare your stats side-by-side with favorited players to monitor competition and benchmark your climb.
 
@@ -98,7 +99,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Player Stats** — Rank, RP, current legend, equipped trackers, and weekly RP gain tracking. Supports search by name or numeric UID.
 - **Weekly Ranked History** — Interactive graph showing RP gains per week with season/split selector and week-by-week navigation. Tracks unlimited snapshots for power users playing 10+ matches daily.
-- **Ranked Breakdown** *(requires active player profile)* — Full ranked deep-dive: match list, RP chart, per-map and per-legend breakdown tables, time-of-day performance chart, sessions summary, and highlight cards for best/worst map. Auto-refreshes every 10 minutes while the app is open.
+- **Ranked Breakdown** — Full ranked deep-dive: match list, RP chart, per-map and per-legend breakdown tables, time-of-day performance chart, sessions summary, and highlight cards for best/worst map. Auto-refreshes every 10 minutes while the app is open. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking starts.
 - **Legend Stats** — Kill counts and tracker values per legend, merged across sessions and sorted by most-played.
 - **Gun Stats** — Detailed weapon performance including kills, damage, and damage per kill.
 - **Map Rotations** — Live countdown for Ranked, Pubs, and Mixtape. Shows current map, time remaining, and what loads next. Switches automatically when the rotation changes.
@@ -115,6 +116,37 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **No account required** — Data is fetched using your public in-game name or UID.
 - **Data Backup & Restore** — Export your player profiles, favorites, and tracked data as a backup file. Restore from backup anytime to recover your data or switch devices seamlessly.
 - **Dark theme** — Designed for low-light gaming sessions.
+
+---
+
+## Ranked Breakdown Guide
+
+> **TL;DR:** Keep Apexlytics open while you play ranked — turn on **Keep
+> screen on** in Settings so it doesn't stop tracking when your screen locks.
+> A browser tab on apexlegendsstatus.com works too, if you'd rather not keep
+> the app open. Past matches can't be recovered.
+
+### Getting started
+
+1. Open Apexlytics and start playing ranked.
+2. Turn on **Keep screen on** in Settings so tracking doesn't stop the moment
+   your screen locks.
+3. Finish a match — it'll appear in your Ranked Breakdown once it ends.
+
+Prefer not to keep the app open? Keeping a browser tab open on your
+[profile page](https://apexlegendsstatus.com/profile/search/) on
+apexlegendsstatus.com works too — just make sure it's your actual profile
+page, not the homepage.
+
+### "Server busy"?
+
+We're limited by our API's request budget. Nothing is lost — you'll see your
+data soon.
+
+### Heads up
+
+Tracking is forward-only: only matches played after you start tracking are
+recorded, so earlier matches can't be pulled in retroactively.
 
 ---
 
@@ -248,6 +280,7 @@ No. Just search for any public player by name or UID.
 ## Known Limitations
 
 - **RP snapshots** — Only tracks if app is open and sync is completed. RP gains when app is closed are not captured.
+- **Ranked Breakdown tracking** — Only records matches while Apexlytics (or your profile page on apexlegendsstatus.com) is open, and only from the point tracking starts — earlier matches can't be recovered. A shared API budget across all users can briefly delay a new profile's tracking with a "Server busy" state. See the [Ranked Breakdown Guide](#ranked-breakdown-guide).
 - **Legend stats** — Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
 - **Predator cutoff** — Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.
 - **Offline player search** — If a player hasn't been searched before, their data won't be cached and you'll need internet to look them up.

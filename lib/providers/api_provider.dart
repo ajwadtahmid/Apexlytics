@@ -7,6 +7,7 @@ import '../services/player_service.dart';
 import '../services/news_service.dart';
 import '../services/predator_service.dart';
 import '../services/games_service.dart';
+import '../utils/refresh_cooldown.dart';
 
 // Overridden in main() with the shared instance created before runApp.
 final apiServiceProvider = Provider<ApiService>(
@@ -35,6 +36,11 @@ final predatorServiceProvider = Provider<PredatorService>(
 
 final gamesServiceProvider = Provider<GamesService>(
   (ref) => GamesService(ref.watch(apiServiceProvider)),
+);
+
+/// Shared cooldown guarding manual refresh/retry actions against spam-tapping.
+final refreshCooldownProvider = Provider<RefreshCooldown>(
+  (ref) => RefreshCooldown(),
 );
 
 /// Cached app version info — avoids re-firing the platform channel on every

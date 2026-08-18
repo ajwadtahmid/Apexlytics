@@ -26,16 +26,11 @@ class ApiConstants {
 
   /// Rolling match-history window the `/games` endpoint serves per UID.
   ///
-  /// History is only lost if 100+ ranked matches are played between syncs, which
-  /// is days-to-weeks of normal play — this is what makes an occasional top-up
-  /// enough, rather than needing a fetch per view.
+  /// History is lost only if 100+ ranked matches are played between syncs.
   static const int gamesHistoryLimit = 100;
 
-  /// How long to wait before asking `/games` for the same UID again.
-  ///
-  /// Matches the backend's own per-UID cooldown: inside this window the server
-  /// answers from its cache, so an earlier client request can't return anything
-  /// newer anyway.
+  /// How long to wait before asking `/games` for the same UID again. Matches
+  /// the backend's own per-UID cooldown, inside which it answers from cache.
   static const Duration gamesSyncCooldown = Duration(hours: 6);
 
   static const Map<String, String> platformLabels = {

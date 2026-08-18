@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/player_stats.dart';
+import '../../providers/api_provider.dart';
 import '../../providers/player_provider.dart';
 import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -197,11 +198,7 @@ class _StatsViewState extends ConsumerState<_StatsView> {
               // and ellipsizes instead of overflowing the AppBar — a bare
               // Text here has no width limit and renders the overflow stripes.
               Flexible(
-                child: Text(
-                  name,
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
+                child: Text(name, overflow: TextOverflow.ellipsis, maxLines: 1),
               ),
               const SizedBox(width: AppTheme.xs),
               const Icon(
@@ -330,8 +327,9 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
 
     // Upsert the current season before parallel work so loadAllSeasonsSync sees it.
     final season = widget.stats.rankedSeason;
-    final seasonChanged =
-        season != null ? await upsertSeason(season, prefs) : false;
+    final seasonChanged = season != null
+        ? await upsertSeason(season, prefs)
+        : false;
     // A season learned here won't otherwise reach rankedSeasonsProvider's
     // frozen snapshot until the next app launch — invalidate it so the ranked
     // split picker picks it up this session too.
@@ -380,6 +378,9 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
     return RefreshIndicator(
       color: AppTheme.accent,
       onRefresh: () async {
+        if (!ref.read(refreshCooldownProvider).tryFire('stats:${stats.uid}')) {
+          return;
+        }
         ref.invalidate(myPlayerStatsProvider);
         try {
           await ref.read(myPlayerStatsProvider.future);

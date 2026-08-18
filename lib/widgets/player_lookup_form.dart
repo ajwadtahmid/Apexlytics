@@ -15,7 +15,8 @@ import 'uid_search_toggle.dart';
 class PlayerLookupForm extends ConsumerStatefulWidget {
   final String submitLabel;
   final VoidCallback? onSuccess;
-  final Future<void> Function(String name, String uid, String platform)? onPlayerFound;
+  final Future<void> Function(String name, String uid, String platform)?
+  onPlayerFound;
   final String? initialName;
   final String? initialPlatform;
 
@@ -67,10 +68,7 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
     if (!mounted) return;
     setState(() {
       _searchByUid = value;
-      // Flag it, don't touch it — a name someone typed out shouldn't vanish
-      // because of an accidental tap on the toggle. inputFormatters block new
-      // non-digit keystrokes going forward; anything already there just gets
-      // called out so the user can fix or clear it themselves.
+      // Flags an existing non-digit value rather than clearing it.
       _error = (value && !isDigitsOnly(_controller.text))
           ? 'UID must contain digits only.'
           : null;
@@ -82,7 +80,9 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
     final query = _controller.text.trim();
     if (query.isEmpty) {
       setState(
-        () => _error = _searchByUid ? 'Enter a player UID.' : 'Enter a player name.',
+        () => _error = _searchByUid
+            ? 'Enter a player UID.'
+            : 'Enter a player name.',
       );
       return;
     }
@@ -91,6 +91,8 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
       setState(() => _error = 'UID must contain digits only.');
       return;
     }
+    final cooldownKey = '${_searchByUid ? 'uid' : 'name'}:$_platform:$query';
+    if (!ref.read(refreshCooldownProvider).tryFire(cooldownKey)) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -142,7 +144,9 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
             if (_error != null) setState(() => _error = null);
           },
           textInputAction: TextInputAction.done,
-          keyboardType: _searchByUid ? TextInputType.number : TextInputType.text,
+          keyboardType: _searchByUid
+              ? TextInputType.number
+              : TextInputType.text,
           inputFormatters: _searchByUid ? uidOnlyInputFormatters : null,
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(

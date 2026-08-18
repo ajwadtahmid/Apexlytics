@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/api_provider.dart';
 import '../../providers/player_provider.dart';
 import '../../services/player_service.dart';
 import '../app_logger.dart';
@@ -9,7 +10,9 @@ String playerSessionKey(String platform, String query) => '$platform:$query';
 /// invalidates [searchPlayerProvider] so it reads the updated disk cache, then
 /// marks the player as synced in [sessionRefreshedProvider].
 ///
-/// Returns true on success, false if the network request failed.
+/// Silently skipped (returns true, as if it had succeeded) if [query] was
+/// refreshed too recently — see [refreshCooldownProvider]. Otherwise returns
+/// true on success, false if the network request failed.
 Future<bool> refreshAndMarkSynced(
   WidgetRef ref,
   PlayerService service,
@@ -18,6 +21,11 @@ Future<bool> refreshAndMarkSynced(
   bool byUid,
 ) async {
   final params = (query: query, platform: platform, searchByUid: byUid);
+  if (!ref
+      .read(refreshCooldownProvider)
+      .tryFire(playerSessionKey(platform, query))) {
+    return true;
+  }
   try {
     // Call service directly to force a network fetch, bypassing the
     // cache-first path in searchPlayerProvider.

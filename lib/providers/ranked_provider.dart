@@ -49,17 +49,13 @@ class RankedPeriodNotifier extends Notifier<RankedPeriod> {
       state = RankedPeriod(splitId: state.splitId, weekIndex: index);
 }
 
-/// Why the ranked view is showing what it's showing.
-///
-/// The breakdown is served from the local store either way — this only explains
-/// *how current* that store is, so the view can distinguish "nothing recorded
-/// yet, keep the app open" from "you're up to date".
+/// Why the ranked view is showing what it's showing — the breakdown is always
+/// served from the local store, and this explains how current that store is.
 enum RankedSyncOutcome {
   /// Fresh match data was merged from `/games`.
   synced,
 
-  /// Skipped the network: the last sync is still inside the cooldown, and the
-  /// server would only answer from its own cache anyway.
+  /// Skipped the network: the last sync is still inside the cooldown.
   cooldown,
 
   /// The server has no slot free right now. Purely a delay.
@@ -83,87 +79,83 @@ const _kOfflineRetry = Duration(minutes: 5);
 /// depend on it so they re-run after each sync, but it deliberately loads *no*
 /// matches into memory itself.
 ///
-/// Requests are rate-limited per UID against a persisted deadline. The server
-/// already refuses to spend budget on a repeat request inside its 6 h cooldown,
-/// so asking more often can't return anything newer — it would only add load and
-/// waitlist churn. A `202` sets the deadline from the server's own `Retry-After`.
+/// Requests are rate-limited per UID against a persisted deadline. A `202`
+/// response sets the deadline from the server's own `Retry-After`.
 ///
 /// A fetch failure is swallowed when persisted history exists (graceful
 /// offline/stale) and only rethrown when there's nothing to show, so the view
 /// can surface a retry.
 final rankedSyncProvider = FutureProvider.autoDispose
     .family<RankedSyncOutcome, String>((ref, uid) async {
-  final store = ref.watch(rankedHistoryStoreProvider);
-  final seasons = ref.watch(rankedSeasonsProvider);
-  final prefs = ref.watch(sharedPreferencesProvider);
+      final store = ref.watch(rankedHistoryStoreProvider);
+      final seasons = ref.watch(rankedSeasonsProvider);
+      final prefs = ref.watch(sharedPreferencesProvider);
 
-  Future<RankedSyncOutcome> remember(
-    RankedSyncOutcome outcome,
-    Duration wait,
-  ) async {
-    await prefs.setInt(
-      PrefsKeys.gamesNextSync(uid),
-      DateTime.now().add(wait).millisecondsSinceEpoch,
-    );
-    await prefs.setString(PrefsKeys.gamesLastOutcome(uid), outcome.name);
-    return outcome;
-  }
-
-  final nextSyncAt = prefs.getInt(PrefsKeys.gamesNextSync(uid)) ?? 0;
-  if (DateTime.now().millisecondsSinceEpoch < nextSyncAt) {
-    // Report the reason we're waiting rather than a generic "cooldown", so a
-    // user with nothing recorded keeps seeing the "keep the app open" guidance,
-    // and a queued user keeps seeing "server busy", instead of it flickering
-    // to a less informative state on retry/tab switch.
-    final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
-    if (last == RankedSyncOutcome.notTracked.name) {
-      return RankedSyncOutcome.notTracked;
-    }
-    if (last == RankedSyncOutcome.queued.name) {
-      return RankedSyncOutcome.queued;
-    }
-    return RankedSyncOutcome.cooldown;
-  }
-
-  try {
-    final result = await ref.watch(gamesServiceProvider).getMatches(uid);
-    switch (result) {
-      case GamesPending(:final retryAfter, :final isNotTracked):
-        return await remember(
-          isNotTracked
-              ? RankedSyncOutcome.notTracked
-              : RankedSyncOutcome.queued,
-          retryAfter,
+      Future<RankedSyncOutcome> remember(
+        RankedSyncOutcome outcome,
+        Duration wait,
+      ) async {
+        await prefs.setInt(
+          PrefsKeys.gamesNextSync(uid),
+          DateTime.now().add(wait).millisecondsSinceEpoch,
         );
-      case GamesMatches(:final matches):
-        // An empty list is a valid answer — tracking is live, nothing recorded
-        // yet — so it still counts as a successful sync.
-        await store.upsertAll(uid, matches, seasons: seasons);
-        await remember(RankedSyncOutcome.synced, ApiConstants.gamesSyncCooldown);
-    }
-  } catch (e) {
-    if (await store.count(uid) == 0) rethrow;
-    log.w('games fetch failed; serving persisted history', error: e);
-    return remember(RankedSyncOutcome.offline, _kOfflineRetry);
-  }
-  // Re-read from prefs rather than reusing the watched `seasons` above: other
-  // screens (e.g. the stats tab) call upsertSeason() directly against prefs
-  // without going through this provider, so a season learned there during
-  // the same session wouldn't otherwise be reflected here until relaunch.
-  final latestSeasons = loadAllSeasonsSync(ref.read(sharedPreferencesProvider));
-  await store.backfillSeasonIds(latestSeasons);
-  // Drain the kills/damage backlog left by the v2 → v3 column migration.
-  await store.backfillKillsDamage();
-  return RankedSyncOutcome.synced;
-});
+        await prefs.setString(PrefsKeys.gamesLastOutcome(uid), outcome.name);
+        return outcome;
+      }
+
+      final nextSyncAt = prefs.getInt(PrefsKeys.gamesNextSync(uid)) ?? 0;
+      if (DateTime.now().millisecondsSinceEpoch < nextSyncAt) {
+        // Re-report the last known outcome rather than a generic cooldown.
+        final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
+        if (last == RankedSyncOutcome.notTracked.name) {
+          return RankedSyncOutcome.notTracked;
+        }
+        if (last == RankedSyncOutcome.queued.name) {
+          return RankedSyncOutcome.queued;
+        }
+        return RankedSyncOutcome.cooldown;
+      }
+
+      try {
+        final result = await ref.watch(gamesServiceProvider).getMatches(uid);
+        switch (result) {
+          case GamesPending(:final retryAfter, :final isNotTracked):
+            return await remember(
+              isNotTracked
+                  ? RankedSyncOutcome.notTracked
+                  : RankedSyncOutcome.queued,
+              retryAfter,
+            );
+          case GamesMatches(:final matches):
+            // An empty list is a valid answer — tracking is live, nothing recorded
+            // yet — so it still counts as a successful sync.
+            await store.upsertAll(uid, matches, seasons: seasons);
+            await remember(
+              RankedSyncOutcome.synced,
+              ApiConstants.gamesSyncCooldown,
+            );
+        }
+      } catch (e) {
+        if (await store.count(uid) == 0) rethrow;
+        log.w('games fetch failed; serving persisted history', error: e);
+        return remember(RankedSyncOutcome.offline, _kOfflineRetry);
+      }
+      // Re-read from prefs rather than reusing the watched `seasons` above: other
+      // screens (e.g. the stats tab) call upsertSeason() directly against prefs
+      // without going through this provider, so a season learned there during
+      // the same session wouldn't otherwise be reflected here until relaunch.
+      final latestSeasons = loadAllSeasonsSync(
+        ref.read(sharedPreferencesProvider),
+      );
+      await store.backfillSeasonIds(latestSeasons);
+      // Drain the kills/damage backlog left by the v2 → v3 column migration.
+      await store.backfillKillsDamage();
+      return RankedSyncOutcome.synced;
+    });
 
 /// Whether the backend is currently seeing polls for [uid] — that is, whether
-/// history is actually accruing right now.
-///
-/// Costs nothing: no budget slot and no upstream call, since the backend already
-/// observes our own `/player` traffic. Used to give the recording opt-in visible
-/// feedback instead of asking the user to take it on faith. Null on failure, so
-/// a flaky network degrades to showing no progress rather than an error.
+/// history is actually accruing right now. Backed by our own `/player` traffic,
+/// so it costs no `/games` budget slot. Null on failure.
 final gamesEligibilityProvider = FutureProvider.autoDispose
     .family<GamesEligibility?, String>((ref, uid) async {
       if (uid.isEmpty) return null;
@@ -182,11 +174,9 @@ final gamesEligibilityProvider = FutureProvider.autoDispose
 /// `currentRp` is part of the cache key — [RankedHistoryStore.netRpInWindow]'s
 /// completeness check validates against it.
 ///
-/// Restricted to the *active profile* rather than any UID. This provider is also
-/// rendered for search results, and history only exists for players somebody is
-/// actively polling — so letting it run for arbitrary searched UIDs would spend
-/// the hourly budget on players with nothing recorded, and fill the server's
-/// waitlist with entries nobody is waiting on.
+/// Restricted to the *active profile* rather than any UID, even though this
+/// provider is also rendered for search results — history only accrues for
+/// players actively being polled.
 final weeklyNetRpProvider = FutureProvider.autoDispose
     .family<int?, ({String uid, DateTime start, DateTime end, int currentRp})>((
       ref,
@@ -252,8 +242,9 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
     .family<RankedSplitView, ({String uid, String splitId})>((ref, arg) async {
       final splits = await ref.watch(rankedSplitsProvider(arg.uid).future);
       final matches = await ref.watch(rankedSplitMatchesProvider(arg).future);
-      final weekIndex =
-          ref.watch(rankedPeriodProvider.select((p) => p.weekIndex));
+      final weekIndex = ref.watch(
+        rankedPeriodProvider.select((p) => p.weekIndex),
+      );
       final view = resolveRankedView(
         splits: splits,
         splitMatches: matches,

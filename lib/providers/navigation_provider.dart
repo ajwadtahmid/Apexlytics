@@ -8,11 +8,7 @@ import 'settings_provider.dart';
 enum AppTab { home, stats, ranked, search, settings }
 
 /// The ordered list of tabs currently visible. Ranked sits between My Stats and
-/// Search.
-///
-/// It used to appear only for UIDs on a server-side allowlist. `/games` is now
-/// open to everyone, so the only remaining condition is having a profile to show
-/// a breakdown *for* — an empty Ranked tab on a fresh install helps nobody.
+/// Search, and only appears once a player profile is set.
 final visibleTabsProvider = Provider<List<AppTab>>((ref) {
   final rankedVisible = ref.watch(
     playerSettingsProvider.select((s) => s.isPlayerSet),

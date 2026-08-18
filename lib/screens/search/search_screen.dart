@@ -33,9 +33,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
     if (!mounted) return;
     setState(() => _searchByUid = value);
-    // Flag it, don't touch it — an accidental tap on the toggle shouldn't
-    // wipe out whatever's already typed. inputFormatters block new non-digit
-    // keystrokes going forward; this just calls out anything already there.
+    // Flags an existing non-digit value rather than clearing it.
     if (value && !isDigitsOnly(_controller.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('UID must contain digits only.')),
@@ -54,7 +52,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
     context.pushPage(
-      PlayerResultPage(query: q, platform: platform ?? _platform, searchByUid: _searchByUid),
+      PlayerResultPage(
+        query: q,
+        platform: platform ?? _platform,
+        searchByUid: _searchByUid,
+      ),
     );
   }
 
@@ -125,7 +127,9 @@ class _SearchBar extends StatelessWidget {
             controller: controller,
             onSubmitted: (_) => onSearch(),
             textInputAction: TextInputAction.search,
-            keyboardType: searchByUid ? TextInputType.number : TextInputType.text,
+            keyboardType: searchByUid
+                ? TextInputType.number
+                : TextInputType.text,
             inputFormatters: searchByUid ? uidOnlyInputFormatters : null,
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(

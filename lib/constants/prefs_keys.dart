@@ -30,6 +30,7 @@ class PrefsKeys {
   static const defaultTab = 'default_tab';
   static const searchFavorites = 'search_favorites';
   static const uidSearchWarningShown = 'uid_search_warning_shown';
+  static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the
   /// current version means the orientation tour is shown once on next launch.
@@ -59,13 +60,8 @@ class PrefsKeys {
   static String rankGoalKeyFor(String uid) => 'rank_goal_$uid';
 
   /// Earliest time (epoch ms) the app may ask `/games` for [uid] again.
-  ///
-  /// Persisted rather than held in memory because the cooldown outlives the
-  /// session: the backend serves the same cached body for 6 h, so re-asking on
-  /// every relaunch would be pure load for no new data.
   static String gamesNextSync(String uid) => 'games_next_sync_$uid';
 
-  /// The last `RankedSyncOutcome` name recorded for [uid], so a request skipped
-  /// by [gamesNextSync] can still explain *why* it is waiting.
+  /// The last `RankedSyncOutcome` name recorded for [uid].
   static String gamesLastOutcome(String uid) => 'games_last_outcome_$uid';
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../constants/prefs_keys.dart';
 import '../../models/ranked_match.dart';
 import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -10,6 +11,7 @@ import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
 import 'widgets/ranked_breakdown_tables.dart';
 import 'widgets/ranked_highlight_cards.dart';
+import 'widgets/ranked_info_sheet.dart';
 import 'widgets/ranked_match_list.dart';
 import 'widgets/ranked_period_selector.dart'
     show RankedSplitDropdown, RankedWeekStrip;
@@ -34,6 +36,7 @@ class RankedBreakdownView extends ConsumerStatefulWidget {
 
 class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
   Timer? _refreshTimer;
+  bool _showCoachMark = false;
 
   // Re-check every 10 min while the tab is alive. This is cheap: the sync
   // provider holds a persisted per-UID cooldown, so most ticks skip the network
@@ -47,12 +50,27 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
       _kViewRefreshInterval,
       (_) => ref.invalidate(rankedSyncProvider(widget.uid)),
     );
+    final prefs = ref.read(sharedPreferencesProvider);
+    _showCoachMark =
+        !(prefs.getBool(PrefsKeys.rankedInfoCoachMarkShown) ?? false);
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _dismissCoachMark() async {
+    setState(() => _showCoachMark = false);
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool(PrefsKeys.rankedInfoCoachMarkShown, true);
+  }
+
+  void _openInfoFromCoachMark() {
+    showRankedInfoSheet(context);
+    _dismissCoachMark();
   }
 
   Future<void> _refresh() async {
@@ -96,7 +114,14 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ranked Breakdown'),
-        actions: [if (shell != null) RankedSplitDropdown(view: shell)],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'How tracking works',
+            onPressed: () => showRankedInfoSheet(context),
+          ),
+          if (shell != null) RankedSplitDropdown(view: shell),
+        ],
         // Weeks ride in the AppBar's bottom slot so split + weeks read as one
         // header surface instead of a separate floating strip.
         bottom: (shell != null && shell.weeks.isNotEmpty)
@@ -104,43 +129,57 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
             : null,
       ),
       body: SafeArea(
-        child: splitsAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: AppTheme.accent),
-          ),
-          error: (e, _) => _MessageState(
-            icon: Icons.lock_outline,
-            title: 'Not available',
-            message: friendlyError(e),
-            onRetry: _refresh,
-          ),
-          data: (splits) {
-            if (splits.isEmpty) return _emptyState();
-            final effId = shell!.effectiveSplitId;
+        child: Column(
+          children: [
+            if (_showCoachMark)
+              _InfoCoachMark(
+                onLearnMore: _openInfoFromCoachMark,
+                onDismiss: _dismissCoachMark,
+              ),
+            Expanded(
+              child: splitsAsync.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: AppTheme.accent),
+                ),
+                error: (e, _) => _MessageState(
+                  icon: Icons.lock_outline,
+                  title: 'Not available',
+                  message: friendlyError(e),
+                  onRetry: _refresh,
+                ),
+                data: (splits) {
+                  if (splits.isEmpty) return _emptyState();
+                  final effId = shell!.effectiveSplitId;
 
-            // Lifetime: every split aggregated in SQL — no matches hydrated.
-            if (isLifetimeSplit(effId)) {
-              return ref
-                  .watch(rankedLifetimeAggregatesProvider(widget.uid))
-                  .when(
-                    loading: _spinner,
-                    error: (e, _) => _errorState(e),
-                    data: _lifetimeTabs,
-                  );
-            }
+                  // Lifetime: every split aggregated in SQL — no matches hydrated.
+                  if (isLifetimeSplit(effId)) {
+                    return ref
+                        .watch(rankedLifetimeAggregatesProvider(widget.uid))
+                        .when(
+                          loading: _spinner,
+                          error: (e, _) => _errorState(e),
+                          data: _lifetimeTabs,
+                        );
+                  }
 
-            // Otherwise load only the selected split's matches (and its
-            // aggregates, memoized in the provider rather than recomputed here).
-            return ref
-                .watch(
-                  rankedSplitViewProvider((uid: widget.uid, splitId: effId)),
-                )
-                .when(
-                  loading: _spinner,
-                  error: (e, _) => _errorState(e),
-                  data: _splitTabs,
-                );
-          },
+                  // Otherwise load only the selected split's matches (and its
+                  // aggregates, memoized in the provider rather than recomputed here).
+                  return ref
+                      .watch(
+                        rankedSplitViewProvider((
+                          uid: widget.uid,
+                          splitId: effId,
+                        )),
+                      )
+                      .when(
+                        loading: _spinner,
+                        error: (e, _) => _errorState(e),
+                        data: _splitTabs,
+                      );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -149,24 +188,21 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
   Widget _spinner() =>
       const Center(child: CircularProgressIndicator(color: AppTheme.accent));
 
-  /// What to say when there is no history yet.
+  /// What to say when there is no history yet. Title/icon are distinct per
+  /// outcome (no data, server busy, offline); [_TrackingSteps] carries the
+  /// shared "what's actually happening" progress regardless of which one.
   ///
-  /// The title carries the distinction: "Ready to record" means the user has
-  /// to act — nothing is being tracked at all. "Warming up" means tracking is
-  /// live and it's a matter of time. But every branch's *message* gives the
-  /// same instruction regardless of title, because "Warming up" alone still
-  /// reads as passive — the user has to keep the app (or an
-  /// apexlegendsstatus.com tab) open and finish a ranked match either way.
-  ///
-  /// `.value` rather than `.asData?.value` deliberately: during a refresh the
-  /// provider briefly has no `AsyncData`, and `asData` would drop straight to
-  /// the least informative branch on every retry — `.value` keeps the last
-  /// known outcome instead.
+  /// Uses `.value` rather than `.asData?.value`: during a refresh the provider
+  /// briefly has no `AsyncData`, and `.value` keeps the last known outcome
+  /// instead of dropping to the least informative branch on every retry.
   Widget _emptyState() {
     final outcome = ref.watch(rankedSyncProvider(widget.uid)).value;
     final recording = ref.watch(
       playerSettingsProvider.select((s) => s.statsRefreshMinutes > 0),
     );
+
+    final steps = _TrackingSteps(recording: recording);
+    void onLearnMore() => showRankedInfoSheet(context);
 
     // Nothing is being recorded for this UID at all — the only state that
     // needs an action rather than just patience.
@@ -175,14 +211,13 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
         icon: Icons.radio_button_checked,
         title: 'Ready to record',
         message:
-            'Match history is only recorded while your profile is being '
-            'polled — so keep Apexlytics open (or a browser tab on '
-            'apexlegendsstatus.com) and finish a ranked match.\n\n'
             'Only matches played from now on can be recorded — earlier ones '
             'are not recoverable.',
+        steps: steps,
         actionLabel: 'Start recording',
         onAction: _startRecording,
         onRetry: _refresh,
+        onLearnMore: onLearnMore,
       );
     }
 
@@ -190,33 +225,34 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
       RankedSyncOutcome.queued => (
         'Server busy',
         Icons.cloud_queue,
-        ' The history server is busy right now, but nothing is lost — this '
+        'The history server is busy right now, but nothing is lost — this '
             'resolves on its own.',
       ),
       RankedSyncOutcome.offline => (
         'Offline',
         Icons.cloud_off,
-        ' Couldn\'t reach the server just now — showing the latest we have.',
+        'Couldn\'t reach the server just now — showing the latest we have.',
       ),
       // synced with zero matches so far, cooldown, or still loading
-      _ => ('Warming up', Icons.hourglass_empty, ''),
+      _ => (
+        'Warming up',
+        Icons.hourglass_empty,
+        'It\'ll appear here once a ranked match ends.',
+      ),
     };
 
     return _MessageState(
       icon: icon,
       title: title,
-      message:
-          'Keep Apexlytics open (or a browser tab on apexlegendsstatus.com) '
-          'while you play, and finish a ranked match — it\'ll appear here '
-          'once it ends.$statusNote',
+      message: statusNote,
+      steps: steps,
       onRetry: _refresh,
+      onLearnMore: onLearnMore,
     );
   }
 
-  /// The breakdown opt-in. Both settings are load-bearing rather than nice to
-  /// have: 5 minutes is the measured floor for reliable match capture (a short
-  /// game can start and end inside a 10-minute gap), and the poll timer only
-  /// fires in the foreground, so a sleeping screen stops recording.
+  /// The breakdown opt-in: sets 5-minute polling (the floor for reliable match
+  /// capture) and Keep screen on (the poll timer only fires in the foreground).
   Future<void> _startRecording() async {
     final settings = ref.read(playerSettingsProvider.notifier);
     await settings.setStatsRefreshMinutes(kRecordingRefreshMinutes);
@@ -402,6 +438,13 @@ class _MessageState extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  /// Optional progress breakdown (e.g. [_TrackingSteps]) shown below the
+  /// message.
+  final Widget? steps;
+
+  /// Optional link to the full explainer sheet.
+  final VoidCallback? onLearnMore;
+
   const _MessageState({
     required this.icon,
     required this.title,
@@ -409,6 +452,8 @@ class _MessageState extends StatelessWidget {
     required this.onRetry,
     this.actionLabel,
     this.onAction,
+    this.steps,
+    this.onLearnMore,
   });
 
   @override
@@ -439,13 +484,12 @@ class _MessageState extends StatelessWidget {
                 height: 1.4,
               ),
             ),
+            ?steps,
             const SizedBox(height: AppTheme.md),
             if (actionLabel != null && onAction != null) ...[
               FilledButton(
                 onPressed: onAction,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.accent,
-                ),
+                style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
                 child: Text(actionLabel!),
               ),
               const SizedBox(height: AppTheme.xs),
@@ -457,8 +501,139 @@ class _MessageState extends StatelessWidget {
                 style: TextStyle(color: AppTheme.accent),
               ),
             ),
+            if (onLearnMore != null)
+              TextButton(
+                onPressed: onLearnMore,
+                child: const Text(
+                  'How does this work?',
+                  style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                ),
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+enum _StepStatus { done, active, pending }
+
+/// The 3-step path from an empty breakdown to a populated one, shared across
+/// every empty-state title/message so "what's actually happening" reads the
+/// same regardless of why the wait is happening.
+class _TrackingSteps extends StatelessWidget {
+  final bool recording;
+
+  const _TrackingSteps({required this.recording});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppTheme.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _StepRow('Profile linked', _StepStatus.done),
+          _StepRow(
+            'App is polling (keep it open)',
+            recording ? _StepStatus.done : _StepStatus.active,
+          ),
+          _StepRow(
+            'Finish a ranked match',
+            recording ? _StepStatus.active : _StepStatus.pending,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepRow extends StatelessWidget {
+  final String label;
+  final _StepStatus status;
+
+  const _StepRow(this.label, this.status);
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (status) {
+      _StepStatus.done => (Icons.check_circle, AppTheme.green),
+      _StepStatus.active => (Icons.radio_button_checked, AppTheme.accent),
+      _StepStatus.pending => (Icons.radio_button_unchecked, AppTheme.muted),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: AppTheme.sm),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: status == _StepStatus.pending
+                  ? AppTheme.muted
+                  : AppTheme.textPrimary,
+              fontWeight: status == _StepStatus.active
+                  ? FontWeight.w600
+                  : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One-time nudge pointing new visitors at the info icon in the AppBar.
+/// Dismissed (or tapped) once, then never shown again.
+class _InfoCoachMark extends StatelessWidget {
+  final VoidCallback onLearnMore;
+  final VoidCallback onDismiss;
+
+  const _InfoCoachMark({required this.onLearnMore, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppTheme.md,
+        AppTheme.sm,
+        AppTheme.md,
+        0,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.sm,
+        vertical: AppTheme.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withAlpha(30),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: AppTheme.accent.withAlpha(90)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: AppTheme.accent, size: 18),
+          const SizedBox(width: AppTheme.sm),
+          Expanded(
+            child: GestureDetector(
+              onTap: onLearnMore,
+              child: const Text(
+                'New here? Tap to see how ranked tracking works.',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16, color: AppTheme.muted),
+            onPressed: onDismiss,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
       ),
     );
   }

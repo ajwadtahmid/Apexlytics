@@ -2,10 +2,7 @@ import '../constants/api_constants.dart';
 import '../models/ranked_match.dart';
 import 'api_service.dart';
 
-/// The result of a `/games` fetch.
-///
-/// The endpoint has two success shapes, and conflating them is the single
-/// easiest way to break this feature: `200` carries match data, `202` means the
+/// The result of a `/games` fetch. `200` carries match data; `202` means the
 /// request was accepted but there is nothing fresh to give — either the hourly
 /// budget is exhausted or upstream isn't recording this player yet. Neither is
 /// an error, and neither should be shown as "0 matches".
@@ -66,17 +63,15 @@ class GamesService {
     final body = response.data is Map ? response.data as Map : const {};
     return GamesPending(
       status: body['status']?.toString() ?? 'queued',
-      // Fall back to the server's own default rather than retrying immediately;
-      // a missing hint is not permission to hammer.
+      // Defaults to 5 minutes if the server didn't send a retry hint.
       retryAfter: Duration(
         seconds: (body['retryAfterSeconds'] as num?)?.toInt() ?? 300,
       ),
     );
   }
 
-  /// Checks whether history is accruing *before* offering a sync, so the app can
-  /// say "keep the app open while you play" instead of spending a request to
-  /// discover there is nothing recorded.
+  /// Checks whether history is currently accruing for [uid], without spending
+  /// a `/games` request.
   Future<GamesEligibility> getEligibility(String uid) async {
     final response = await _api.getWithStatus(
       ApiConstants.gamesEligibilityPath,

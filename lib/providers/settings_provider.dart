@@ -21,26 +21,20 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
 
 /// Selectable values for "Stats update frequency", in minutes. `0` = manual.
 ///
-/// 5 min is the floor because upstream reconstructs match history by diffing
-/// consecutive `/bridge` polls: a short game can start and end inside a 10-min
-/// gap and never be recorded. Measured — 10 min mostly works but drops matches,
-/// 5 min is reliable. The ranked breakdown opt-in forces 5.
+/// Upstream reconstructs match history by diffing consecutive `/bridge` polls,
+/// so a short game can start and end inside a 10-min gap and never be recorded;
+/// 5 min is the floor for reliable capture.
 const kStatsRefreshOptions = <int>[0, 5, 10, 15];
 
-/// Applied when the user has never opened the picker. Previously `0`, which
-/// meant a default install polled *never* and so accrued no match history.
+/// Applied when the user has never opened the picker.
 const kDefaultStatsRefreshMinutes = 10;
 
-/// Forced by the ranked-breakdown opt-in. 10 minutes mostly works but drops
-/// matches; this is the measured floor for reliable capture.
+/// Forced by the ranked-breakdown opt-in.
 const kRecordingRefreshMinutes = 5;
 
-/// Snaps a persisted interval onto [kStatsRefreshOptions].
-///
-/// Builds before this shipped stored `20`/`30`, which are no longer offered;
-/// left unclamped the picker highlights the first option ("Manual") while the
-/// settings row still reads "Every 20 min". Manual is a deliberate mode rather
-/// than a point on the scale, so a non-zero value never collapses to it.
+/// Snaps a persisted interval onto [kStatsRefreshOptions]. Manual is a
+/// deliberate mode rather than a point on the scale, so a non-zero value
+/// never collapses to it.
 int clampStatsRefreshMinutes(int minutes) {
   if (minutes <= 0) return 0;
   return kStatsRefreshOptions
@@ -305,22 +299,20 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       );
     }
 
-    // Retire intervals that are no longer offered (20/30 → 15). Persisting the
-    // clamp keeps the stored value and the picker in agreement, and it's only
-    // written when it actually changes — so a user who never opened the picker
-    // stays keyless and keeps inheriting the default.
+    // Clamp legacy stored intervals (20/30) onto the current options, only
+    // rewriting the pref when the value actually changes.
     final storedRefresh = _prefs.getInt(PrefsKeys.statsRefreshMinutes);
     final refreshMinutes = storedRefresh == null
         ? kDefaultStatsRefreshMinutes
         : clampStatsRefreshMinutes(storedRefresh);
     if (storedRefresh != null && refreshMinutes != storedRefresh) {
       unawaited(
-        _prefs
-            .setInt(PrefsKeys.statsRefreshMinutes, refreshMinutes)
-            .catchError((Object e) {
-              log.w('Stats refresh clamp persist failed', error: e);
-              return false;
-            }),
+        _prefs.setInt(PrefsKeys.statsRefreshMinutes, refreshMinutes).catchError(
+          (Object e) {
+            log.w('Stats refresh clamp persist failed', error: e);
+            return false;
+          },
+        ),
       );
     }
 

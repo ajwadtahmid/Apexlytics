@@ -57,7 +57,10 @@ class ApiService {
     final cached = _cache.load(key);
     if (cached == null) return null;
     // Expose the save timestamp so callers can show "cached X ago" to the user.
-    return ApiResult(cached.data as Map<String, dynamic>, staleAt: cached.savedAt);
+    return ApiResult(
+      cached.data as Map<String, dynamic>,
+      staleAt: cached.savedAt,
+    );
   }
 
   /// Fetches [endpoint] and caches the result. On [DioException], returns stale
@@ -67,19 +70,18 @@ class ApiService {
     String endpoint, {
     Map<String, dynamic>? params,
     bool noCache = false,
-  }) =>
-      _request(
-        endpoint,
-        params: params,
-        noCache: noCache,
-        // Defensive fallback: wrap non-map responses (e.g. scalars, lists) so the
-        // caller always receives a Map<String, dynamic>. The wrapped value is in '_raw'.
-        normalizer: (d) {
-          if (d is Map && d.containsKey('error')) throw AppException(d['error']);
-          return d is Map<String, dynamic> ? d : {'_raw': d};
-        },
-        cacheNormalizer: (d) => d as Map<String, dynamic>,
-      );
+  }) => _request(
+    endpoint,
+    params: params,
+    noCache: noCache,
+    // Defensive fallback: wrap non-map responses (e.g. scalars, lists) so the
+    // caller always receives a Map<String, dynamic>. The wrapped value is in '_raw'.
+    normalizer: (d) {
+      if (d is Map && d.containsKey('error')) throw AppException(d['error']);
+      return d is Map<String, dynamic> ? d : {'_raw': d};
+    },
+    cacheNormalizer: (d) => d as Map<String, dynamic>,
+  );
 
   /// Fetches [endpoint] expecting a list response and caches the result.
   /// On [DioException], returns stale cached data if available; otherwise re-throws.
@@ -88,30 +90,23 @@ class ApiService {
     String endpoint, {
     Map<String, dynamic>? params,
     bool noCache = false,
-  }) =>
-      _request(
-        endpoint,
-        params: params,
-        noCache: noCache,
-        normalizer: (d) {
-          if (d is List) return d;
-          if (d is Map && d.containsKey('error')) throw AppException(d['error']);
-          return <dynamic>[];
-        },
-        cacheNormalizer: (d) => d as List<dynamic>,
-      );
+  }) => _request(
+    endpoint,
+    params: params,
+    noCache: noCache,
+    normalizer: (d) {
+      if (d is List) return d;
+      if (d is Map && d.containsKey('error')) throw AppException(d['error']);
+      return <dynamic>[];
+    },
+    cacheNormalizer: (d) => d as List<dynamic>,
+  );
 
   /// Fetches [endpoint] and returns the HTTP status alongside the decoded body.
   ///
-  /// [get] and [getList] deliberately hide the status code, which is correct for
-  /// every endpoint whose only success is `200`. `/games` is the exception: it
-  /// answers `202` to mean "request accepted, no fresh data — use what you have".
-  /// Dio's default `validateStatus` accepts any 2xx, and [getList]'s normalizer
-  /// turns an unrecognised map into an empty list, so without the status code a
-  /// queued response is indistinguishable from "this player has no matches".
-  ///
-  /// Never caches: the only caller passes `noCache` anyway, and storing a
-  /// transient queued envelope would be actively wrong.
+  /// Unlike [get]/[getList], which only ever see `200`, this exposes `202` too —
+  /// `/games` uses it to mean "request accepted, no fresh data yet". Never
+  /// caches the response.
   Future<({int status, dynamic data})> getWithStatus(
     String endpoint, {
     Map<String, dynamic>? params,
@@ -149,7 +144,10 @@ class ApiService {
       if (!noCache) {
         final cached = _cache.loadStale(key);
         if (cached != null) {
-          return ApiResult(cacheNormalizer(cached.data), staleAt: cached.savedAt);
+          return ApiResult(
+            cacheNormalizer(cached.data),
+            staleAt: cached.savedAt,
+          );
         }
       }
       throw AppException(friendlyError(e));
