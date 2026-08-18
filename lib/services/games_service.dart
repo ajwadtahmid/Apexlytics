@@ -1,5 +1,6 @@
 import '../constants/api_constants.dart';
 import '../models/ranked_match.dart';
+import '../utils/error_messages.dart';
 import 'api_service.dart';
 
 /// The result of a `/games` fetch. `200` carries match data; `202` means the
@@ -56,7 +57,13 @@ class GamesService {
       params: {'uid': uid, 'limit': ApiConstants.gamesHistoryLimit},
     );
 
-    if (response.status == 200 && response.data is List) {
+    if (response.status == 200) {
+      // Only a list body is a valid 200. Anything else raises, sending the
+      // caller down the failure path — persisted history plus a retry — rather
+      // than the pending path below.
+      if (response.data is! List) {
+        throw const AppException('Unexpected response from the history server.');
+      }
       return GamesMatches(RankedMatch.listFromJson(response.data as List));
     }
 

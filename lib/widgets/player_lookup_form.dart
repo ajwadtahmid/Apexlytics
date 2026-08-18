@@ -4,6 +4,7 @@ import '../constants/api_constants.dart';
 import '../providers/api_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/error_messages.dart';
+import '../utils/formatting/search_utils.dart';
 import '../utils/theme.dart';
 import '../utils/uid_warning_dialog.dart';
 import 'platform_picker.dart';
@@ -91,8 +92,13 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
       setState(() => _error = 'UID must contain digits only.');
       return;
     }
-    final cooldownKey = '${_searchByUid ? 'uid' : 'name'}:$_platform:$query';
-    if (!ref.read(refreshCooldownProvider).tryFire(cooldownKey)) return;
+    // The same key the favorites and result-page refreshes fire under, so all
+    // three share one cooldown window per player.
+    if (!ref
+        .read(refreshCooldownProvider)
+        .tryFire(playerRefreshKey(_platform, query))) {
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;

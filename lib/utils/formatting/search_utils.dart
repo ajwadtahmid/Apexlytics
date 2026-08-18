@@ -6,13 +6,22 @@ import '../app_logger.dart';
 
 String playerSessionKey(String platform, String query) => '$platform:$query';
 
+/// Cooldown key for "fetch this player's stats", fired by the lookup form and
+/// by the favorites and result-page refreshes. Trims and lowercases [query] so
+/// one player maps to a single cooldown window however it was typed.
+///
+/// [playerSessionKey] is the separate identity key the synced badge reads.
+String playerRefreshKey(String platform, String query) =>
+    '$platform:${query.trim().toLowerCase()}';
+
 /// Fetches fresh stats for a player (bypassing the cache-first provider path),
 /// invalidates [searchPlayerProvider] so it reads the updated disk cache, then
 /// marks the player as synced in [sessionRefreshedProvider].
 ///
-/// Silently skipped (returns true, as if it had succeeded) if [query] was
-/// refreshed too recently — see [refreshCooldownProvider]. Otherwise returns
-/// true on success, false if the network request failed.
+/// Skips the fetch when [query] was refreshed too recently — see
+/// [refreshCooldownProvider] — and in that case still returns true and still
+/// marks the player synced, a recent fetch having already refreshed it.
+/// Returns false only when the request itself failed.
 Future<bool> refreshAndMarkSynced(
   WidgetRef ref,
   PlayerService service,
@@ -23,7 +32,13 @@ Future<bool> refreshAndMarkSynced(
   final params = (query: query, platform: platform, searchByUid: byUid);
   if (!ref
       .read(refreshCooldownProvider)
-      .tryFire(playerSessionKey(platform, query))) {
+      .tryFire(playerRefreshKey(platform, query))) {
+    // The same key _FavoriteTile reads the badge under, built from the
+    // arguments; reading searchPlayerProvider here would start the fetch this
+    // branch just suppressed.
+    ref
+        .read(sessionRefreshedProvider.notifier)
+        .add(byUid ? query.trim() : playerSessionKey(platform, query));
     return true;
   }
   try {

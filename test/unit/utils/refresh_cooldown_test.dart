@@ -38,5 +38,25 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 30));
       expect(cooldown.tryFire('a'), isTrue);
     });
+
+    test('purging expired keys leaves an active key still cooling down', () {
+      final cooldown = RefreshCooldown(duration: const Duration(seconds: 10));
+      expect(cooldown.tryFire('a'), isTrue);
+      // Firing 'b' sweeps expired entries; 'a' is still inside its window and
+      // survives the sweep.
+      expect(cooldown.tryFire('b'), isTrue);
+      expect(cooldown.tryFire('a'), isFalse);
+    });
+
+    test('a key that expired during another key\'s window is swept', () async {
+      final cooldown = RefreshCooldown(
+        duration: const Duration(milliseconds: 20),
+      );
+      expect(cooldown.tryFire('a'), isTrue);
+      await Future.delayed(const Duration(milliseconds: 30));
+      // 'b' sweeps the now-expired 'a', which then fires as a first-time key.
+      expect(cooldown.tryFire('b'), isTrue);
+      expect(cooldown.tryFire('a'), isTrue);
+    });
   });
 }

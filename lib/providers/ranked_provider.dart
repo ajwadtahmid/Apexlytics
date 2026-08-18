@@ -105,15 +105,13 @@ final rankedSyncProvider = FutureProvider.autoDispose
 
       final nextSyncAt = prefs.getInt(PrefsKeys.gamesNextSync(uid)) ?? 0;
       if (DateTime.now().millisecondsSinceEpoch < nextSyncAt) {
-        // Re-report the last known outcome rather than a generic cooldown.
+        // Inside the backoff window: replay the outcome the last real fetch
+        // recorded, falling back to a plain cooldown when nothing is stored.
         final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
-        if (last == RankedSyncOutcome.notTracked.name) {
-          return RankedSyncOutcome.notTracked;
-        }
-        if (last == RankedSyncOutcome.queued.name) {
-          return RankedSyncOutcome.queued;
-        }
-        return RankedSyncOutcome.cooldown;
+        return RankedSyncOutcome.values.firstWhere(
+          (o) => o.name == last,
+          orElse: () => RankedSyncOutcome.cooldown,
+        );
       }
 
       try {

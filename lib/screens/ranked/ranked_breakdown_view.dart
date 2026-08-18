@@ -88,6 +88,11 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
   Widget build(BuildContext context) {
     final splitsAsync = ref.watch(rankedSplitsProvider(widget.uid));
     final period = ref.watch(rankedPeriodProvider);
+    // The tabs render from the local store, so a failed sync still leaves a
+    // populated view — it is just behind whatever upstream has.
+    final isOffline =
+        ref.watch(rankedSyncProvider(widget.uid)).value ==
+        RankedSyncOutcome.offline;
 
     // A matches-free "shell" view (splits + weeks only) so the AppBar's split
     // dropdown and week strip render the moment the picker resolves, before the
@@ -136,17 +141,13 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
                 onLearnMore: _openInfoFromCoachMark,
                 onDismiss: _dismissCoachMark,
               ),
+            if (isOffline) const _OfflineBanner(),
             Expanded(
               child: splitsAsync.when(
                 loading: () => const Center(
                   child: CircularProgressIndicator(color: AppTheme.accent),
                 ),
-                error: (e, _) => _MessageState(
-                  icon: Icons.lock_outline,
-                  title: 'Not available',
-                  message: friendlyError(e),
-                  onRetry: _refresh,
-                ),
+                error: (e, _) => _errorState(e),
                 data: (splits) {
                   if (splits.isEmpty) return _emptyState();
                   final effId = shell!.effectiveSplitId;
@@ -268,11 +269,14 @@ class _RankedBreakdownViewState extends ConsumerState<RankedBreakdownView> {
     await _refresh();
   }
 
+  /// Shown when the sync failed and there is no persisted history to fall back
+  /// on, which is a cold start without a working connection.
   Widget _errorState(Object e) => _MessageState(
-    icon: Icons.lock_outline,
-    title: 'Not available',
+    icon: Icons.cloud_off,
+    title: 'Can\'t load history',
     message: friendlyError(e),
     onRetry: _refresh,
+    onLearnMore: () => showRankedInfoSheet(context),
   );
 
   /// Tab shell keyed by [key] so switching between a split (4 tabs) and Lifetime
@@ -589,6 +593,45 @@ class _StepRow extends StatelessWidget {
 
 /// One-time nudge pointing new visitors at the info icon in the AppBar.
 /// Dismissed (or tapped) once, then never shown again.
+/// Strip shown above the tabs when the last sync failed and persisted history
+/// is still on screen. Sits in the layout alongside the tabs rather than
+/// replacing them, unlike [_MessageState].
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppTheme.md,
+        AppTheme.sm,
+        AppTheme.md,
+        0,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.sm,
+        vertical: AppTheme.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppTheme.orange.withAlpha(25),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.cloud_off, size: 14, color: AppTheme.orange),
+          SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Offline — showing saved history.',
+              style: TextStyle(color: AppTheme.orange, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoCoachMark extends StatelessWidget {
   final VoidCallback onLearnMore;
   final VoidCallback onDismiss;

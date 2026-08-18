@@ -14,6 +14,9 @@ class RefreshCooldown {
     final now = DateTime.now();
     final last = _lastFiredAt[key];
     if (last != null && now.difference(last) < duration) return false;
+    // Drop every key whose window has already elapsed, leaving the map holding
+    // only the keys still cooling down.
+    _lastFiredAt.removeWhere((_, t) => now.difference(t) >= duration);
     _lastFiredAt[key] = now;
     return true;
   }
