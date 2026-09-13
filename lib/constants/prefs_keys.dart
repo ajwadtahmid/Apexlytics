@@ -54,10 +54,14 @@ class PrefsKeys {
   static String legendStatsKeyFor(String? uid) =>
       uid?.isNotEmpty == true ? 'legend_stats_$uid' : 'legend_stats';
 
+  /// Prefix for the UID-scoped ranked goal. Named so backup and clear can
+  /// match it by prefix - a bare literal here is how the goal escaped both.
+  static const rankGoalPrefix = 'rank_goal_';
+
   /// Builds UID-scoped key for the ranked goal (a [kRankLadder] index the player
   /// is climbing toward). Absent = no goal set; the card falls back to tracking
   /// the next division automatically.
-  static String rankGoalKeyFor(String uid) => 'rank_goal_$uid';
+  static String rankGoalKeyFor(String uid) => '$rankGoalPrefix$uid';
 
   /// Earliest time (epoch ms) the app may ask `/games` for [uid] again.
   static String gamesNextSync(String uid) => 'games_next_sync_$uid';

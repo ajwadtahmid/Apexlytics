@@ -768,7 +768,7 @@ List<HourBucket> timeOfDayBucketsFromRankedRows(
 ) => _bucketByHour(
   rows.map((r) {
     final (startMs, rp) = r;
-    final effectiveRp = rp.abs() >= kRankedOutlierThreshold ? 0 : rp;
+    final effectiveRp = effectiveRpOf(rp);
     return (
       DateTime.fromMillisecondsSinceEpoch(startMs, isUtc: true),
       effectiveRp,
@@ -825,7 +825,7 @@ List<WeekdayBucket> dayOfWeekBucketsFromRankedRows(
 ) => _bucketByWeekday(
   rows.map((r) {
     final (startMs, rp) = r;
-    final effectiveRp = rp.abs() >= kRankedOutlierThreshold ? 0 : rp;
+    final effectiveRp = effectiveRpOf(rp);
     return (
       DateTime.fromMillisecondsSinceEpoch(startMs, isUtc: true),
       effectiveRp,

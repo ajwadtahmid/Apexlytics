@@ -8,6 +8,7 @@ import 'providers/navigation_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/player_provider.dart';
 import 'providers/predator_provider.dart';
+import 'providers/ranked_provider.dart';
 import 'providers/server_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/home/home_screen.dart';
@@ -16,6 +17,7 @@ import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'utils/app_logger.dart';
 import 'utils/onboarding.dart';
+import 'utils/storage/rp_snapshot_storage.dart';
 import 'utils/theme.dart';
 
 class ApexLegendsApp extends StatelessWidget {
@@ -58,18 +60,24 @@ class _AppShellState extends ConsumerState<_AppShell>
       // hit-test note above). Shows once on first launch, then never again.
       unawaited(showOnboardingIfNeeded(context, ref));
     });
-    unawaited(Future(() {
-      final defaultTab = ref.read(playerSettingsProvider).defaultTab;
-      ref.read(currentTabProvider.notifier).setTab(appTabForDefault(defaultTab));
-    }));
+    unawaited(
+      Future(() {
+        final defaultTab = ref.read(playerSettingsProvider).defaultTab;
+        ref
+            .read(currentTabProvider.notifier)
+            .setTab(appTabForDefault(defaultTab));
+      }),
+    );
 
     ref.listenManual(playerSettingsProvider, (prev, next) {
       if (prev?.defaultTab != next.defaultTab) {
         // Defer the state update so it doesn't run in the middle of a build —
         // this listener fires synchronously during the build phase.
-        Future(() => ref
-            .read(currentTabProvider.notifier)
-            .setTab(appTabForDefault(next.defaultTab)));
+        Future(
+          () => ref
+              .read(currentTabProvider.notifier)
+              .setTab(appTabForDefault(next.defaultTab)),
+        );
       }
     });
     _applyWakelock(ref.read(playerSettingsProvider).keepScreenOn);
@@ -118,32 +126,32 @@ class _AppShellState extends ConsumerState<_AppShell>
       AppTab.search => const SearchScreen(),
       AppTab.settings => const SettingsScreen(),
     };
-    // Keyed so the IndexedStack preserves each screen's state even when Ranked
-    // is inserted/removed and the others shift position.
+    // Keyed by tab identity so IndexedStack preserves each screen's state
+    // across rebuilds regardless of position.
     return KeyedSubtree(key: ValueKey(tab), child: screen);
   }
 
   BottomNavigationBarItem _navItemFor(AppTab tab) => switch (tab) {
     AppTab.home => const BottomNavigationBarItem(
-        icon: Icon(Icons.home_outlined),
-        activeIcon: Icon(Icons.home),
-        label: 'Home',
-      ),
+      icon: Icon(Icons.home_outlined),
+      activeIcon: Icon(Icons.home),
+      label: 'Home',
+    ),
     AppTab.stats => const BottomNavigationBarItem(
-        icon: Icon(Icons.bar_chart_outlined),
-        activeIcon: Icon(Icons.bar_chart),
-        label: 'My Stats',
-      ),
+      icon: Icon(Icons.bar_chart_outlined),
+      activeIcon: Icon(Icons.bar_chart),
+      label: 'My Stats',
+    ),
     AppTab.search => const BottomNavigationBarItem(
-        icon: Icon(Icons.search_outlined),
-        activeIcon: Icon(Icons.search),
-        label: 'Search',
-      ),
+      icon: Icon(Icons.search_outlined),
+      activeIcon: Icon(Icons.search),
+      label: 'Search',
+    ),
     AppTab.settings => const BottomNavigationBarItem(
-        icon: Icon(Icons.settings_outlined),
-        activeIcon: Icon(Icons.settings),
-        label: 'Settings',
-      ),
+      icon: Icon(Icons.settings_outlined),
+      activeIcon: Icon(Icons.settings),
+      label: 'Settings',
+    ),
   };
 
   /// Fires API requests in priority order on launch:
@@ -152,6 +160,8 @@ class _AppShellState extends ConsumerState<_AppShell>
   /// Favorites are NOT pre-fetched — only updated on manual sync.
   Future<void> _runStartupSequence() async {
     final settings = ref.read(playerSettingsProvider);
+
+    unawaited(_prepareSnapshots(settings.uid));
 
     unawaited(_prefetch(ref.read(mapRotationProvider.future)));
     unawaited(_prefetch(ref.read(seasonalMapsProvider.future)));
@@ -163,6 +173,22 @@ class _AppShellState extends ConsumerState<_AppShell>
     await Future.delayed(_kPhase2Delay);
     unawaited(_prefetch(ref.read(predatorProvider.future)));
     unawaited(_prefetch(ref.read(serverStatusProvider.future)));
+  }
+
+  /// Drains any legacy prefs snapshots into SQLite, then warms the cache for
+  /// the active profile. Failure is non-fatal - the RP graph just stays empty
+  /// for the session.
+  Future<void> _prepareSnapshots(String uid) async {
+    try {
+      final store = ref.read(rankedHistoryStoreProvider);
+      await migrateSnapshotsFromPrefs(
+        ref.read(sharedPreferencesProvider),
+        store,
+      );
+      if (uid.isNotEmpty) await primeSnapshots(store, uid);
+    } catch (e) {
+      log.w('Snapshot preparation failed', error: e);
+    }
   }
 
   Future<void> _prefetch(Future<Object?> future) async {
@@ -178,8 +204,7 @@ class _AppShellState extends ConsumerState<_AppShell>
     final tabs = ref.watch(visibleTabsProvider);
     final currentTab = ref.watch(currentTabProvider);
 
-    // The selected tab may not be in the visible set (e.g. the profile was
-    // cleared while on Ranked) — fall back to the first tab.
+    // Falls back to the first tab if currentTab isn't in the visible set.
     var index = tabs.indexOf(currentTab);
     if (index < 0) index = 0;
 
@@ -189,7 +214,7 @@ class _AppShellState extends ConsumerState<_AppShell>
         children: [for (final t in tabs) _screenFor(t)],
       ),
       bottomNavigationBar: BottomNavigationBar(
-        // Fixed type keeps all labels visible once there are 5 items.
+        // Fixed type keeps every label visible.
         type: BottomNavigationBarType.fixed,
         currentIndex: index,
         onTap: (i) => ref.read(currentTabProvider.notifier).setTab(tabs[i]),

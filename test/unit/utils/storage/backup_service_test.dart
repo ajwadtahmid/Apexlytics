@@ -4,6 +4,65 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  group('backup allowlist exhaustiveness', () {
+    // Every key shape the app persists, each with an explicit verdict -
+    // maintained by hand, but both real escapes so far (Wildcard alerts,
+    // rank_goal_) were keys nobody ever decided about either way.
+    const uid = '1006838015507';
+    const verdicts = <String, bool>{
+      // ── Backed up: user intent worth carrying to a new device ──
+      PrefsKeys.profiles: true,
+      PrefsKeys.activeProfileIndex: true,
+      PrefsKeys.playerName: true,
+      PrefsKeys.playerUid: true,
+      PrefsKeys.playerPlatform: true,
+      PrefsKeys.statsRefreshMinutes: true,
+      PrefsKeys.compactLegendCards: true,
+      PrefsKeys.keepScreenOn: true,
+      PrefsKeys.notifyPubsMapRotation: true,
+      PrefsKeys.notifyRankedMapRotation: true,
+      PrefsKeys.notifyMixtapeMapRotation: true,
+      PrefsKeys.notifyWildcardMapRotation: true,
+      PrefsKeys.rankedNotifyMinutes: true,
+      PrefsKeys.pubsNotifyMinutes: true,
+      PrefsKeys.mixtapeNotifyMinutes: true,
+      PrefsKeys.wildcardNotifyMinutes: true,
+      PrefsKeys.favoriteRankedMapNames: true,
+      PrefsKeys.favoritePubsMapNames: true,
+      PrefsKeys.defaultTab: true,
+      PrefsKeys.searchFavorites: true,
+      PrefsKeys.legendStats: true,
+      PrefsKeys.legendVisitStack: true,
+      PrefsKeys.seasonHistory: true,
+      PrefsKeys.statSnapshots: true,
+      // ── Excluded, each for a stated reason ──
+      // Device-local first-run state: a restore on a fresh install should
+      // still show the tour once.
+      PrefsKeys.onboardingVersion: false,
+      PrefsKeys.uidSearchWarningShown: false,
+      PrefsKeys.rankedInfoCoachMarkShown: false,
+      // Legacy migration-only key; build() derives the per-mode keys from it.
+      PrefsKeys.mapNotifyMinutes: false,
+    };
+
+    test('every fixed PrefsKeys entry has the expected verdict', () {
+      for (final MapEntry(key: key, value: expected) in verdicts.entries) {
+        expect(backupIncludesKey(key), expected, reason: key);
+      }
+    });
+
+    test('every UID-scoped key shape has the expected verdict', () {
+      // Per-UID data the user would expect to survive a device move...
+      expect(backupIncludesKey(PrefsKeys.snapshotKeyFor(uid)), isTrue);
+      expect(backupIncludesKey(PrefsKeys.legendStatsKeyFor(uid)), isTrue);
+      expect(backupIncludesKey(PrefsKeys.rankGoalKeyFor(uid)), isTrue);
+      // ...versus transient sync bookkeeping, which must not be restored: a
+      // stale deadline would open a fresh install inside a 6 h cooldown.
+      expect(backupIncludesKey(PrefsKeys.gamesNextSync(uid)), isFalse);
+      expect(backupIncludesKey(PrefsKeys.gamesLastOutcome(uid)), isFalse);
+    });
+  });
+
   group('backup key allowlist', () {
     // Every map-rotation notification setting a user can configure. If a new
     // alert category is added, its toggle + minutes keys belong here AND in the
@@ -34,8 +93,18 @@ void main() {
 
     test('runtime caches and one-shot flags are excluded from backups', () {
       // Server-derived / device-local state must not travel between devices.
-      expect(backupIncludesKey(PrefsKeys.gamesNextSync('1006838015507')), isFalse);
-      expect(backupIncludesKey(PrefsKeys.gamesLastOutcome('1006838015507')), isFalse);
+      expect(
+        backupIncludesKey(PrefsKeys.rankGoalKeyFor('1006838015507')),
+        isTrue,
+      );
+      expect(
+        backupIncludesKey(PrefsKeys.gamesNextSync('1006838015507')),
+        isFalse,
+      );
+      expect(
+        backupIncludesKey(PrefsKeys.gamesLastOutcome('1006838015507')),
+        isFalse,
+      );
       expect(backupIncludesKey(PrefsKeys.uidSearchWarningShown), isFalse);
       expect(backupIncludesKey(PrefsKeys.onboardingVersion), isFalse);
       expect(backupIncludesKey('api_cache:whatever'), isFalse);
@@ -55,10 +124,10 @@ void main() {
         PrefsKeys.favoriteRankedMapNames: ['Olympus', "World's Edge"],
       });
 
-      expect(
-        prefs.getStringList(PrefsKeys.favoriteRankedMapNames),
-        ['Olympus', "World's Edge"],
-      );
+      expect(prefs.getStringList(PrefsKeys.favoriteRankedMapNames), [
+        'Olympus',
+        "World's Edge",
+      ]);
     });
 
     test('still restores string/int/bool/double values', () async {

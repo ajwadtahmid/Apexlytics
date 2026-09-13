@@ -25,6 +25,27 @@ const int kMinPlausibleRpChange = -250;
 const int kMaxPlausibleKills = 200;
 const int kMaxPlausibleDamage = 20000;
 
+/// Whether [rpChange] is a reset artifact or bad upstream value rather than
+/// RP the player actually moved. Plausible range is `[kMinPlausibleRpChange,
+/// kRankedOutlierThreshold)`, i.e. -250..=999.
+///
+/// **This is the only definition** - every aggregate, Dart or SQL, must reach
+/// the same verdict, or Split/Lifetime/Comparison views disagree on the same
+/// rows. Queries use [kSqlPlausibleRpChange], derived from the same constants.
+bool isImplausibleRpChange(int rpChange) =>
+    rpChange < kMinPlausibleRpChange || rpChange >= kRankedOutlierThreshold;
+
+/// [rpChange] with an implausible value neutralized to 0.
+int effectiveRpOf(int rpChange) =>
+    isImplausibleRpChange(rpChange) ? 0 : rpChange;
+
+/// SQL counterpart of `!`[isImplausibleRpChange], interpolated from the same
+/// constants rather than restated - a hand-copied version of this is how the
+/// SQL and Dart aggregates drifted before.
+const String kSqlPlausibleRpChange =
+    'rp_change >= $kMinPlausibleRpChange AND '
+    'rp_change < $kRankedOutlierThreshold';
+
 /// Stored columns a user may correct by hand, after which sync leaves them
 /// alone. Timestamps are excluded: they derive the row's primary key, its split
 /// classification and its session grouping. `length_secs` is excluded too —
@@ -71,7 +92,11 @@ class MatchTracker {
 
   final num value;
 
-  const MatchTracker({required this.key, required this.name, required this.value});
+  const MatchTracker({
+    required this.key,
+    required this.name,
+    required this.value,
+  });
 
   factory MatchTracker.fromJson(Map<String, dynamic> json) => MatchTracker(
     key: json['key'] as String? ?? '',
@@ -147,10 +172,7 @@ class RankedMatch {
   /// True when this match's [rpChange] is a rank-reset artifact, or otherwise
   /// outside the plausible per-game range, rather than a real per-game swing.
   /// The game itself still counts (kills, damage, etc.).
-  bool get isRankedOutlier =>
-      isRanked &&
-      (rpChange.abs() >= kRankedOutlierThreshold ||
-          rpChange < kMinPlausibleRpChange);
+  bool get isRankedOutlier => isRanked && isImplausibleRpChange(rpChange);
 
   /// [rpChange] with reset artifacts zeroed out. Used in every RP aggregate
   /// (Overview, Legends, Maps, Sessions, Time of Day). The raw [rpChange] is
@@ -168,10 +190,16 @@ class RankedMatch {
   RankedMatch withEdits(Map<String, Object?> changes) => RankedMatch(
     uid: uid,
     playerName: playerName,
-    legend: changes.containsKey('legend') ? changes['legend'] as String : legend,
+    legend: changes.containsKey('legend')
+        ? changes['legend'] as String
+        : legend,
     gameMode: gameMode,
-    mapKey: changes.containsKey('map_key') ? changes['map_key'] as String : mapKey,
-    rpChange: changes.containsKey('rp_change') ? changes['rp_change'] as int : rpChange,
+    mapKey: changes.containsKey('map_key')
+        ? changes['map_key'] as String
+        : mapKey,
+    rpChange: changes.containsKey('rp_change')
+        ? changes['rp_change'] as int
+        : rpChange,
     cumulativeRp: cumulativeRp,
     rankImg: rankImg,
     lengthSecs: lengthSecs,
@@ -225,8 +253,12 @@ class RankedMatch {
   RankedMatch withPlausibleStats() {
     final k = kills;
     final d = damage;
-    final validKills = k == null || (k >= 0 && k <= kMaxPlausibleKills) ? k : null;
-    final validDamage = d == null || (d >= 0 && d <= kMaxPlausibleDamage) ? d : null;
+    final validKills = k == null || (k >= 0 && k <= kMaxPlausibleKills)
+        ? k
+        : null;
+    final validDamage = d == null || (d >= 0 && d <= kMaxPlausibleDamage)
+        ? d
+        : null;
     if (validKills == k && validDamage == d) return this;
     return RankedMatch(
       uid: uid,
@@ -352,7 +384,8 @@ class RankedMatch {
     'end_ms': endTime.millisecondsSinceEpoch,
     'is_party_full': isPartyFull ? 1 : 0,
     'trackers': jsonEncode([
-      for (final t in trackers) {'key': t.key, 'name': t.name, 'value': t.value},
+      for (final t in trackers)
+        {'key': t.key, 'name': t.name, 'value': t.value},
     ]),
     'kills': kills,
     'damage': damage,

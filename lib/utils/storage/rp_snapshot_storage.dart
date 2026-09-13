@@ -1,19 +1,35 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/prefs_keys.dart';
 import '../../models/player_stats.dart';
 import '../../models/season_meta.dart';
 import '../app_logger.dart';
+import 'ranked_history_store.dart';
 import 'season_storage.dart';
 import '../formatting/season_utils.dart';
 import '../formatting/snapshot_types.dart';
 
-/// Prefix for RP snapshot keys. Keys are stored as `stat_snapshots_<uid>`.
-/// Included in backups to preserve historical RP data across app reinstalls.
+/// Legacy prefix for RP snapshot keys, `stat_snapshots_<uid>`.
+///
+/// Snapshots now live in the `stat_snapshots` table (schema v8). This is kept
+/// for two reasons: [migrateSnapshotsFromPrefs] drains it, and v2 backup files
+/// still carry the prefs form, so `backup_service` must keep accepting it.
 const String snapshotKeyPrefix = 'stat_snapshots_';
 
-// No cap — snapshots grow only when RP changes (dedup), so the total is
-// bounded by the number of matches played across the life of the app.
+/// Per-UID snapshots held in memory, oldest first - the table is the durable
+/// copy, but the RP graph renders on frame 1 and SQLite is async, so reads
+/// are served from here. [primeSnapshots] fills it, [loadSnapshotsSync] reads
+/// it, [appendSnapshot] keeps both in step. Keyed like [PrefsKeys.snapshotKeyFor].
+final Map<String, List<StatSnapshot>> _cache = {};
+
+/// Drops every cached entry. For "Clear all data" and for test isolation -
+/// without it a cleared database would still read back through this cache.
+void resetSnapshotCache() => _cache.clear();
+
+@visibleForTesting
+bool isSnapshotCachePrimed(String? uid) =>
+    _cache.containsKey(PrefsKeys.snapshotKeyFor(uid));
 
 List<StatSnapshot> _parseSnapshots(String? raw) {
   try {
@@ -28,24 +44,85 @@ List<StatSnapshot> _parseSnapshots(String? raw) {
   }
 }
 
-/// Synchronous read — SharedPreferences.getString is in-memory after app init,
-/// so this never blocks. Use this to populate the graph on the first frame.
-List<StatSnapshot> loadSnapshotsSync(SharedPreferences prefs, {String? uid}) =>
-    _parseSnapshots(prefs.getString(PrefsKeys.snapshotKeyFor(uid)));
+/// Moves any snapshots still in SharedPreferences into [store].
+///
+/// Driven by the presence of legacy keys, not a "migrated" flag - a flag set
+/// on first launch would wrongly suppress the drain when an older backup
+/// (which carries snapshots as prefs, not table rows) is imported later.
+/// Each key is removed only after its rows commit, and the insert is
+/// idempotent, so an interrupted or repeated run is safe.
+Future<void> migrateSnapshotsFromPrefs(
+  SharedPreferences prefs,
+  RankedHistoryStore store,
+) async {
+  final legacyKeys = prefs
+      .getKeys()
+      .where(
+        (k) => k.startsWith(snapshotKeyPrefix) || k == PrefsKeys.statSnapshots,
+      )
+      .toList();
+  if (legacyKeys.isEmpty) return;
 
-Future<void> appendSnapshot(
+  for (final key in legacyKeys) {
+    final snaps = _parseSnapshots(prefs.getString(key));
+    if (snaps.isEmpty) continue;
+    // The UID-less legacy key has no owner; it predates multi-profile support
+    // and its data belongs to whoever was linked at the time. Keeping it under
+    // the empty-uid bucket matches how snapshotKeyFor(null) already reads it.
+    final uid = key == PrefsKeys.statSnapshots
+        ? ''
+        : key.substring(snapshotKeyPrefix.length);
+    await store.appendSnapshotsFor(uid, snaps);
+    log.i('Migrated ${snaps.length} RP snapshots to SQLite');
+  }
+
+  for (final key in legacyKeys) {
+    await prefs.remove(key);
+  }
+  // Anything already cached was read before the drain and is now incomplete.
+  resetSnapshotCache();
+}
+
+/// Loads [uid]'s snapshots from [store] into the cache. Call before the first
+/// synchronous read for that UID - on app start for the active profile, and on
+/// profile switch.
+Future<List<StatSnapshot>> primeSnapshots(
+  RankedHistoryStore store,
+  String? uid,
+) async {
+  final snaps = await store.snapshotsFor(uid ?? '');
+  _cache[PrefsKeys.snapshotKeyFor(uid)] = snaps;
+  return snaps;
+}
+
+/// Synchronous read, served from the cache filled by [primeSnapshots].
+/// Returns empty for a UID that has not been primed yet - the graph fills in
+/// on the frame after priming completes rather than blocking the first one.
+List<StatSnapshot> loadSnapshotsSync({String? uid}) =>
+    _cache[PrefsKeys.snapshotKeyFor(uid)] ?? const [];
+
+/// Appends a reading for [uid], if it is one worth keeping.
+///
+/// Returns the updated list. Skips (returning the current list unchanged) when
+/// the reading is an untrustworthy zero or a duplicate of the last one.
+Future<List<StatSnapshot>> appendSnapshot(
   PlayerStats stats,
-  SharedPreferences prefs, {
+  RankedHistoryStore store, {
   String? uid,
   bool deduplicateRp = true,
 }) async {
-  final snapshots = _parseSnapshots(prefs.getString(PrefsKeys.snapshotKeyFor(uid)));
-  final now = DateTime.now();
+  final key = PrefsKeys.snapshotKeyFor(uid);
+  // A UID that was never primed would otherwise dedup against an empty list
+  // and re-append a reading already on disk.
+  final snapshots = _cache.containsKey(key)
+      ? _cache[key]!
+      : await primeSnapshots(store, uid);
+
   final seasonId = stats.rankedSeason?.id;
 
   // Keeps a mid-rollover `rankScore: 0` from planting a fake reset floor. See
   // [trustedSnapshots], which does the same for entries already on disk.
-  if (stats.rankScore == 0 && snapshots.any((s) => s.rp > 0)) return;
+  if (stats.rankScore == 0 && snapshots.any((s) => s.rp > 0)) return snapshots;
 
   // Dedup covers the split too — that entry marks where the reset fell, so it
   // must survive even when RP lands on the same number.
@@ -53,39 +130,52 @@ Future<void> appendSnapshot(
       deduplicateRp &&
       snapshots.last.rp == stats.rankScore &&
       snapshots.last.seasonId == seasonId) {
-    return;
+    return snapshots;
   }
 
-  snapshots.add(
-    StatSnapshot(timestamp: now, rp: stats.rankScore, seasonId: seasonId),
-  );
+  // `(uid, ts_ms)` is the primary key, so two appends in the same millisecond
+  // would replace each other instead of both landing - nudge forward to keep
+  // the series strictly increasing. Compared in whole milliseconds, not with
+  // DateTime.isAfter: DateTime's microsecond precision would still collide on
+  // the truncated column.
+  final lastMs = snapshots.isEmpty
+      ? null
+      : snapshots.last.timestamp.millisecondsSinceEpoch;
+  var nowMs = DateTime.now().millisecondsSinceEpoch;
+  if (lastMs != null && nowMs <= lastMs) nowMs = lastMs + 1;
 
-  await prefs.setString(
-    PrefsKeys.snapshotKeyFor(uid),
-    jsonEncode(snapshots.map((s) => s.toJson()).toList()),
+  final snapshot = StatSnapshot(
+    timestamp: DateTime.fromMillisecondsSinceEpoch(nowMs),
+    rp: stats.rankScore,
+    seasonId: seasonId,
   );
+  await store.appendSnapshotFor(uid ?? '', snapshot);
+  // One row appended, one list element appended - no full re-encode of the
+  // series, which is what made the old prefs blob O(n) on every poll tick.
+  final updated = [...snapshots, snapshot];
+  _cache[key] = updated;
+  return updated;
 }
 
-/// Appends a snapshot and returns the updated snapshot list.
+/// Appends a snapshot and returns the updated list for `stats.uid`.
 Future<List<StatSnapshot>> appendAndLoadSnapshots(
   PlayerStats stats,
-  SharedPreferences prefs, {
+  RankedHistoryStore store, {
   bool deduplicateRp = true,
-}) async {
-  await appendSnapshot(stats, prefs, uid: stats.uid, deduplicateRp: deduplicateRp);
-  return loadSnapshotsSync(prefs, uid: stats.uid);
-}
+}) =>
+    appendSnapshot(stats, store, uid: stats.uid, deduplicateRp: deduplicateRp);
 
 /// Loads snapshots, seasons, and computes RP delta for a player in one call.
-/// Used by state initialization in stats views to populate all snapshot-related data.
+/// Used by state initialization in stats views to populate all snapshot-related
+/// data. Reads the primed cache, so it stays synchronous.
 ({List<StatSnapshot> snapshots, Map<String, SeasonMeta> allSeasons, int? delta})
-    initSnapshotsData(
+initSnapshotsData(
   SharedPreferences prefs,
   String uid,
   SeasonMeta? season,
   int currentRp,
 ) {
-  final snaps = loadSnapshotsSync(prefs, uid: uid);
+  final snaps = loadSnapshotsSync(uid: uid);
   final seasons = loadAllSeasonsSync(prefs);
   final delta = computeWeekDelta(snaps, season, currentRp);
   return (snapshots: snaps, allSeasons: seasons, delta: delta);

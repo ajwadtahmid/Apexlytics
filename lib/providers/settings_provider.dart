@@ -554,52 +554,56 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     (s) => s.copyWith(favoritePubsMapNames: v),
   );
 
-  Future<void> clear() async {
-    await Future.wait([
-      _prefs.remove(PrefsKeys.profiles),
-      _prefs.remove(PrefsKeys.activeProfileIndex),
-      _prefs.remove(PrefsKeys.playerName),
-      _prefs.remove(PrefsKeys.playerUid),
-      _prefs.remove(PrefsKeys.playerPlatform),
-      _prefs.remove(PrefsKeys.notifyPubsMapRotation),
-      _prefs.remove(PrefsKeys.notifyRankedMapRotation),
-      _prefs.remove(PrefsKeys.notifyMixtapeMapRotation),
-      _prefs.remove(PrefsKeys.notifyWildcardMapRotation),
-      _prefs.remove(PrefsKeys.rankedNotifyMinutes),
-      _prefs.remove(PrefsKeys.pubsNotifyMinutes),
-      _prefs.remove(PrefsKeys.mixtapeNotifyMinutes),
-      _prefs.remove(PrefsKeys.wildcardNotifyMinutes),
-      // Legacy pre-per-mode key. Without this, the build() migration sees the
-      // per-mode keys absent and this key still present, then re-populates
-      // the per-mode timings from it — undoing the clear.
-      _prefs.remove(PrefsKeys.mapNotifyMinutes),
-      _prefs.remove(PrefsKeys.favoriteRankedMapNames),
-      _prefs.remove(PrefsKeys.favoritePubsMapNames),
-      _prefs.remove(PrefsKeys.statsRefreshMinutes),
-      _prefs.remove(PrefsKeys.compactLegendCards),
-      _prefs.remove(PrefsKeys.keepScreenOn),
-      _prefs.remove(PrefsKeys.defaultTab),
-    ]);
-    state = state.copyWith(
-      profiles: [],
-      activeProfileIndex: 0,
-      notifyPubsMapRotation: false,
-      notifyRankedMapRotation: false,
-      notifyMixtapeMapRotation: false,
-      notifyWildcardMapRotation: false,
-      rankedNotifyMinutesBefore: 0,
-      pubsNotifyMinutesBefore: 0,
-      mixtapeNotifyMinutesBefore: 0,
-      wildcardNotifyMinutesBefore: 0,
-      favoriteRankedMapNames: [],
-      favoritePubsMapNames: [],
-      // The key is removed above, so the next launch reads the default anyway —
-      // reset in-memory to the same value rather than to a stale 0.
-      statsRefreshMinutes: kDefaultStatsRefreshMinutes,
-      compactLegendCards: false,
-      keepScreenOn: false,
-      defaultTab: 0,
-    );
+  /// Device-local first-run state, deliberately **kept** by [clearAll] -
+  /// clearing player data shouldn't replay the onboarding tour. Mirrors
+  /// `backup_service.dart`'s `_excludedKeys`.
+  @visibleForTesting
+  static const survivesClearAll = {
+    PrefsKeys.onboardingVersion,
+    PrefsKeys.uidSearchWarningShown,
+    PrefsKeys.rankedInfoCoachMarkShown,
+  };
+
+  /// Who the user is and who they follow - the identity half of the data.
+  /// Cleared on its own by [clearProfilesAndFavorites], and as part of the
+  /// sweep by [clearAll].
+  static const _profileKeys = {
+    PrefsKeys.profiles,
+    PrefsKeys.activeProfileIndex,
+    // Legacy single-player keys: left behind, build()'s migration would
+    // resurrect a profile from them on next launch.
+    PrefsKeys.playerName,
+    PrefsKeys.playerUid,
+    PrefsKeys.playerPlatform,
+    PrefsKeys.searchFavorites,
+  };
+
+  /// Removes saved profiles and favourite players, leaving preferences,
+  /// notification settings, RP history and match history intact.
+  ///
+  /// Callers must also reset `searchStateProvider`, which holds the favourites
+  /// list in memory.
+  Future<void> clearProfilesAndFavorites() async {
+    await Future.wait(_profileKeys.map(_prefs.remove));
+    state = state.copyWith(profiles: [], activeProfileIndex: 0);
+  }
+
+  /// Removes **everything** except [survivesClearAll].
+  ///
+  /// A sweep, not an enumerated list - the old version named 20 keys and
+  /// missed nine others, so "clear all data" quietly left RP history behind.
+  /// A survivor allowlist can't rot the same way: a new key is cleared by
+  /// default unless kept on purpose.
+  ///
+  /// Callers must also clear the ranked match database, the API cache, and any
+  /// provider holding derived state (see `CacheSettingsSection`).
+  Future<void> clearAll() async {
+    final doomed = _prefs
+        .getKeys()
+        .where((k) => !survivesClearAll.contains(k))
+        .toList();
+    await Future.wait(doomed.map(_prefs.remove));
+    state = const PlayerSettings();
   }
 }
 

@@ -375,6 +375,12 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
   List<String> _legendStack = [];
   String? _lastLegend;
 
+  // Guards against a slower earlier load (e.g. from a profile switch)
+  // overwriting a faster later one. Same idiom as
+  // MyPlayerStatsNotifier._buildGeneration. _lastLegend below is unrelated -
+  // it debounces the legend-stack push, not this state write.
+  int _loadGeneration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -406,6 +412,9 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
   }
 
   Future<void> _loadAndAppend() async {
+    // Claimed synchronously, before the first await, so no other invocation
+    // can interleave between the read and the write.
+    final generation = ++_loadGeneration;
     final legend = widget.stats.currentLegend;
     final legendChanged = legend != _lastLegend;
     // Update immediately so concurrent calls don't double-push.
@@ -424,14 +433,20 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
     if (seasonChanged && mounted) ref.invalidate(rankedSeasonsProvider);
 
     final (snaps, legends, stack) = await (
-      appendAndLoadSnapshots(widget.stats, prefs),
+      // Primes the snapshot cache on first call for this UID.
+      appendAndLoadSnapshots(
+        widget.stats,
+        ref.read(rankedHistoryStoreProvider),
+      ),
       mergeLegendStats(widget.stats.legendStats, prefs, uid: widget.stats.uid),
       legendChanged && legend.isNotEmpty
           ? pushToLegendStack(legend, prefs)
           : loadLegendStack(prefs),
     ).wait;
     final historyNetRp = await _historyNetRpThisWeek();
-    if (mounted) {
+    // A newer load superseded us while we were awaiting - its data is the
+    // current profile's, ours may not be.
+    if (mounted && generation == _loadGeneration) {
       setState(() {
         snapshots = snaps;
         _mergedLegends = legends;

@@ -232,6 +232,13 @@ typedef RankedSplitView = ({
   RankedSummary summary,
   List<LegendBreakdown> legends,
   List<MapBreakdown> maps,
+  // Belongs here, not in build - these were computed inline in
+  // _OverviewTab and re-ran on every rebuild, the exact waste this provider
+  // exists to avoid.
+  List<HourBucket> timeOfDay,
+  List<WeekdayBucket> dayOfWeek,
+  RankedSummary fullSquad,
+  RankedSummary partialSquad,
 });
 
 final rankedSplitViewProvider = FutureProvider.autoDispose
@@ -253,6 +260,10 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
         summary: summarize(filtered),
         legends: legendBreakdowns(filtered),
         maps: mapBreakdowns(filtered),
+        timeOfDay: timeOfDayBuckets(filtered),
+        dayOfWeek: dayOfWeekBuckets(filtered),
+        fullSquad: summarize(filtered.where((m) => m.isPartyFull).toList()),
+        partialSquad: summarize(filtered.where((m) => !m.isPartyFull).toList()),
       );
     });
 
@@ -316,7 +327,10 @@ final rankedSplitDetailProvider = FutureProvider.autoDispose
       final store = ref.watch(rankedHistoryStoreProvider);
       return (
         summary: await store.summaryFor(arg.uid, seasonId: arg.splitId),
-        legends: await store.legendBreakdownsFor(arg.uid, seasonId: arg.splitId),
+        legends: await store.legendBreakdownsFor(
+          arg.uid,
+          seasonId: arg.splitId,
+        ),
         maps: await store.mapBreakdownsFor(arg.uid, seasonId: arg.splitId),
         legendMap: await store.legendMapBreakdownsFor(
           arg.uid,

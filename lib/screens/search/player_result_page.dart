@@ -86,9 +86,16 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
     if (mounted) setState(() => _refreshing = false);
   }
 
-  Future<void> _openOnALS(BuildContext context, String uid, String platform) async {
+  Future<void> _openOnALS(
+    BuildContext context,
+    String uid,
+    String platform,
+  ) async {
     final url = '${ApiConstants.alsProfileBaseUrl}/$platform/$uid';
-    final success = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    final success = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
     if (!success && context.mounted) {
       context.showMessage('Could not open link');
     }
@@ -201,7 +208,9 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
       context: context,
       backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusLg),
+        ),
       ),
       builder: (sheetCtx) {
         return SafeArea(
@@ -235,8 +244,11 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
                   Navigator.pop(sheetCtx);
                   showDialog(
                     context: context,
-                    builder: (_) =>
-                        PlayerCompareSheet(me: me, them: them, selection: 'Ranked'),
+                    builder: (_) => PlayerCompareSheet(
+                      me: me,
+                      them: them,
+                      selection: 'Ranked',
+                    ),
                   );
                 },
               ),
@@ -318,6 +330,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     if (!mounted) return;
     final changed = await appendSnapshotState(
       prefs,
+      ref.read(rankedHistoryStoreProvider),
       widget.stats,
       historyNetRp: historyNetRp,
     );
@@ -330,8 +343,12 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     // Populate from the in-memory prefs store synchronously so the graph is
     // present on the very first frame — no layout shift.
     final prefs = ref.read(sharedPreferencesProvider);
-    initSnapshotFields(prefs, widget.stats.uid,
-        widget.stats.rankedSeason, widget.stats.rankScore);
+    initSnapshotFields(
+      prefs,
+      widget.stats.uid,
+      widget.stats.rankedSeason,
+      widget.stats.rankScore,
+    );
     // Append the current data point (disk write) and update if a new entry was added.
     _appendSnapshot(prefs);
   }
@@ -341,8 +358,12 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     super.didUpdateWidget(old);
     if (old.stats.uid != widget.stats.uid) {
       final prefs = ref.read(sharedPreferencesProvider);
-      initSnapshotFields(prefs, widget.stats.uid,
-          widget.stats.rankedSeason, widget.stats.rankScore);
+      initSnapshotFields(
+        prefs,
+        widget.stats.uid,
+        widget.stats.rankedSeason,
+        widget.stats.rankScore,
+      );
       _appendSnapshot(prefs);
     }
   }

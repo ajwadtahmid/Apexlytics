@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
@@ -9,6 +10,7 @@ import '../../constants/ranked_map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
 import '../formatting/season_utils.dart';
+import '../formatting/snapshot_types.dart';
 import '../ranked/ranked_aggregates.dart';
 
 /// Local SQLite store that accumulates ranked match history per UID, beyond the
@@ -22,7 +24,13 @@ import '../ranked/ranked_aggregates.dart';
 class RankedHistoryStore {
   static const _dbName = 'ranked_history.db';
   static const table = 'ranked_matches';
-  static const _version = 7;
+
+  /// RP snapshots - the *other* RP source (see `rp_snapshot_storage.dart`).
+  /// Lives here rather than in its own database because it shares this one's
+  /// lifecycle, backup envelope and per-UID scoping.
+  static const snapshotTable = 'stat_snapshots';
+
+  static const _version = 8;
 
   // Scope of the lazy season backfill — the rows it still has work to do on.
   // Used verbatim by both a partial index and the backfill query, which must
@@ -34,14 +42,39 @@ class RankedHistoryStore {
   final String? _overridePath;
   Database? _db;
 
+  // The in-flight open, held only while one is running. See [_open].
+  Future<Database>? _opening;
+
+  /// Test hook: sqflite silently no-ops a duplicate open of the same path
+  /// (no error, no second `onCreate`), so this counter is the only way to
+  /// verify [_open]'s single-open guarantee.
+  @visibleForTesting
+  int openCount = 0;
+
   // this._overridePath can't be a named parameter here — private identifiers
   // aren't callable from outside the library, and `overridePath:` must stay
   // public for existing callers.
   // ignore: prefer_initializing_formals
   RankedHistoryStore({String? overridePath}) : _overridePath = overridePath;
 
-  Future<Database> _open() async {
-    if (_db != null) return _db!;
+  /// The open database, opening it on first use.
+  ///
+  /// Memoizes the in-flight *future*, not just the result - several ranked
+  /// providers can resume in the same microtask drain and race into this
+  /// method before `_db` is set, and a plain `if (_db != null)` check would
+  /// let each one call [openDatabase] (leaked handles, possibly concurrent
+  /// `onUpgrade` runs). [_opening] is assigned synchronously, before any
+  /// await, so a racing caller awaits the same future instead of its own.
+  Future<Database> _open() {
+    final db = _db;
+    if (db != null) return Future.value(db);
+    // Cleared on completion (including failure) so a transient open error
+    // can't pin a rejected future for every later call.
+    return _opening ??= _doOpen().whenComplete(() => _opening = null);
+  }
+
+  Future<Database> _doOpen() async {
+    openCount++;
     final path = _overridePath ?? await _resolveDbPath();
     _db = await openDatabase(
       path,
@@ -80,6 +113,7 @@ class RankedHistoryStore {
           'ON $table (uid, game_mode, rp_change)',
         );
         await _createSeasonBackfillIndex(db);
+        await _createSnapshotTable(db);
       },
       onUpgrade: (db, oldVersion, _) async {
         // v1 → v2: add the derived season/split column + its index. Existing
@@ -138,6 +172,12 @@ class RankedHistoryStore {
         if (oldVersion < 7) {
           await _repairImplausibleStats(db);
         }
+        // v7 → v8: RP snapshots move out of an ever-growing SharedPreferences
+        // JSON string into a real table. Prefs migration happens separately
+        // via `migrateSnapshotsFromPrefs`, which needs SharedPreferences.
+        if (oldVersion < 8) {
+          await _createSnapshotTable(db);
+        }
       },
     );
     return _db!;
@@ -153,6 +193,22 @@ class RankedHistoryStore {
       'CREATE INDEX IF NOT EXISTS idx_needs_season_id '
       'ON $table (id) WHERE $_needsSeasonId',
     );
+  }
+
+  /// The RP-snapshot table. `(uid, ts_ms)` is the primary key: one reading per
+  /// player per instant, so a replayed append or a re-run migration is
+  /// idempotent rather than duplicating the series. That doubles as the index
+  /// for every read, which is always "this player's snapshots, oldest first".
+  Future<void> _createSnapshotTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $snapshotTable (
+        uid TEXT NOT NULL,
+        ts_ms INTEGER NOT NULL,
+        rp INTEGER NOT NULL,
+        season_id TEXT,
+        PRIMARY KEY (uid, ts_ms)
+      )
+    ''');
   }
 
   /// Re-derives every row's [kills]/[damage] from its stored `trackers` blob,
@@ -189,7 +245,8 @@ class RankedHistoryStore {
     final rows = await db.query(
       table,
       columns: ['id', 'kills', 'damage', 'edited_fields'],
-      where: 'kills < 0 OR kills > $kMaxPlausibleKills OR '
+      where:
+          'kills < 0 OR kills > $kMaxPlausibleKills OR '
           'damage < 0 OR damage > $kMaxPlausibleDamage',
     );
     if (rows.isEmpty) return;
@@ -197,8 +254,10 @@ class RankedHistoryStore {
     for (final r in rows) {
       final kills = (r['kills'] as num?)?.toInt();
       final damage = (r['damage'] as num?)?.toInt();
-      final badKills = kills != null && (kills < 0 || kills > kMaxPlausibleKills);
-      final badDamage = damage != null && (damage < 0 || damage > kMaxPlausibleDamage);
+      final badKills =
+          kills != null && (kills < 0 || kills > kMaxPlausibleKills);
+      final badDamage =
+          damage != null && (damage < 0 || damage > kMaxPlausibleDamage);
       final flags = {
         ...decodeEditedFields(r['edited_fields']),
         if (badKills) 'kills',
@@ -363,11 +422,25 @@ class RankedHistoryStore {
   /// Keys of [values] must be in [kEditableMatchFields]; anything else throws.
   /// The row's `id` is never rewritten, so correcting a field can't produce a
   /// second row for the same match. Flags accumulate across calls.
+  ///
+  /// Values are range-checked against the same plausibility constants
+  /// [RankedMatch.withPlausibleStats] applies to synced matches. This is
+  /// deliberately enforced here and not only in the edit form: an edit sets the
+  /// edited flag, which stops every later sync from correcting the column, so
+  /// an out-of-range value written through this method is permanent.
   Future<void> editMatch(String id, Map<String, Object?> values) async {
     final invalid = values.keys.toSet().difference(kEditableMatchFields);
     if (invalid.isNotEmpty) {
       throw ArgumentError('Not editable: ${invalid.join(', ')}');
     }
+    _assertEditableRange(values, 'kills', 0, kMaxPlausibleKills);
+    _assertEditableRange(values, 'damage', 0, kMaxPlausibleDamage);
+    _assertEditableRange(
+      values,
+      'rp_change',
+      kMinPlausibleRpChange,
+      kRankedOutlierThreshold - 1,
+    );
     if (values.isEmpty) return;
     final db = await _open();
     final existing = await db.query(
@@ -388,6 +461,23 @@ class RankedHistoryStore {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  /// Throws when [values] carries [key] with a value outside `[min, max]`.
+  /// A null is always allowed - for kills/damage it is the legitimate "not
+  /// reported" value, and the caller validates required-ness separately.
+  static void _assertEditableRange(
+    Map<String, Object?> values,
+    String key,
+    int min,
+    int max,
+  ) {
+    if (!values.containsKey(key)) return;
+    final v = values[key];
+    if (v == null) return;
+    if (v is! int || v < min || v > max) {
+      throw ArgumentError.value(v, key, 'must be an int in [$min, $max]');
+    }
   }
 
   /// Drops the edited flag on [field] for the match [id], or on every field
@@ -508,9 +598,9 @@ class RankedHistoryStore {
     return (buf.toString(), args);
   }
 
-  // Shared aggregate columns. Net RP zeroes reset outliers; a win/loss is an
-  // RP-positive/negative game that isn't a reset artifact — matching
-  // `RankedMatch.effectiveRpChange`.
+  // Shared aggregate columns. Uses [kSqlPlausibleRpChange] rather than a
+  // hand-copied threshold test - restating the rule here is what let these
+  // columns drift from `RankedMatch.effectiveRpChange` in the past.
   static const _aggCols =
       '''
       COUNT(*) AS games,
@@ -519,11 +609,11 @@ class RankedHistoryStore {
       COUNT(kills) AS kills_games,
       COUNT(damage) AS damage_games,
       COALESCE(SUM(length_secs), 0) AS length_secs,
-      COALESCE(SUM(CASE WHEN ABS(rp_change) >= $kRankedOutlierThreshold
-                        THEN 0 ELSE rp_change END), 0) AS net_rp,
-      COALESCE(SUM(CASE WHEN rp_change > 0 AND rp_change < $kRankedOutlierThreshold
+      COALESCE(SUM(CASE WHEN $kSqlPlausibleRpChange
+                        THEN rp_change ELSE 0 END), 0) AS net_rp,
+      COALESCE(SUM(CASE WHEN rp_change > 0 AND $kSqlPlausibleRpChange
                         THEN 1 ELSE 0 END), 0) AS wins,
-      COALESCE(SUM(CASE WHEN rp_change < 0 AND rp_change > -$kRankedOutlierThreshold
+      COALESCE(SUM(CASE WHEN rp_change < 0 AND $kSqlPlausibleRpChange
                         THEN 1 ELSE 0 END), 0) AS losses''';
 
   /// Window summary for [uid] across [seasonId] (null = lifetime), via SQL.
@@ -686,8 +776,8 @@ class RankedHistoryStore {
 
     final byPair = <(String, String), List<Map<String, Object?>>>{};
     for (final r in rows) {
-      final legend = kLegendsByName[(r['legend'] as String? ?? '').toLowerCase()]
-          ?.name;
+      final legend =
+          kLegendsByName[(r['legend'] as String? ?? '').toLowerCase()]?.name;
       final mapName = rankedMapInfo(r['map_key'] as String? ?? '')?.name;
       if (legend == null || mapName == null) continue;
       byPair.putIfAbsent((legend, mapName), () => []).add(r);
@@ -699,11 +789,15 @@ class RankedHistoryStore {
           legend: entry.key.$1,
           mapName: entry.key.$2,
           games: entry.value.fold(0, (s, r) => s + (r['games'] as num).toInt()),
-          totalRp:
-              entry.value.fold(0, (s, r) => s + (r['net_rp'] as num).toInt()),
+          totalRp: entry.value.fold(
+            0,
+            (s, r) => s + (r['net_rp'] as num).toInt(),
+          ),
           wins: entry.value.fold(0, (s, r) => s + (r['wins'] as num).toInt()),
-          losses:
-              entry.value.fold(0, (s, r) => s + (r['losses'] as num).toInt()),
+          losses: entry.value.fold(
+            0,
+            (s, r) => s + (r['losses'] as num).toInt(),
+          ),
         ),
     ];
   }
@@ -817,10 +911,16 @@ class RankedHistoryStore {
     return (
       bestRpGame: await top(
         'rp_change',
-        extraWhere: ' AND ABS(rp_change) < $kRankedOutlierThreshold',
+        extraWhere: ' AND $kSqlPlausibleRpChange',
       ),
-      bestKillsGame: await top('kills'),
-      bestDamageGame: await top('damage'),
+      // `IS NOT NULL` is load-bearing: `LIMIT 1` on a non-empty table always
+      // returns a row, so without it an untracked stat returned a real match
+      // with a null value instead of no match at all.
+      bestKillsGame: await top('kills', extraWhere: ' AND kills IS NOT NULL'),
+      bestDamageGame: await top(
+        'damage',
+        extraWhere: ' AND damage IS NOT NULL',
+      ),
     );
   }
 
@@ -869,7 +969,14 @@ class RankedHistoryStore {
       'AND end_ms >= ? AND end_ms < ? ORDER BY end_ms ASC',
       [uid, startMs, end.millisecondsSinceEpoch],
     );
-    if (rows.isEmpty) return null;
+    // No matches in the window is a provable zero, not "can't determine": the
+    // anchor above already establishes that local history predates [start], so
+    // there is no hole to hide a game in. Returning null here sent a week the
+    // player genuinely sat out to the less accurate snapshot estimate.
+    if (rows.isEmpty) {
+      final anchorCum = (anchor.first['cumulative_rp'] as num?)?.toInt() ?? 0;
+      return anchorCum == currentRp ? 0 : null;
+    }
 
     var prevCum = (anchor.first['cumulative_rp'] as num?)?.toInt() ?? 0;
     var net = 0;
@@ -877,8 +984,10 @@ class RankedHistoryStore {
       final change = (r['rp_change'] as num?)?.toInt() ?? 0;
       final cum = (r['cumulative_rp'] as num?)?.toInt() ?? 0;
       if (cum == prevCum + change) {
-        // Matches the neutralisation in [RankedMatch.effectiveRpChange].
-        if (change.abs() < kRankedOutlierThreshold) net += change;
+        // Matches the neutralisation in [RankedMatch.effectiveRpChange], via
+        // the shared predicate - this is the weekly RP figure on My Stats, so
+        // it has to agree with the breakdown the user compares it against.
+        net += effectiveRpOf(change);
       } else if (change == 0 && cum < prevCum) {
         net = 0; // the reset — start counting from the new floor
       } else {
@@ -898,31 +1007,161 @@ class RankedHistoryStore {
     return (rows.first['c'] as num?)?.toInt() ?? 0;
   }
 
+  // ── RP snapshots ───────────────────────────────────────────────────────────
+
+  /// [uid]'s RP snapshots, oldest first - the order every consumer assumes
+  /// (`lastResetIndex` walks backwards, `weekDelta` takes `before.last`).
+  Future<List<StatSnapshot>> snapshotsFor(String uid) async {
+    final db = await _open();
+    final rows = await db.query(
+      snapshotTable,
+      where: 'uid = ?',
+      whereArgs: [uid],
+      orderBy: 'ts_ms ASC',
+    );
+    return [
+      for (final r in rows)
+        StatSnapshot(
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            (r['ts_ms'] as num).toInt(),
+          ),
+          rp: (r['rp'] as num).toInt(),
+          seasonId: r['season_id'] as String?,
+        ),
+    ];
+  }
+
+  /// Appends one reading for [uid]. O(1) - the whole point of the table.
+  /// Replaces on conflict so a repeated write at the same instant can't
+  /// duplicate the row.
+  Future<void> appendSnapshotFor(String uid, StatSnapshot snapshot) async {
+    final db = await _open();
+    await db.insert(snapshotTable, {
+      'uid': uid,
+      'ts_ms': snapshot.timestamp.millisecondsSinceEpoch,
+      'rp': snapshot.rp,
+      'season_id': snapshot.seasonId,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Bulk insert, for draining the legacy prefs blob. Idempotent via the
+  /// primary key, so an interrupted migration can simply be re-run.
+  Future<void> appendSnapshotsFor(
+    String uid,
+    List<StatSnapshot> snapshots,
+  ) async {
+    if (snapshots.isEmpty) return;
+    final db = await _open();
+    final batch = db.batch();
+    for (final s in snapshots) {
+      batch.insert(snapshotTable, {
+        'uid': uid,
+        'ts_ms': s.timestamp.millisecondsSinceEpoch,
+        'rp': s.rp,
+        'season_id': s.seasonId,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<int> snapshotCount(String uid) async {
+    final db = await _open();
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM $snapshotTable WHERE uid = ?',
+      [uid],
+    );
+    return (rows.first['c'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Every snapshot row across all UIDs - the export counterpart of
+  /// [exportRows].
+  Future<List<Map<String, Object?>>> exportSnapshotRows() async {
+    final db = await _open();
+    return db.query(snapshotTable, orderBy: 'uid ASC, ts_ms ASC');
+  }
+
+  /// Restores snapshot rows from an export. Idempotent.
+  Future<void> importSnapshotRows(List<dynamic> rows) async {
+    final db = await _open();
+    final batch = db.batch();
+    for (final r in rows) {
+      if (r is! Map) continue;
+      final uid = r['uid'];
+      final tsMs = r['ts_ms'];
+      // Both are NOT NULL and form the primary key - a row missing either is
+      // unusable, and letting it through would fail the whole batch.
+      if (uid is! String || tsMs is! num) continue;
+      batch.insert(snapshotTable, {
+        'uid': uid,
+        'ts_ms': tsMs.toInt(),
+        'rp': (r['rp'] as num?)?.toInt() ?? 0,
+        'season_id': r['season_id'] as String?,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  // ── Export / import ────────────────────────────────────────────────────────
+
   /// Every row across all UIDs — used to build the single-file export.
   Future<List<Map<String, Object?>>> exportRows() async {
     final db = await _open();
     return db.query(table, orderBy: 'start_ms DESC');
   }
 
+  /// Columns [importRows] will accept from a backup file. Anything else in the
+  /// JSON is dropped rather than passed to SQLite as a column name.
+  static const _importableColumns = {
+    'id',
+    'uid',
+    'player_name',
+    'legend',
+    'game_mode',
+    'map_key',
+    'rp_change',
+    'cumulative_rp',
+    'rank_img',
+    'length_secs',
+    'start_ms',
+    'end_ms',
+    'is_party_full',
+    'trackers',
+    'season_id',
+    'kills',
+    'damage',
+    'edited_fields',
+  };
+
   /// Restores rows from an export (single JSON file). Idempotent.
+  ///
+  /// Each row is filtered to [_importableColumns] and skipped unless it carries
+  /// a non-empty `id`. Both matter for a file the user picked off disk:
+  /// an unknown key would reach SQLite as a column name and fail the entire
+  /// batch, and SQLite permits NULL in a non-`INTEGER PRIMARY KEY`, so
+  /// id-less rows would insert as duplicates instead of deduping.
   Future<void> importRows(List<dynamic> rows) async {
     final db = await _open();
     final batch = db.batch();
     for (final r in rows) {
-      if (r is Map) {
-        batch.insert(
-          table,
-          r.map((k, v) => MapEntry(k.toString(), v)),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
+      if (r is! Map) continue;
+      final id = r['id'];
+      if (id is! String || id.isEmpty) continue;
+      batch.insert(table, {
+        for (final e in r.entries)
+          if (_importableColumns.contains(e.key.toString()))
+            e.key.toString(): e.value,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }
 
+  /// Drops both tables. Backs "Clear all data", which promises *everything* -
+  /// RP snapshots included, since they are the app's other record of the
+  /// player's history.
   Future<void> deleteAll() async {
     final db = await _open();
     await db.delete(table);
+    await db.delete(snapshotTable);
   }
 
   Future<void> close() async {

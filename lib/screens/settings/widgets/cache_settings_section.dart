@@ -7,6 +7,7 @@ import '../../../providers/settings_provider.dart';
 import '../../../utils/error_messages.dart';
 import '../../../utils/notifications.dart';
 import '../../../utils/storage/backup_service.dart';
+import '../../../utils/storage/rp_snapshot_storage.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/widgets.dart';
 
@@ -36,18 +37,48 @@ class CacheSettingsSection extends ConsumerWidget {
               ),
               const Divider(color: AppTheme.surface2, height: 24),
               ActionRow(
+                icon: Icons.person_remove_outlined,
+                label: 'Clear profiles & favorites',
+                color: AppTheme.orange,
+                onTap: () => _confirm(
+                  context,
+                  title: 'Clear profiles & favorites?',
+                  body:
+                      'Your saved profiles and favorite players will be '
+                      'removed. Your settings, RP history and match history '
+                      'are kept.',
+                  confirmLabel: 'Clear',
+                  confirmColor: AppTheme.orange,
+                  onConfirm: () => _clearProfilesAndFavorites(ref),
+                ),
+              ),
+              const Divider(color: AppTheme.surface2, height: 24),
+              ActionRow(
                 icon: Icons.delete_outline,
                 label: 'Clear all data',
                 color: AppTheme.red,
+                // Two confirmations: ranked history is forward-only, so a
+                // mis-tap here destroys accrual that can't be re-fetched.
                 onTap: () => _confirm(
                   context,
                   title: 'Clear all data?',
-                  body: 'All data including your linked player, favorites, and match history will be removed.',
+                  body:
+                      'Everything will be removed: your profiles, favorites, '
+                      'settings, RP history and recorded match history.',
+                  confirmLabel: 'Continue',
                   onConfirm: () async {
-                    await ref.read(playerSettingsProvider.notifier).clear();
-                    await ref.read(searchStateProvider.notifier).clearFavorites();
-                    await ref.read(rankedHistoryStoreProvider).deleteAll();
-                    await ref.read(apiServiceProvider).clearCache();
+                    if (!context.mounted) return;
+                    await _confirm(
+                      context,
+                      title: 'This cannot be undone',
+                      body:
+                          'Recorded match history only accrues while the app '
+                          'is open, so it cannot be downloaded again. Export a '
+                          'backup first if you might want it back.\n\n'
+                          'Permanently erase all data?',
+                      confirmLabel: 'Erase everything',
+                      onConfirm: () => _clearAll(ref),
+                    );
                   },
                 ),
               ),
@@ -56,6 +87,25 @@ class CacheSettingsSection extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  /// Drops saved profiles and favourites, keeping everything else.
+  Future<void> _clearProfilesAndFavorites(WidgetRef ref) async {
+    await ref.read(playerSettingsProvider.notifier).clearProfilesAndFavorites();
+    await ref.read(searchStateProvider.notifier).clearFavorites();
+  }
+
+  /// Erases every persisted surface: prefs (bar first-run state), the ranked
+  /// match database, and the API response cache.
+  Future<void> _clearAll(WidgetRef ref) async {
+    await ref.read(searchStateProvider.notifier).clearFavorites();
+    await ref.read(playerSettingsProvider.notifier).clearAll();
+    await ref.read(rankedHistoryStoreProvider).deleteAll();
+    await ref.read(apiServiceProvider).clearCache();
+    // Both read through a cache that deleteAll() alone won't invalidate,
+    // so they'd otherwise keep serving erased data until relaunch.
+    resetSnapshotCache();
+    ref.invalidate(rankedSeasonsProvider);
   }
 
   Future<void> _exportData(BuildContext context, WidgetRef ref) async {
@@ -86,18 +136,27 @@ class CacheSettingsSection extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: const Text('Import backup?'),
+        // "Merge" matches importRows' actual behavior: it replaces rows the
+        // backup carries, leaving local-only rows untouched.
         content: const Text(
-          'This will overwrite your current data with the contents of the backup file.',
+          'This will restore the backup\'s settings and profiles, and merge '
+          'its match history into your current data.',
           style: TextStyle(color: AppTheme.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.muted)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.muted),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Select file', style: TextStyle(color: AppTheme.accent)),
+            child: const Text(
+              'Select file',
+              style: TextStyle(color: AppTheme.accent),
+            ),
           ),
         ],
       ),
@@ -117,6 +176,12 @@ class CacheSettingsSection extends ConsumerWidget {
       case ImportSuccess(:final keyCount):
         ref.invalidate(playerSettingsProvider);
         ref.invalidate(searchStateProvider);
+        // Same UID as before restore, so these families' cached values would
+        // otherwise survive and the Ranked tab would show stale data.
+        ref.invalidate(rankedSeasonsProvider);
+        ref.invalidate(rankedSyncProvider);
+        ref.invalidate(rankedSplitsProvider);
+        ref.invalidate(rankedSplitMatchesProvider);
         context.showMessage('Backup restored ($keyCount items).');
       case ImportError(:final message):
         context.showError(message);
@@ -125,13 +190,18 @@ class CacheSettingsSection extends ConsumerWidget {
     }
   }
 
+  /// Destructive-action dialog. [onConfirm] runs after the sheet is dismissed,
+  /// and the returned future completes only once it has - so a caller can
+  /// chain a second [_confirm] inside it to build a two-step confirmation.
   Future<void> _confirm(
     BuildContext context, {
     required String title,
     required String body,
     required Future<void> Function() onConfirm,
-  }) {
-    return showDialog(
+    String confirmLabel = 'Confirm',
+    Color confirmColor = AppTheme.red,
+  }) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
@@ -139,24 +209,24 @@ class CacheSettingsSection extends ConsumerWidget {
         content: Text(body, style: const TextStyle(color: AppTheme.muted)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.muted)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.muted),
+            ),
           ),
           TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await onConfirm();
-              } catch (e) {
-                if (context.mounted) {
-                  context.showError(friendlyError(e));
-                }
-              }
-            },
-            child: const Text('Confirm', style: TextStyle(color: AppTheme.red)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirmLabel, style: TextStyle(color: confirmColor)),
           ),
         ],
       ),
     );
+    if (confirmed != true) return;
+    try {
+      await onConfirm();
+    } catch (e) {
+      if (context.mounted) context.showError(friendlyError(e));
+    }
   }
 }

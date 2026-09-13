@@ -25,12 +25,54 @@ class RetryInterceptor extends Interceptor {
   final Duration initialDelay;
   final String? backupBaseUrl;
 
-  const RetryInterceptor({
+  /// How long a successful failover makes the backup the default host.
+  final Duration primaryDownFor;
+
+  RetryInterceptor({
     required this.dio,
     this.maxRetries = 2,
     this.initialDelay = const Duration(seconds: 1),
     this.backupBaseUrl,
+    this.primaryDownFor = const Duration(minutes: 5),
   });
+
+  /// When set and in the future, requests start at [backupBaseUrl] instead of
+  /// re-discovering the outage from scratch on every request.
+  DateTime? _primaryDownUntil;
+
+  bool get _primaryIsDown {
+    final until = _primaryDownUntil;
+    if (until == null) return false;
+    if (DateTime.now().isBefore(until)) return true;
+    // Window elapsed - forget it, so the primary coming back is noticed on the
+    // next request rather than after a restart.
+    _primaryDownUntil = null;
+    return false;
+  }
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final backup = backupBaseUrl;
+    if (backup != null && backup.isNotEmpty && _primaryIsDown) {
+      options
+        ..baseUrl = backup
+        // Marked as already-failed-over so onError doesn't try the backup a
+        // second time and instead surfaces the error.
+        ..extra[_kUsedBackupKey] = true;
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    // A primary that answers is a primary that is back; clear the shortcut
+    // immediately rather than waiting out the window.
+    if (_primaryDownUntil != null &&
+        response.requestOptions.extra[_kUsedBackupKey] != true) {
+      _primaryDownUntil = null;
+    }
+    handler.next(response);
+  }
 
   @override
   Future<void> onError(
@@ -74,6 +116,8 @@ class RetryInterceptor extends Interceptor {
         ..baseUrl = backup
         ..extra[_kUsedBackupKey] = true
         ..extra[_kRetryKey] = 0;
+      // Remember across requests, so the next one starts at the backup.
+      _primaryDownUntil = DateTime.now().add(primaryDownFor);
       return _refetch(err, handler);
     }
 
@@ -95,7 +139,10 @@ class RetryInterceptor extends Interceptor {
   bool _shouldRetry(DioException err) {
     final status = err.response?.statusCode;
     if (status != null && status >= 500) return true;
-    return err.type == DioExceptionType.connectionError ||
+    // connectionTimeout, not connectionError, is what a sleeping free-tier
+    // host produces (accepts the socket, then stalls).
+    return err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.connectionError ||
         err.type == DioExceptionType.receiveTimeout ||
         err.type == DioExceptionType.sendTimeout;
   }

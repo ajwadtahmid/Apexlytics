@@ -193,6 +193,14 @@ class NotificationService {
   // case, but enforce defensively in case modes/horizon grow.
   static const _maxTotalScheduled = 56;
 
+  /// Fired this much earlier than the arithmetic lead time, to absorb
+  /// `currentRemainingSecs` already being a stale countdown by the time it
+  /// reaches the client (proxy caching + round trip) - always early, never
+  /// late, hence a fixed lead. Doesn't fix inexact alarms or the background-
+  /// fetch floor, which is why the copy says "about" (see AUDIT.md F15).
+  @visibleForTesting
+  static const scheduleSlack = Duration(seconds: 45);
+
   /// Schedules a batch of upcoming-rotation notifications per enabled mode and
   /// cancels any previously scheduled ones.
   ///
@@ -372,18 +380,22 @@ class NotificationService {
 
       final notifyAt = now
           .add(Duration(seconds: rotationStartSecs))
-          .subtract(Duration(minutes: minutesBefore));
+          .subtract(Duration(minutes: minutesBefore))
+          .subtract(scheduleSlack);
 
       if (notifyAt.isAfter(now)) {
         final unit = minutesBefore == 1 ? 'minute' : 'minutes';
+        // "about", deliberately. Android batches inexact alarms and may defer
+        // them by minutes under Doze, so promising an exact lead time is a
+        // claim the platform doesn't let us keep.
         final String body;
         if (i == 0) {
           body =
-              '$modeLabel: ${_mapDisplay(nextMap)} starts in $minutesBefore $unit';
+              '$modeLabel: ${_mapDisplay(nextMap)} starts in about $minutesBefore $unit';
         } else if (mapName != null) {
-          body = '$modeLabel: $mapName starts in $minutesBefore $unit';
+          body = '$modeLabel: $mapName starts in about $minutesBefore $unit';
         } else {
-          body = '$modeLabel: Next map starts in $minutesBefore $unit';
+          body = '$modeLabel: Next map starts in about $minutesBefore $unit';
         }
         alerts.add(
           PlannedAlert(id: idBase + i, body: body, notifyAt: notifyAt),

@@ -35,6 +35,7 @@ void main() {
     required Future<ResponseBody> Function(RequestOptions) onFetch,
     int maxRetries = 2,
     String? backupBaseUrl,
+    Duration primaryDownFor = const Duration(minutes: 5),
   }) {
     final dio = Dio(BaseOptions(baseUrl: primary));
     dio.httpClientAdapter = _FakeAdapter(onFetch);
@@ -44,6 +45,7 @@ void main() {
         maxRetries: maxRetries,
         initialDelay: Duration.zero,
         backupBaseUrl: backupBaseUrl,
+        primaryDownFor: primaryDownFor,
       ),
     );
     return dio;
@@ -95,6 +97,111 @@ void main() {
     expect(response.statusCode, 200);
     // Primary gets its full retry budget (2 calls) before the backup (1 call).
     expect(calledBaseUrls, [primary, primary, backup]);
+  });
+
+  test('a connection timeout retries and fails over to the backup', () async {
+    // A spun-down free-tier host produces connectionTimeout, not
+    // connectionError - treating it as non-retryable skipped the failover.
+    final calledBaseUrls = <String>[];
+    final dio = buildDio(
+      maxRetries: 1,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        if (o.baseUrl == backup) return _status(200);
+        throw DioException.connectionTimeout(
+          timeout: const Duration(seconds: 15),
+          requestOptions: o,
+        );
+      },
+    );
+
+    final response = await dio.get('/player');
+
+    expect(response.statusCode, 200);
+    expect(calledBaseUrls, [primary, primary, backup]);
+  });
+
+  test('every transport failure type is retryable', () async {
+    // Enumerated, not spot-checked - a new type silently missing this list
+    // is exactly how the connectionTimeout gap went unnoticed before.
+    for (final type in const [
+      DioExceptionType.connectionTimeout,
+      DioExceptionType.connectionError,
+      DioExceptionType.receiveTimeout,
+      DioExceptionType.sendTimeout,
+    ]) {
+      var calls = 0;
+      final dio = buildDio(
+        maxRetries: 2,
+        onFetch: (o) async {
+          calls++;
+          throw DioException(type: type, requestOptions: o);
+        },
+      );
+
+      await expectLater(dio.get('/player'), throwsA(isA<DioException>()));
+      expect(calls, 3, reason: '$type should retry (initial + 2)');
+    }
+  });
+
+  test('a known-down primary is skipped on the next request', () async {
+    // Failover state used to live only in one request's RequestOptions, so
+    // every request re-discovered the outage from scratch.
+    final calledBaseUrls = <String>[];
+    final dio = buildDio(
+      maxRetries: 1,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        if (o.baseUrl == backup) return _status(200);
+        throw DioException.connectionTimeout(
+          timeout: const Duration(seconds: 15),
+          requestOptions: o,
+        );
+      },
+    );
+
+    await dio.get('/first');
+    calledBaseUrls.clear();
+    await dio.get('/second');
+
+    // Straight to the backup - no primary attempts at all.
+    expect(calledBaseUrls, [backup]);
+  });
+
+  test('a recovered primary clears the shortcut', () async {
+    var primaryDown = true;
+    final calledBaseUrls = <String>[];
+    final dio = buildDio(
+      maxRetries: 0,
+      backupBaseUrl: backup,
+      // A window short enough to elapse within the test.
+      primaryDownFor: const Duration(milliseconds: 40),
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        if (o.baseUrl == backup) return _status(200);
+        if (primaryDown) {
+          throw DioException.connectionTimeout(
+            timeout: const Duration(seconds: 15),
+            requestOptions: o,
+          );
+        }
+        return _status(200);
+      },
+    );
+
+    await dio.get('/first'); // primary fails, backup serves
+    primaryDown = false;
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    calledBaseUrls.clear();
+
+    await dio.get('/second'); // window elapsed - primary retried and works
+    expect(calledBaseUrls, [primary]);
+
+    calledBaseUrls.clear();
+    await dio.get('/third'); // and stays there
+    expect(calledBaseUrls, [primary]);
   });
 
   test('never bounces back to primary if the backup also fails', () async {

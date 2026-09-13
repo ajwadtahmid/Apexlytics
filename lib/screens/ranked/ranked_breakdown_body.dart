@@ -9,7 +9,6 @@ import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/formatting/snapshot_types.dart';
-import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
 import '../../widgets/graph_card.dart' show showSnapshotBackupSheet;
@@ -211,6 +210,28 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
       );
     }
 
+    // Recording is on but nothing has arrived - ask the server whether it's
+    // actually seeing polls for this UID (costs no /games budget) instead of
+    // leaving the user guessing.
+    if (recording && outcome != RankedSyncOutcome.offline) {
+      final eligibility = ref.watch(gamesEligibilityProvider(widget.uid)).value;
+      if (eligibility != null && !eligibility.eligible) {
+        return _MessageState(
+          icon: Icons.wifi_tethering_off,
+          title: 'Not being tracked yet',
+          message: eligibility.pollCount == 0
+              ? 'The server hasn\'t seen this profile yet. Keep Apexlytics '
+                    'open - tracking starts within a few minutes.'
+              : 'Tracking has paused. Keep Apexlytics open while you play so '
+                    'matches keep being recorded.',
+          steps: steps,
+          onRetry: _refresh,
+          onLearnMore: onLearnMore,
+          onViewAvailable: onViewAvailable,
+        );
+      }
+    }
+
     final (title, icon, statusNote) = switch (outcome) {
       RankedSyncOutcome.queued => (
         'Server busy',
@@ -315,12 +336,13 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
   Widget _splitTabs(RankedSplitView data) {
     final view = data.view;
     final filtered = view.filtered;
-    final summary = data.summary;
     final legends = data.legends;
     final maps = data.maps;
 
     // For a split the matches are already in memory — the drill-down just
     // filters them (wrapped in a Future to share the widgets' lazy signature).
+    // Defined once here and passed down; _OverviewTab used to declare a
+    // byte-identical pair of its own.
     Future<List<RankedMatch>> legendMatches(String legend) async =>
         filtered.where((m) => m.legend == legend).toList();
     Future<List<RankedMatch>> mapMatches(String mapKey) async =>
@@ -336,14 +358,12 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           rpDelta: widget.rpDelta,
           snapshots: widget.snapshots,
           allSeasons: widget.allSeasons,
-          summary: summary,
-          matches: filtered,
-          legends: legends,
-          maps: maps,
-          splits: view.splits,
+          data: data,
           legendStats: widget.legendStats,
           compactLegendCards: widget.compactLegendCards,
           legendStack: widget.legendStack,
+          legendMatchesFor: legendMatches,
+          mapMatchesFor: mapMatches,
           onRefresh: _refresh,
         ),
         RankedLegendBreakdown(
@@ -422,9 +442,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: RankedPersonalBestEntry(uid: widget.uid),
-                    ),
+                    Expanded(child: RankedPersonalBestEntry(uid: widget.uid)),
                     const SizedBox(width: AppTheme.sm),
                     Expanded(
                       child: RankedTimeBreakdownEntry(
@@ -460,14 +478,17 @@ class _OverviewTab extends StatelessWidget {
   final int? rpDelta;
   final List<StatSnapshot> snapshots;
   final Map<String, SeasonMeta> allSeasons;
-  final RankedSummary summary;
-  final List<RankedMatch> matches;
-  final List<LegendBreakdown> legends;
-  final List<MapBreakdown> maps;
-  final List<RankedSplitBucket> splits;
+
+  /// Every split-scoped aggregate, already computed by
+  /// [rankedSplitViewProvider] - kept as one record so nothing here gets
+  /// recomputed by accident.
+  final RankedSplitView data;
+
   final List<LegendStat> legendStats;
   final bool compactLegendCards;
   final List<String> legendStack;
+  final Future<List<RankedMatch>> Function(String) legendMatchesFor;
+  final Future<List<RankedMatch>> Function(String) mapMatchesFor;
   final Future<void> Function() onRefresh;
 
   const _OverviewTab({
@@ -476,26 +497,21 @@ class _OverviewTab extends StatelessWidget {
     required this.rpDelta,
     required this.snapshots,
     required this.allSeasons,
-    required this.summary,
-    required this.matches,
-    required this.legends,
-    required this.maps,
-    required this.splits,
+    required this.data,
     required this.legendStats,
     required this.compactLegendCards,
     required this.legendStack,
+    required this.legendMatchesFor,
+    required this.mapMatchesFor,
     required this.onRefresh,
   });
 
-  // Matches are already in memory for a split — the drill-down just filters
-  // them, same as the Legends/Maps tabs' own matchesFor closures.
-  Future<List<RankedMatch>> _legendMatchesFor(String legend) async =>
-      matches.where((m) => m.legend == legend).toList();
-  Future<List<RankedMatch>> _mapMatchesFor(String mapKey) async =>
-      matches.where((m) => m.mapKey == mapKey).toList();
-
   @override
   Widget build(BuildContext context) {
+    final summary = data.summary;
+    final matches = data.view.filtered;
+    final legends = data.legends;
+    final maps = data.maps;
     return RefreshIndicator(
       color: AppTheme.accent,
       onRefresh: onRefresh,
@@ -526,8 +542,8 @@ class _OverviewTab extends StatelessWidget {
           RankedOverviewHighlights(
             legends: legends,
             maps: maps,
-            legendMatchesFor: _legendMatchesFor,
-            mapMatchesFor: _mapMatchesFor,
+            legendMatchesFor: legendMatchesFor,
+            mapMatchesFor: mapMatchesFor,
             onRefresh: onRefresh,
           ),
           const SizedBox(height: AppTheme.md),
@@ -561,8 +577,8 @@ class _OverviewTab extends StatelessWidget {
                 const SizedBox(width: AppTheme.sm),
                 Expanded(
                   child: RankedTimeBreakdownEntry(
-                    hourBuckets: timeOfDayBuckets(matches),
-                    weekdayBuckets: dayOfWeekBuckets(matches),
+                    hourBuckets: data.timeOfDay,
+                    weekdayBuckets: data.dayOfWeek,
                     matches: matches,
                   ),
                 ),
@@ -578,18 +594,14 @@ class _OverviewTab extends StatelessWidget {
                   child: RankedPersonalRecordsEntry(
                     uid: uid,
                     matches: matches,
-                    splits: splits,
+                    splits: data.view.splits,
                   ),
                 ),
                 const SizedBox(width: AppTheme.sm),
                 Expanded(
                   child: RankedSquadSessionsEntry(
-                    fullSquad: summarize(
-                      matches.where((m) => m.isPartyFull).toList(),
-                    ),
-                    partialSquad: summarize(
-                      matches.where((m) => !m.isPartyFull).toList(),
-                    ),
+                    fullSquad: data.fullSquad,
+                    partialSquad: data.partialSquad,
                     matches: matches,
                     onRefresh: onRefresh,
                   ),

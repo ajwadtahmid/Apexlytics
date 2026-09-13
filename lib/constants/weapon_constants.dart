@@ -33,7 +33,8 @@ class Weapon {
     String? assetFileName,
   }) : _assetFileOverride = assetFileName;
 
-  String get assetPath => 'assets/weapons/${_assetFileOverride ?? _assetName()}.webp';
+  String get assetPath =>
+      'assets/weapons/${_assetFileOverride ?? _assetName()}.webp';
 
   String _assetName() => name
       .toLowerCase()
@@ -278,8 +279,3 @@ final Map<WeaponType, List<Weapon>> kWeaponsByType = {
   WeaponType.marksman: _byType(WeaponType.marksman),
   WeaponType.pistol: _byType(WeaponType.pistol),
 };
-
-/// Look up a weapon by name, full name, or alt name (case-insensitive).
-Weapon? findWeapon(String query) {
-  return kWeaponsByName[query.toLowerCase()];
-}

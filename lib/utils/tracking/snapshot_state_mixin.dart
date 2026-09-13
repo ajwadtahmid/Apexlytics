@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/player_stats.dart';
 import '../../models/season_meta.dart';
+import '../storage/ranked_history_store.dart';
 import '../storage/rp_snapshot_storage.dart';
 import '../storage/season_storage.dart';
 import '../formatting/season_utils.dart';
@@ -55,16 +56,17 @@ mixin SnapshotStateMixin {
   /// snapshot-derived delta. See [computeWeekDelta].
   Future<bool> appendSnapshotState(
     SharedPreferences prefs,
+    RankedHistoryStore store,
     PlayerStats stats, {
     int? historyNetRp,
   }) async {
     if (!mounted) return false;
     final season = stats.rankedSeason;
-    final seasonChanged =
-        season != null ? await upsertSeason(season, prefs) : false;
+    final seasonChanged = season != null
+        ? await upsertSeason(season, prefs)
+        : false;
     if (!mounted) return seasonChanged;
-    await appendSnapshot(stats, prefs, uid: stats.uid);
-    final snaps = loadSnapshotsSync(prefs, uid: stats.uid);
+    final snaps = await appendSnapshot(stats, store, uid: stats.uid);
     if (!mounted) return seasonChanged;
     setState(() {
       snapshots = snaps;

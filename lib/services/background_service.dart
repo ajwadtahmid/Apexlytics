@@ -18,7 +18,20 @@ import '../utils/retry_interceptor.dart';
 import 'notification_service.dart';
 
 const int _backgroundFetchIntervalMinutes = 30;
-const String _kLastFetchResultKey = 'bg_fetch_last_result';
+
+/// Outcome of the most recent background fetch, as `ok:<iso8601>` or
+/// `error:<iso8601>`. Surfaced in Settings - background fetch is otherwise
+/// completely invisible, and "are my map alerts actually being rescheduled?"
+/// has no other answer from inside the app.
+const String kLastFetchResultKey = 'bg_fetch_last_result';
+
+/// `debugPrint` is **not** stripped in release builds, and this runs in a
+/// detached isolate where the app logger and Sentry may not be initialised -
+/// hence print rather than log. Gating on [kDebugMode] keeps routine progress
+/// chatter out of production logcat.
+void _debugLog(String message) {
+  if (kDebugMode) debugPrint('[BackgroundService] $message');
+}
 
 /// Reads the cached rotation order written by the foreground /maps provider.
 /// Returns null if absent or unparseable — callers fall back to generic copy.
@@ -36,8 +49,7 @@ SeasonalMaps? _cachedSeasonalMaps(SharedPreferences prefs) {
 @pragma('vm:entry-point')
 void backgroundFetchHeadlessTask(HeadlessEvent event) async {
   if (event.timeout) {
-    // Headless isolate — use debugPrint since logger/Sentry may not be initialised.
-    debugPrint('[BackgroundService] Task timed out: ${event.taskId}');
+    _debugLog('Task timed out: ${event.taskId}');
     BackgroundFetch.finish(event.taskId);
     return;
   }
@@ -51,7 +63,7 @@ void backgroundFetchHeadlessTask(HeadlessEvent event) async {
 Future<void> _backgroundFetchAndSchedule() async {
   SharedPreferences? prefs;
   try {
-    debugPrint('[BackgroundService] Fetch started');
+    _debugLog('Fetch started');
     tz.initializeTimeZones();
     await NotificationService.init();
 
@@ -96,17 +108,26 @@ Future<void> _backgroundFetchAndSchedule() async {
       rankedSequence: seasonal?.rankedNames ?? const [],
       pubsSequence: seasonal?.pubsNames ?? const [],
     );
-    debugPrint('[BackgroundService] Notifications scheduled successfully');
+    _debugLog('Notifications scheduled successfully');
     await prefs.setString(
-        _kLastFetchResultKey, 'ok:${DateTime.now().toIso8601String()}');
+      kLastFetchResultKey,
+      'ok:${DateTime.now().toIso8601String()}',
+    );
   } catch (e) {
-    debugPrint('[BackgroundService] Fetch failed: $e');
+    // Detail only in debug: this string can carry a host name or an upstream
+    // message, and debugPrint is not stripped from release builds.
+    _debugLog('Fetch failed: $e');
     try {
       prefs ??= await SharedPreferences.getInstance();
+      // Timestamp only. The reason used to be appended here, which put an
+      // exception string into a pref that a support screenshot could carry
+      // off the device.
       await prefs.setString(
-          _kLastFetchResultKey, 'error:${DateTime.now().toIso8601String()}:$e');
+        kLastFetchResultKey,
+        'error:${DateTime.now().toIso8601String()}',
+      );
     } catch (e2) {
-      debugPrint('[BackgroundService] Failed to persist error flag: $e2');
+      _debugLog('Failed to persist error flag: $e2');
     }
   }
 }
@@ -122,19 +143,20 @@ class BackgroundService {
         startOnBoot: true,
       );
 
-  static Future<void> _configure(int intervalMinutes) =>
-      BackgroundFetch.configure(
-        _config(intervalMinutes),
-        (String taskId) async {
-          try {
-            await _backgroundFetchAndSchedule();
-          } finally {
-            BackgroundFetch.finish(taskId);
-          }
-        },
-        // Timeout handler — invoked if the task doesn't finish within the deadline.
-        (String taskId) => BackgroundFetch.finish(taskId),
-      );
+  static Future<void> _configure(
+    int intervalMinutes,
+  ) => BackgroundFetch.configure(
+    _config(intervalMinutes),
+    (String taskId) async {
+      try {
+        await _backgroundFetchAndSchedule();
+      } finally {
+        BackgroundFetch.finish(taskId);
+      }
+    },
+    // Timeout handler — invoked if the task doesn't finish within the deadline.
+    (String taskId) => BackgroundFetch.finish(taskId),
+  );
 
   static Future<void> init() async {
     if (!_supported) return;
@@ -142,7 +164,9 @@ class BackgroundService {
     if (Platform.isAndroid) {
       BackgroundFetch.registerHeadlessTask(backgroundFetchHeadlessTask);
     }
-    log.i('BackgroundService initialised (interval: ${_backgroundFetchIntervalMinutes}min)');
+    log.i(
+      'BackgroundService initialised (interval: ${_backgroundFetchIntervalMinutes}min)',
+    );
   }
 
   /// Reconfigures the background fetch interval to the smallest active

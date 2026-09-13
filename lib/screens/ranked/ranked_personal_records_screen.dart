@@ -237,18 +237,23 @@ List<Widget> _recordCards({
       icon: Icons.sports_kabaddi,
       label: 'Most Kills',
       match: bestKillsGame,
-      value: bestKillsGame == null
+      // Guards the *stat*, not the match. kills is nullable ("upstream
+      // reported no tracker"), so a match can exist with nothing to show here.
+      // Both sources already exclude those games, but checking only the match
+      // is what let a null stat reach `!` and crash this screen once.
+      value: bestKillsGame?.kills == null
           ? null
-          : '${formatNumber(bestKillsGame.kills!)} kills',
+          : '${formatNumber(bestKillsGame!.kills!)} kills',
     ),
     const SizedBox(height: AppTheme.md),
     _RecordCard(
       icon: Icons.local_fire_department,
       label: 'Most Damage',
       match: bestDamageGame,
-      value: bestDamageGame == null
+      // Same nullable-stat guard as Most Kills above.
+      value: bestDamageGame?.damage == null
           ? null
-          : '${formatNumber(bestDamageGame.damage!)} damage',
+          : '${formatNumber(bestDamageGame!.damage!)} damage',
     ),
   ];
 }

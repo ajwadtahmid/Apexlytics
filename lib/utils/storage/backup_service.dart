@@ -14,8 +14,10 @@ import 'legend_stats_storage.dart';
 import 'ranked_history_store.dart';
 import 'rp_snapshot_storage.dart';
 
-// v2 adds the `ranked_history` section. v1 backups (prefs only) still import.
-const int _kBackupVersion = 2;
+// v1: prefs only. v2 adds `ranked_history`. v3 adds `stat_snapshots` (schema
+// v8 moved these to SQLite); older files still carry them as prefs keys,
+// which `migrateSnapshotsFromPrefs` picks up after restore.
+const int _kBackupVersion = 3;
 
 const _excludedKeys = {
   PrefsKeys.uidSearchWarningShown,
@@ -56,6 +58,9 @@ const _staticBackupKeys = {
 const _dynamicBackupPrefixes = [
   legendStatsKeyPrefix,
   snapshotKeyPrefix,
+  // Deliberate user input, and the second setting to escape backups by being
+  // a UID-scoped key nobody added here. See the exhaustiveness test.
+  PrefsKeys.rankGoalPrefix,
 ];
 
 bool _include(String key) {
@@ -76,6 +81,11 @@ bool _include(String key) {
 @visibleForTesting
 bool backupIncludesKey(String key) => _include(key);
 
+/// Masks any embedded UID in a pref key before logging - `log.w` forwards to
+/// Sentry, and UID-scoped keys (`rank_goal_1006838015507`) carry the player
+/// identifier in the key name itself.
+String _redactUid(String key) => key.replaceAll(RegExp(r'\d{10,20}'), '<uid>');
+
 /// Restores [prefsData] into [prefs], skipping disallowed keys and dispatching
 /// each value to the matching typed `SharedPreferences` setter. Extracted from
 /// [importBackup] so the type-dispatch is testable without a file picker.
@@ -86,7 +96,9 @@ Future<void> restorePrefsData(
 ) async {
   for (final entry in prefsData.entries) {
     if (!_include(entry.key)) {
-      log.w('Backup import: skipping disallowed key "${entry.key}"');
+      log.w(
+        'Backup import: skipping disallowed key "${_redactUid(entry.key)}"',
+      );
       continue;
     }
     final v = entry.value;
@@ -101,7 +113,10 @@ Future<void> restorePrefsData(
     } else if (v is List) {
       await prefs.setStringList(entry.key, v.map((e) => e.toString()).toList());
     } else {
-      log.w('Backup import: skipping unsupported type for "${entry.key}": ${v.runtimeType}');
+      log.w(
+        'Backup import: skipping unsupported type for '
+        '"${_redactUid(entry.key)}": ${v.runtimeType}',
+      );
     }
   }
 }
@@ -129,11 +144,15 @@ Future<String?> exportBackup(
   final rankedHistory = rankedStore == null
       ? const <Map<String, Object?>>[]
       : await rankedStore.exportRows();
+  final statSnapshots = rankedStore == null
+      ? const <Map<String, Object?>>[]
+      : await rankedStore.exportSnapshotRows();
   final envelope = {
     'version': _kBackupVersion,
     'exported_at': DateTime.now().toIso8601String(),
     'prefs': payload,
     'ranked_history': rankedHistory,
+    'stat_snapshots': statSnapshots,
   };
 
   final json = const JsonEncoder.withIndent('  ').convert(envelope);
@@ -147,8 +166,10 @@ Future<String?> exportBackup(
     await SharePlus.instance.share(
       ShareParams(files: [XFile(filePath, mimeType: 'application/json')]),
     );
-    log.i('Backup shared: ${payload.length} keys, '
-        '${rankedHistory.length} ranked matches → $filePath');
+    log.i(
+      'Backup shared: ${payload.length} keys, '
+      '${rankedHistory.length} ranked matches → $filePath',
+    );
     return filePath;
   }
 
@@ -158,8 +179,10 @@ Future<String?> exportBackup(
   final filePath = [dirPath, defaultFilename].join(Platform.pathSeparator);
   await File(filePath).writeAsString(json);
 
-  log.i('Backup exported: ${payload.length} keys, '
-      '${rankedHistory.length} ranked matches → $filePath');
+  log.i(
+    'Backup exported: ${payload.length} keys, '
+    '${rankedHistory.length} ranked matches → $filePath',
+  );
   return filePath;
 }
 
@@ -209,14 +232,30 @@ Future<ImportResult> importBackup(
     if (prefsData is! Map<String, dynamic>) {
       return ImportError('Invalid prefs structure in backup file.');
     }
-    await restorePrefsData(prefs, prefsData);
-
-    // Restore embedded ranked history (absent in v1 backups).
-    final rankedHistory = envelope['ranked_history'];
+    // Database sections first, prefs last - no transaction spans both stores,
+    // so a malformed file should fail before any pref commits, not after.
+    final rankedHistory = envelope['ranked_history']; // absent in v1
     if (rankedHistory is List && rankedStore != null) {
       await rankedStore.importRows(rankedHistory);
       log.i('Backup restored ${rankedHistory.length} ranked matches');
     }
+
+    // Absent in v1/v2, where snapshots rode along in `prefs` instead and are
+    // picked up by migrateSnapshotsFromPrefs below.
+    final statSnapshots = envelope['stat_snapshots'];
+    if (statSnapshots is List && rankedStore != null) {
+      await rankedStore.importSnapshotRows(statSnapshots);
+      log.i('Backup restored ${statSnapshots.length} RP snapshots');
+    }
+
+    await restorePrefsData(prefs, prefsData);
+    if (rankedStore != null) {
+      // A v1/v2 file restores its snapshots as prefs keys; drain them now
+      // rather than leaving the graph empty until the next launch. No-op for
+      // a v3 file, which carries no legacy keys.
+      await migrateSnapshotsFromPrefs(prefs, rankedStore);
+    }
+    resetSnapshotCache();
 
     log.i('Backup restored: ${prefsData.length} keys from v$version backup');
     return ImportSuccess(prefsData.length);

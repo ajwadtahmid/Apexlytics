@@ -10,7 +10,9 @@ plugins {
 
 android {
     namespace = "com.ajwadtahmid.apexlytics"
-    compileSdk = flutter.compileSdkVersion
+    // Ahead of flutter.compileSdkVersion (36): permission_handler_android 14.x
+    // requires 37. Change only together with that dependency.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -50,6 +52,15 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+            // R8 shrink + obfuscate - cuts APK size and raises the reverse-
+            // engineering bar (doesn't make the embedded client token secret;
+            // abuse protection still must be server-side).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

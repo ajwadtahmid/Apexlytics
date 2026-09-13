@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../providers/notification_provider.dart';
 import '../../../providers/settings_provider.dart';
+import '../../../services/background_service.dart' show kLastFetchResultKey;
+import '../../../utils/formatting/format.dart' show timeAgo;
 import '../../../utils/theme.dart';
 import '../../../widgets/widgets.dart';
 import '../map_alerts_sheet.dart';
@@ -12,21 +14,30 @@ class NotificationSettingsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notifyRanked =
-        ref.watch(playerSettingsProvider.select((s) => s.notifyRankedMapRotation));
-    final rankedMinutes =
-        ref.watch(playerSettingsProvider.select((s) => s.rankedNotifyMinutesBefore));
-    final notifyPubs = ref.watch(playerSettingsProvider.select((s) => s.notifyPubsMapRotation));
-    final pubsMinutes =
-        ref.watch(playerSettingsProvider.select((s) => s.pubsNotifyMinutesBefore));
-    final notifyWildcard =
-        ref.watch(playerSettingsProvider.select((s) => s.notifyWildcardMapRotation));
-    final wildcardMinutes =
-        ref.watch(playerSettingsProvider.select((s) => s.wildcardNotifyMinutesBefore));
-    final notifyMixtape =
-        ref.watch(playerSettingsProvider.select((s) => s.notifyMixtapeMapRotation));
-    final mixtapeMinutes =
-        ref.watch(playerSettingsProvider.select((s) => s.mixtapeNotifyMinutesBefore));
+    final notifyRanked = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyRankedMapRotation),
+    );
+    final rankedMinutes = ref.watch(
+      playerSettingsProvider.select((s) => s.rankedNotifyMinutesBefore),
+    );
+    final notifyPubs = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyPubsMapRotation),
+    );
+    final pubsMinutes = ref.watch(
+      playerSettingsProvider.select((s) => s.pubsNotifyMinutesBefore),
+    );
+    final notifyWildcard = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyWildcardMapRotation),
+    );
+    final wildcardMinutes = ref.watch(
+      playerSettingsProvider.select((s) => s.wildcardNotifyMinutesBefore),
+    );
+    final notifyMixtape = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyMixtapeMapRotation),
+    );
+    final mixtapeMinutes = ref.watch(
+      playerSettingsProvider.select((s) => s.mixtapeNotifyMinutesBefore),
+    );
 
     final active = [
       notifyRanked && rankedMinutes > 0,
@@ -39,13 +50,17 @@ class NotificationSettingsSection extends ConsumerWidget {
     // Defaults to permitted while the check is in flight so the banner never
     // flashes on for users whose permission is actually fine.
     final permissionEnabled =
-        ref.watch(notificationsEnabledProvider).whenOrNull(data: (v) => v) ?? true;
+        ref.watch(notificationsEnabledProvider).whenOrNull(data: (v) => v) ??
+        true;
     final showPermissionBanner = activeCount > 0 && !permissionEnabled;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionLabel(label: 'Notifications', icon: Icons.notifications_outlined),
+        const SectionLabel(
+          label: 'Notifications',
+          icon: Icons.notifications_outlined,
+        ),
         SettingsCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,28 +74,104 @@ class NotificationSettingsSection extends ConsumerWidget {
                 onTap: () => showMapAlertsSheet(context),
                 child: Row(
                   children: [
-                    const Icon(Icons.notifications_outlined, color: AppTheme.textPrimary, size: 20),
+                    const Icon(
+                      Icons.notifications_outlined,
+                      color: AppTheme.textPrimary,
+                      size: 20,
+                    ),
                     const SizedBox(width: AppTheme.sm),
                     const Expanded(
-                      child: Text('Map rotation alerts', style: TextStyle(fontSize: 14)),
+                      child: Text(
+                        'Map rotation alerts',
+                        style: TextStyle(fontSize: 14),
+                      ),
                     ),
                     Text(
                       activeCount == 0 ? 'Off' : '$activeCount active',
                       style: TextStyle(
-                        color: activeCount > 0 ? AppTheme.accent : AppTheme.muted,
+                        color: activeCount > 0
+                            ? AppTheme.accent
+                            : AppTheme.muted,
                         fontSize: 14,
                       ),
                     ),
                     const SizedBox(width: AppTheme.xs),
-                    const Icon(Icons.chevron_right, color: AppTheme.muted, size: 18),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: AppTheme.muted,
+                      size: 18,
+                    ),
                   ],
                 ),
               ),
+              // Only meaningful once an alert is armed - that is when the
+              // background refresh starts mattering.
+              if (activeCount > 0) ...[
+                const Divider(color: AppTheme.surface2, height: 24),
+                const _LastBackgroundRefreshRow(),
+              ],
             ],
           ),
         ),
       ],
     );
+  }
+}
+
+/// "Last background refresh: …" - background fetch is otherwise invisible,
+/// so this is the one signal distinguishing "the OS isn't running the task"
+/// from "it ran and something else is wrong".
+class _LastBackgroundRefreshRow extends ConsumerWidget {
+  const _LastBackgroundRefreshRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final raw = ref
+        .watch(sharedPreferencesProvider)
+        .getString(kLastFetchResultKey);
+
+    final (label, color) = switch (_parse(raw)) {
+      null => (
+        // Expected on iOS until the OS decides to run the task, and on Android
+        // until the first 15-minute window elapses - so it is phrased as a
+        // wait, not a failure.
+        'Waiting for first background refresh',
+        AppTheme.muted,
+      ),
+      (final ok, final at) => (
+        '${ok ? 'Last background refresh' : 'Last attempt failed'}: '
+            '${timeAgo(at)}',
+        ok ? AppTheme.muted : AppTheme.orange,
+      ),
+    };
+
+    return Row(
+      children: [
+        Icon(
+          color == AppTheme.orange
+              ? Icons.sync_problem_outlined
+              : Icons.sync_outlined,
+          color: color,
+          size: 20,
+        ),
+        const SizedBox(width: AppTheme.sm),
+        Expanded(
+          child: Text(label, style: TextStyle(fontSize: 13, color: color)),
+        ),
+      ],
+    );
+  }
+
+  /// `ok:<iso8601>` / `error:<iso8601>` → (succeeded, when). Null when absent
+  /// or unparseable - a diagnostic row must never be the thing that crashes
+  /// Settings.
+  static (bool, DateTime)? _parse(String? raw) {
+    if (raw == null) return null;
+    final sep = raw.indexOf(':');
+    if (sep <= 0) return null;
+    final at = DateTime.tryParse(raw.substring(sep + 1));
+    if (at == null) return null;
+    return (raw.substring(0, sep) == 'ok', at);
   }
 }
 
@@ -100,12 +191,12 @@ class _PermissionBanner extends StatelessWidget {
           Icon(Icons.notifications_off_outlined, color: AppTheme.red, size: 20),
           SizedBox(width: AppTheme.sm),
           Expanded(
-            child: Text('Notification permission off', style: TextStyle(fontSize: 14)),
+            child: Text(
+              'Notification permission off',
+              style: TextStyle(fontSize: 14),
+            ),
           ),
-          Text(
-            'Fix',
-            style: TextStyle(color: AppTheme.accent, fontSize: 14),
-          ),
+          Text('Fix', style: TextStyle(color: AppTheme.accent, fontSize: 14)),
           SizedBox(width: AppTheme.xs),
           Icon(Icons.chevron_right, color: AppTheme.muted, size: 18),
         ],

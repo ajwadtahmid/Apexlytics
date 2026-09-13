@@ -15,14 +15,13 @@ void main() {
     int remainingSecs = 600,
     int durationMins = 60,
     String? eventName,
-  }) =>
-      MapMode(
-        map: map,
-        remainingSecs: remainingSecs,
-        durationMins: durationMins,
-        asset: '',
-        eventName: eventName,
-      );
+  }) => MapMode(
+    map: map,
+    remainingSecs: remainingSecs,
+    durationMins: durationMins,
+    asset: '',
+    eventName: eventName,
+  );
 
   List<PlannedAlert> project(
     MapMode next, {
@@ -33,18 +32,17 @@ void main() {
     int budget = 56,
     List<String> favorites = const [],
     List<String> sequence = const [],
-  }) =>
-      NotificationService.projectModeSeries(
-        idBase,
-        label,
-        next,
-        remainingSecs,
-        minutesBefore,
-        budget,
-        favoriteMapNames: favorites,
-        mapSequence: sequence,
-        now: now,
-      );
+  }) => NotificationService.projectModeSeries(
+    idBase,
+    label,
+    next,
+    remainingSecs,
+    minutesBefore,
+    budget,
+    favoriteMapNames: favorites,
+    mapSequence: sequence,
+    now: now,
+  );
 
   group('budget & per-mode caps', () {
     test('returns nothing when budget is zero or negative', () {
@@ -69,14 +67,42 @@ void main() {
   });
 
   group('timing & ids', () {
-    test('notifyAt = rotation start minus minutesBefore', () {
+    test('notifyAt = rotation start minus minutesBefore minus slack', () {
       final alerts = project(
         mode('WE'),
         remainingSecs: 600,
         minutesBefore: 5,
         budget: 1,
       );
-      expect(alerts.first.notifyAt, now.add(const Duration(seconds: 600 - 5 * 60)));
+      // The slack absorbs a decaying baseline: remainingSecs is a countdown
+      // that was already up to ~30 s stale when it left the proxy's cache, so
+      // the real rotation is at or before this point, never after.
+      expect(
+        alerts.first.notifyAt,
+        now
+            .add(const Duration(seconds: 600 - 5 * 60))
+            .subtract(NotificationService.scheduleSlack),
+      );
+    });
+
+    test('the slack is subtracted once, not per projected rotation', () {
+      // A compounding slack would walk later alerts progressively earlier
+      // until they detached from their rotation entirely.
+      final alerts = project(
+        mode('WE', durationMins: 60),
+        remainingSecs: 600,
+        minutesBefore: 5,
+        budget: 3,
+      );
+      for (var i = 0; i < alerts.length; i++) {
+        expect(
+          alerts[i].notifyAt,
+          now
+              .add(Duration(seconds: 600 + i * 3600 - 5 * 60))
+              .subtract(NotificationService.scheduleSlack),
+          reason: 'rotation $i',
+        );
+      }
     });
 
     test('drops alerts whose fire time is already in the past', () {
@@ -110,13 +136,13 @@ void main() {
       );
       expect(
         alerts.first.body,
-        'Ranked: Storm Point (Straight Shot) starts in 5 minutes',
+        'Ranked: Storm Point (Straight Shot) starts in about 5 minutes',
       );
     });
 
     test('singular "minute" when minutesBefore is 1', () {
       final alerts = project(mode('WE'), budget: 1, minutesBefore: 1);
-      expect(alerts.first.body, 'Ranked: WE starts in 1 minute');
+      expect(alerts.first.body, 'Ranked: WE starts in about 1 minute');
     });
 
     test('later rotations without a sequence use generic copy', () {
@@ -126,8 +152,8 @@ void main() {
         budget: 2,
         minutesBefore: 5,
       );
-      expect(alerts[0].body, 'Ranked: WE starts in 5 minutes');
-      expect(alerts[1].body, 'Ranked: Next map starts in 5 minutes');
+      expect(alerts[0].body, 'Ranked: WE starts in about 5 minutes');
+      expect(alerts[1].body, 'Ranked: Next map starts in about 5 minutes');
     });
   });
 
@@ -141,9 +167,9 @@ void main() {
         sequence: ['WE', 'Storm Point', 'Olympus'],
       );
       expect(alerts.map((a) => a.body), [
-        'Ranked: WE starts in 5 minutes',
-        'Ranked: Storm Point starts in 5 minutes',
-        'Ranked: Olympus starts in 5 minutes',
+        'Ranked: WE starts in about 5 minutes',
+        'Ranked: Storm Point starts in about 5 minutes',
+        'Ranked: Olympus starts in about 5 minutes',
       ]);
     });
 
@@ -157,9 +183,9 @@ void main() {
       );
       // nextIndex=2 → i=0 Olympus, i=1 WE (wrap), i=2 Storm Point.
       expect(alerts.map((a) => a.body), [
-        'Ranked: Olympus starts in 5 minutes',
-        'Ranked: WE starts in 5 minutes',
-        'Ranked: Storm Point starts in 5 minutes',
+        'Ranked: Olympus starts in about 5 minutes',
+        'Ranked: WE starts in about 5 minutes',
+        'Ranked: Storm Point starts in about 5 minutes',
       ]);
     });
   });
@@ -190,7 +216,7 @@ void main() {
       );
       // Only the live next map (i==0) can be identified, and it is a favourite.
       expect(alerts.length, 1);
-      expect(alerts.first.body, 'Ranked: WE starts in 5 minutes');
+      expect(alerts.first.body, 'Ranked: WE starts in about 5 minutes');
     });
   });
 

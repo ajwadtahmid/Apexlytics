@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// visible set ever changes again in the future.
 enum AppTab { home, stats, search, settings }
 
-/// The ordered list of tabs currently visible. Ranked Breakdown is part of
-/// My Stats (see `StatsScreen`), not a separate tab.
+/// The ordered list of visible tabs. Ranked Breakdown is part of My Stats
+/// (see `StatsScreen`), not a separate tab.
 final visibleTabsProvider = Provider<List<AppTab>>((ref) {
   return const [AppTab.home, AppTab.stats, AppTab.search, AppTab.settings];
 });

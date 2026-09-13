@@ -22,17 +22,21 @@ Future<RankedMatch?> showMatchEditSheet(
     backgroundColor: AppTheme.surface,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppTheme.radiusLg),
+      ),
     ),
     builder: (_) => MatchEditSheet(match: match),
   );
 }
 
-/// Bounds enforced on a hand-entered RP change. Kept out of the error text —
-/// wider than a real per-game swing on purpose, as headroom for future
-/// changes, and not something to advertise.
-const int kMinEditableRpChange = -250;
-const int kMaxEditableRpChange = 1000;
+/// Bounds enforced on a hand-entered RP change, derived from the model's
+/// plausibility constants rather than restated. The `- 1` matters:
+/// [isImplausibleRpChange] treats [kRankedOutlierThreshold] itself as a reset
+/// artifact, so a correction of exactly `1000` used to be accepted here and
+/// then silently neutralized to 0.
+const int kMinEditableRpChange = kMinPlausibleRpChange;
+const int kMaxEditableRpChange = kRankedOutlierThreshold - 1;
 
 /// One editable numeric stat: its stored column, form label, and a
 /// field-specific range check for a human-readable error.
@@ -62,8 +66,14 @@ class _NumericField {
   }
 }
 
-String? _nonNegative(String label, int value) =>
-    value < 0 ? "$label can't be negative" : null;
+/// Range check shared by Kills and Damage, using the same ceiling
+/// `withPlausibleStats` applies to synced matches - without it, a typo here
+/// sets the edited flag and blocks any later sync from correcting it.
+String? _inRange(String label, int value, int max) {
+  if (value < 0) return "$label can't be negative";
+  if (value > max) return '$label seems too high';
+  return null;
+}
 
 String? _rpChangeRange(int value) {
   if (value < kMinEditableRpChange) return "RP change seems too low";
@@ -89,8 +99,9 @@ const _numericFields = [
   _NumericField('rp_change', 'RP change', rangeCheck: _rpChangeRange),
 ];
 
-String? _killsRange(int value) => _nonNegative('Kills', value);
-String? _damageRange(int value) => _nonNegative('Damage', value);
+String? _killsRange(int value) => _inRange('Kills', value, kMaxPlausibleKills);
+String? _damageRange(int value) =>
+    _inRange('Damage', value, kMaxPlausibleDamage);
 
 /// Correction form for a single match: kills, damage, RP change, and legend.
 ///
@@ -430,7 +441,9 @@ class _NumericFieldRowState extends State<_NumericFieldRow> {
           child: TextField(
             controller: widget.controller,
             keyboardType: const TextInputType.numberWithOptions(signed: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[-0-9]'))],
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[-0-9]')),
+            ],
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               isDense: true,

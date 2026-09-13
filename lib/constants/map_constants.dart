@@ -14,12 +14,3 @@ const List<AppMap> kBattleRoyaleMaps = [
   AppMap(id: '5', name: "Broken Moon"),
   AppMap(id: '6', name: "E-District"),
 ];
-
-/// Finds a map by id or name (case-insensitive). Returns null if not found.
-AppMap? findMap(String query) {
-  final q = query.toLowerCase().trim();
-  for (final m in kBattleRoyaleMaps) {
-    if (m.id == q || m.name.toLowerCase() == q) return m;
-  }
-  return null;
-}

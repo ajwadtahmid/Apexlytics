@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Resource-shrinker keep list (isShrinkResources = true). Both drawables are
+  referenced only as Dart strings, resolved at runtime via
+  Resources.getIdentifier() - invisible to the shrinker, which would
+  otherwise strip them and break every scheduled notification's icon.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification,@drawable/ic_notification_fallback" />

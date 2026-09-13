@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/utils/error_messages.dart';
 
@@ -142,7 +143,9 @@ void main() {
       final container = await makeContainer();
       addTearDown(container.dispose);
 
-      await container.read(playerSettingsProvider.notifier).setKeepScreenOn(true);
+      await container
+          .read(playerSettingsProvider.notifier)
+          .setKeepScreenOn(true);
 
       expect(container.read(playerSettingsProvider).keepScreenOn, isTrue);
     });
@@ -251,17 +254,20 @@ void main() {
         expect(container.read(playerSettingsProvider).uid, 'uid2');
       });
 
-      test('setPlayer may overwrite the active slot with its own UID', () async {
-        final container = await makeContainer();
-        addTearDown(container.dispose);
-        final notifier = container.read(playerSettingsProvider.notifier);
+      test(
+        'setPlayer may overwrite the active slot with its own UID',
+        () async {
+          final container = await makeContainer();
+          addTearDown(container.dispose);
+          final notifier = container.read(playerSettingsProvider.notifier);
 
-        await notifier.setPlayer('Aceu', 'uid1', 'PC');
-        await notifier.setPlayer('Aceu', 'uid1', 'PS4');
+          await notifier.setPlayer('Aceu', 'uid1', 'PC');
+          await notifier.setPlayer('Aceu', 'uid1', 'PS4');
 
-        expect(container.read(playerSettingsProvider).platform, 'PS4');
-        expect(container.read(playerSettingsProvider).profiles.length, 1);
-      });
+          expect(container.read(playerSettingsProvider).platform, 'PS4');
+          expect(container.read(playerSettingsProvider).profiles.length, 1);
+        },
+      );
 
       test('an empty UID is never treated as a duplicate', () async {
         final container = await makeContainer({
@@ -280,9 +286,9 @@ void main() {
 
     group('profile cap', () {
       String profileJson(int count) => jsonEncode([
-            for (var i = 0; i < count; i++)
-              {'name': 'P$i', 'uid': '100000000000$i', 'platform': 'PC'},
-          ]);
+        for (var i = 0; i < count; i++)
+          {'name': 'P$i', 'uid': '100000000000$i', 'platform': 'PC'},
+      ]);
 
       test('addProfile fills up to the cap and then refuses', () async {
         final container = await makeContainer();
@@ -314,8 +320,9 @@ void main() {
 
       test('stored profiles beyond the cap are truncated on read', () async {
         final container = await makeContainer({
-          'player_profiles':
-              profileJson(PlayerSettingsNotifier.maxProfileCount + 3),
+          'player_profiles': profileJson(
+            PlayerSettingsNotifier.maxProfileCount + 3,
+          ),
         });
         addTearDown(container.dispose);
 
@@ -326,7 +333,9 @@ void main() {
       });
 
       test('a profile set saved under the old cap of 3 still loads', () async {
-        final container = await makeContainer({'player_profiles': profileJson(3)});
+        final container = await makeContainer({
+          'player_profiles': profileJson(3),
+        });
         addTearDown(container.dispose);
 
         final profiles = container.read(playerSettingsProvider).profiles;
@@ -347,8 +356,7 @@ void main() {
       expect(container.read(playerSettingsProvider).activeProfile, isNull);
     });
 
-    test(
-        'clear() resets UI prefs (defaultTab, statsRefreshMinutes, '
+    test('clearAll() resets UI prefs (defaultTab, statsRefreshMinutes, '
         'compactLegendCards, keepScreenOn)', () async {
       final container = await makeContainer();
       addTearDown(container.dispose);
@@ -358,7 +366,7 @@ void main() {
       await notifier.setStatsRefreshMinutes(5);
       await notifier.setCompactLegendCards(true);
       await notifier.setKeepScreenOn(true);
-      await notifier.clear();
+      await notifier.clearAll();
 
       final settings = container.read(playerSettingsProvider);
       expect(settings.defaultTab, 0);
@@ -377,6 +385,78 @@ void main() {
       expect(prefs.getBool('keep_screen_on'), isNull);
     });
 
+    test(
+      'clearAll() removes every key except documented first-run state',
+      () async {
+        // One key of every shape the app persists, including the nine the old
+        // enumerated clear() silently left behind.
+        const uid = '1006838015507';
+        final container = await makeContainer({
+          PrefsKeys.profiles: '[{"name":"T","uid":"$uid","platform":"PC"}]',
+          PrefsKeys.activeProfileIndex: 0,
+          PrefsKeys.playerUid: uid,
+          PrefsKeys.searchFavorites: '[]',
+          PrefsKeys.statsRefreshMinutes: 5,
+          PrefsKeys.keepScreenOn: true,
+          PrefsKeys.notifyRankedMapRotation: true,
+          PrefsKeys.rankedNotifyMinutes: 10,
+          PrefsKeys.favoriteRankedMapNames: '["World\'s Edge"]',
+          PrefsKeys.seasonHistory: '{}',
+          PrefsKeys.legendVisitStack: '[]',
+          PrefsKeys.snapshotKeyFor(uid): '[{"t":1,"rp":100}]',
+          PrefsKeys.legendStatsKeyFor(uid): '[]',
+          PrefsKeys.rankGoalKeyFor(uid): 3,
+          PrefsKeys.gamesNextSync(uid): 1770000000000,
+          PrefsKeys.gamesLastOutcome(uid): 'synced',
+          'api_cache:/player': '{}',
+          'api_cache_ts:/player': 1770000000000,
+          // The documented survivors.
+          PrefsKeys.onboardingVersion: 1,
+          PrefsKeys.uidSearchWarningShown: true,
+          PrefsKeys.rankedInfoCoachMarkShown: true,
+        });
+        addTearDown(container.dispose);
+        await container.read(playerSettingsProvider.notifier).clearAll();
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getKeys(),
+          PlayerSettingsNotifier.survivesClearAll,
+          reason: 'clearAll() must sweep every key except first-run state',
+        );
+      },
+    );
+
+    test('clearProfilesAndFavorites() keeps settings and history', () async {
+      const uid = '1006838015507';
+      final container = await makeContainer({
+        PrefsKeys.profiles: '[{"name":"T","uid":"$uid","platform":"PC"}]',
+        PrefsKeys.activeProfileIndex: 0,
+        PrefsKeys.playerUid: uid,
+        PrefsKeys.searchFavorites: '[{"query":"x","platform":"PC"}]',
+        PrefsKeys.statsRefreshMinutes: 5,
+        PrefsKeys.snapshotKeyFor(uid): '[{"t":1,"rp":100}]',
+        PrefsKeys.rankGoalKeyFor(uid): 3,
+      });
+      addTearDown(container.dispose);
+      await container
+          .read(playerSettingsProvider.notifier)
+          .clearProfilesAndFavorites();
+
+      expect(container.read(playerSettingsProvider).profiles, isEmpty);
+
+      final prefs = await SharedPreferences.getInstance();
+      // Identity gone...
+      expect(prefs.getString(PrefsKeys.profiles), isNull);
+      expect(prefs.getString(PrefsKeys.playerUid), isNull);
+      expect(prefs.getString(PrefsKeys.searchFavorites), isNull);
+      // ...everything else untouched. This is the whole point of the second
+      // button: re-linking a profile shouldn't cost you your RP history.
+      expect(prefs.getInt(PrefsKeys.statsRefreshMinutes), 5);
+      expect(prefs.getString(PrefsKeys.snapshotKeyFor(uid)), isNotNull);
+      expect(prefs.getInt(PrefsKeys.rankGoalKeyFor(uid)), 3);
+    });
+
     group('removeProfile', () {
       Future<ProviderContainer> containerWithProfiles(
         List<(String, String, String)> profiles, {
@@ -391,73 +471,81 @@ void main() {
         return container;
       }
 
-      test('removing a slot before the active one keeps the same profile active',
-          () async {
-        // [A, B, C] with B active. Removing A (index 0, before active index 1)
-        // must shift the active pointer down so it still resolves to B, not C.
-        final container = await containerWithProfiles([
-          ('A', 'uidA', 'PC'),
-          ('B', 'uidB', 'PC'),
-          ('C', 'uidC', 'PC'),
-        ], active: 1);
-        addTearDown(container.dispose);
-        final notifier = container.read(playerSettingsProvider.notifier);
+      test(
+        'removing a slot before the active one keeps the same profile active',
+        () async {
+          // [A, B, C] with B active. Removing A (index 0, before active index 1)
+          // must shift the active pointer down so it still resolves to B, not C.
+          final container = await containerWithProfiles([
+            ('A', 'uidA', 'PC'),
+            ('B', 'uidB', 'PC'),
+            ('C', 'uidC', 'PC'),
+          ], active: 1);
+          addTearDown(container.dispose);
+          final notifier = container.read(playerSettingsProvider.notifier);
 
-        await notifier.removeProfile(0);
+          await notifier.removeProfile(0);
 
-        final settings = container.read(playerSettingsProvider);
-        expect(settings.profiles.map((p) => p.uid), ['uidB', 'uidC']);
-        expect(settings.uid, 'uidB');
-      });
+          final settings = container.read(playerSettingsProvider);
+          expect(settings.profiles.map((p) => p.uid), ['uidB', 'uidC']);
+          expect(settings.uid, 'uidB');
+        },
+      );
 
-      test('removing the active profile falls back to a neighboring slot',
-          () async {
-        final container = await containerWithProfiles([
-          ('A', 'uidA', 'PC'),
-          ('B', 'uidB', 'PC'),
-          ('C', 'uidC', 'PC'),
-        ], active: 1);
-        addTearDown(container.dispose);
-        final notifier = container.read(playerSettingsProvider.notifier);
+      test(
+        'removing the active profile falls back to a neighboring slot',
+        () async {
+          final container = await containerWithProfiles([
+            ('A', 'uidA', 'PC'),
+            ('B', 'uidB', 'PC'),
+            ('C', 'uidC', 'PC'),
+          ], active: 1);
+          addTearDown(container.dispose);
+          final notifier = container.read(playerSettingsProvider.notifier);
 
-        await notifier.removeProfile(1);
+          await notifier.removeProfile(1);
 
-        final settings = container.read(playerSettingsProvider);
-        expect(settings.profiles.map((p) => p.uid), ['uidA', 'uidC']);
-        expect(settings.uid, 'uidC');
-      });
+          final settings = container.read(playerSettingsProvider);
+          expect(settings.profiles.map((p) => p.uid), ['uidA', 'uidC']);
+          expect(settings.uid, 'uidC');
+        },
+      );
 
-      test('removing a slot after the active one leaves the active profile unchanged',
-          () async {
-        final container = await containerWithProfiles([
-          ('A', 'uidA', 'PC'),
-          ('B', 'uidB', 'PC'),
-          ('C', 'uidC', 'PC'),
-        ], active: 1);
-        addTearDown(container.dispose);
-        final notifier = container.read(playerSettingsProvider.notifier);
+      test(
+        'removing a slot after the active one leaves the active profile unchanged',
+        () async {
+          final container = await containerWithProfiles([
+            ('A', 'uidA', 'PC'),
+            ('B', 'uidB', 'PC'),
+            ('C', 'uidC', 'PC'),
+          ], active: 1);
+          addTearDown(container.dispose);
+          final notifier = container.read(playerSettingsProvider.notifier);
 
-        await notifier.removeProfile(2);
+          await notifier.removeProfile(2);
 
-        final settings = container.read(playerSettingsProvider);
-        expect(settings.profiles.map((p) => p.uid), ['uidA', 'uidB']);
-        expect(settings.uid, 'uidB');
-      });
+          final settings = container.read(playerSettingsProvider);
+          expect(settings.profiles.map((p) => p.uid), ['uidA', 'uidB']);
+          expect(settings.uid, 'uidB');
+        },
+      );
 
-      test('removing the last remaining profile clears the active player',
-          () async {
-        final container = await containerWithProfiles([
-          ('A', 'uidA', 'PC'),
-        ], active: 0);
-        addTearDown(container.dispose);
-        final notifier = container.read(playerSettingsProvider.notifier);
+      test(
+        'removing the last remaining profile clears the active player',
+        () async {
+          final container = await containerWithProfiles([
+            ('A', 'uidA', 'PC'),
+          ], active: 0);
+          addTearDown(container.dispose);
+          final notifier = container.read(playerSettingsProvider.notifier);
 
-        await notifier.removeProfile(0);
+          await notifier.removeProfile(0);
 
-        final settings = container.read(playerSettingsProvider);
-        expect(settings.profiles, isEmpty);
-        expect(settings.isPlayerSet, isFalse);
-      });
+          final settings = container.read(playerSettingsProvider);
+          expect(settings.profiles, isEmpty);
+          expect(settings.isPlayerSet, isFalse);
+        },
+      );
     });
   });
 }
