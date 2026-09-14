@@ -82,12 +82,17 @@ class PlayerInfoCard extends StatelessWidget {
                     children: [
                       Text(
                         'UID: ${stats.uid}',
-                        style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                        style: const TextStyle(
+                          color: AppTheme.muted,
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(width: 2),
                       GestureDetector(
                         onTap: () async {
-                          await Clipboard.setData(ClipboardData(text: stats.uid));
+                          await Clipboard.setData(
+                            ClipboardData(text: stats.uid),
+                          );
                           if (context.mounted) {
                             context.showMessage(
                               'UID copied',
@@ -97,7 +102,11 @@ class PlayerInfoCard extends StatelessWidget {
                         },
                         child: const Padding(
                           padding: EdgeInsets.all(4),
-                          child: Icon(Icons.copy, size: 12, color: AppTheme.muted),
+                          child: Icon(
+                            Icons.copy,
+                            size: 12,
+                            color: AppTheme.muted,
+                          ),
                         ),
                       ),
                     ],

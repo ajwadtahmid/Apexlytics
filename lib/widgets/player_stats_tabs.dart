@@ -73,7 +73,9 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
 
   List<LegendStat> _computeSorted() {
     final list = List<LegendStat>.from(widget.legendStats);
-    final originalIndex = {for (var i = 0; i < list.length; i++) list[i].name: i};
+    final originalIndex = {
+      for (var i = 0; i < list.length; i++) list[i].name: i,
+    };
     switch (_sort) {
       case _LegendSortOrder.byKills:
         list.sort((a, b) {
@@ -107,8 +109,10 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
         });
       case _LegendSortOrder.byRole:
         list.sort((a, b) {
-          final roleA = kLegendsByName[a.name.toLowerCase()]?.role ?? LegendRole.assault;
-          final roleB = kLegendsByName[b.name.toLowerCase()]?.role ?? LegendRole.assault;
+          final roleA =
+              kLegendsByName[a.name.toLowerCase()]?.role ?? LegendRole.assault;
+          final roleB =
+              kLegendsByName[b.name.toLowerCase()]?.role ?? LegendRole.assault;
           final roleIdxA = kRoleDisplayOrder.indexOf(roleA);
           final roleIdxB = kRoleDisplayOrder.indexOf(roleB);
           if (roleIdxA != roleIdxB) return roleIdxA.compareTo(roleIdxB);
@@ -167,7 +171,10 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
                   };
                 }),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.surface2,
                     borderRadius: BorderRadius.circular(100),
@@ -237,7 +244,10 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
         ],
         const SizedBox(height: AppTheme.md),
         if (_tab == 0)
-          LegendStatsSection(legends: _displayedLegends, compact: widget.compact)
+          LegendStatsSection(
+            legends: _displayedLegends,
+            compact: widget.compact,
+          )
         else
           WeaponStatsSection(legendStats: widget.legendStats),
       ],

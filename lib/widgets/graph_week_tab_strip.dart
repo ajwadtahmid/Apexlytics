@@ -53,8 +53,8 @@ class _WeekTabStripState extends State<WeekTabStrip> {
 
   void _scrollToSelected() {
     if (!_scroll.hasClients) return;
-    final offset =
-        (widget.selectedIndex * _chipWidth - _chipScrollLeadIn).clamp(0.0, double.infinity);
+    final offset = (widget.selectedIndex * _chipWidth - _chipScrollLeadIn)
+        .clamp(0.0, double.infinity);
     _scroll.animateTo(
       offset,
       duration: AppTheme.shortAnimation,
@@ -73,8 +73,7 @@ class _WeekTabStripState extends State<WeekTabStrip> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(widget.weeks.length, (i) {
             final week = widget.weeks[i];
-            final isFuture =
-                widget.isCurrentSeason && now.isBefore(week.start);
+            final isFuture = widget.isCurrentSeason && now.isBefore(week.start);
             final isSelected = i == widget.selectedIndex;
 
             return GestureDetector(
@@ -82,13 +81,16 @@ class _WeekTabStripState extends State<WeekTabStrip> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
                 margin: const EdgeInsets.only(right: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? AppTheme.accent
                       : isFuture
-                          ? AppTheme.surface2.withAlpha(80)
-                          : AppTheme.surface2,
+                      ? AppTheme.surface2.withAlpha(80)
+                      : AppTheme.surface2,
                   borderRadius: BorderRadius.circular(100),
                 ),
                 child: Text(
@@ -96,13 +98,14 @@ class _WeekTabStripState extends State<WeekTabStrip> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     color: isSelected
                         ? Colors.white
                         : isFuture
-                            ? AppTheme.muted.withAlpha(80)
-                            : AppTheme.muted,
+                        ? AppTheme.muted.withAlpha(80)
+                        : AppTheme.muted,
                   ),
                 ),
               ),

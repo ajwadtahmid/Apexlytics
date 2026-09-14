@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../constants/legend_constants.dart';
-import '../../../constants/ranked_map_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/player_stats.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/settings_provider.dart';
@@ -31,7 +31,9 @@ Future<void> showLegendDetailSheet(
     backgroundColor: AppTheme.surface,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppTheme.radiusLg),
+      ),
     ),
     builder: (_) => _LegendDetailSheet(
       breakdown: breakdown,
@@ -70,14 +72,15 @@ class _LegendDetailSheet extends ConsumerWidget {
       MaterialPageRoute(
         builder: (_) => RankedEntityHistoryScreen(
           title: breakdown.legend,
-          subtitle: '${breakdown.games} ranked games · '
+          subtitle:
+              '${breakdown.games} ranked games · '
               '${formatSigned(breakdown.avgRpPerGame)} RP/game',
           matches: games,
           onRefresh: onRefresh,
           groupLabel: 'map',
           grouping: MatchGrouping(
             keyOf: (m) => m.mapKey,
-            nameOf: (m) => rankedMapName(m.mapKey),
+            nameOf: (m) => battleRoyaleMapName(m.mapKey),
           ),
         ),
       ),
@@ -85,9 +88,9 @@ class _LegendDetailSheet extends ConsumerWidget {
   }
 
   void _viewTrackers(BuildContext context, LegendStat stat) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => LegendDetailPage(legend: stat)),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => LegendDetailPage(legend: stat)));
   }
 
   @override
@@ -148,7 +151,9 @@ class _LegendDetailSheet extends ConsumerWidget {
                           ),
                           decoration: BoxDecoration(
                             color: info.role.color.withAlpha(35),
-                            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusSm,
+                            ),
                           ),
                           child: Text(
                             info.role.displayName,
@@ -173,12 +178,16 @@ class _LegendDetailSheet extends ConsumerWidget {
                 StatDisplay(
                   label: 'Avg RP',
                   value: formatSigned(breakdown.avgRpPerGame),
-                  valueColor: breakdown.avgRpPerGame >= 0 ? AppTheme.green : AppTheme.red,
+                  valueColor: breakdown.avgRpPerGame >= 0
+                      ? AppTheme.green
+                      : AppTheme.red,
                 ),
                 StatDisplay(
                   label: 'Total RP',
                   value: formatSigned(breakdown.totalRp.toDouble()),
-                  valueColor: breakdown.totalRp >= 0 ? AppTheme.green : AppTheme.red,
+                  valueColor: breakdown.totalRp >= 0
+                      ? AppTheme.green
+                      : AppTheme.red,
                 ),
                 WinLossStat(wins: breakdown.wins, losses: breakdown.losses),
                 StatDisplay(
@@ -228,7 +237,9 @@ class _LegendDetailSheet extends ConsumerWidget {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: () => _viewHistory(context),
-                    style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.accent,
+                    ),
                     icon: const Icon(Icons.history, size: 18),
                     label: const Text('History'),
                   ),

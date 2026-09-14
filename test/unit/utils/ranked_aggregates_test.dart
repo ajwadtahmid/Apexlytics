@@ -29,7 +29,11 @@ void main() {
         {'key': 'kills', 'value': kills, 'name': 'BR Kills'},
         {'key': 'damage', 'value': damage, 'name': 'BR Damage'},
         if (axleTracker)
-          {'key': 'axle_tactical', 'value': 9, 'name': 'Tactical: Nitro Gates Used'},
+          {
+            'key': 'axle_tactical',
+            'value': 9,
+            'name': 'Tactical: Nitro Gates Used',
+          },
       ],
       'BRScoreChange': rpChange,
       'BRScore': cumulativeRp,
@@ -47,11 +51,55 @@ void main() {
   late List<RankedMatch> ranked;
   setUp(() {
     data = [
-      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 40, cumulativeRp: 1040, kills: 3, damage: 1000, startOffset: 0, axleTracker: true),
-      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: -20, cumulativeRp: 1020, kills: 1, damage: 500, startOffset: 1800, axleTracker: true),
-      match(legend: 'Bangalore', mapKey: 'storm_point_rotation', rpChange: 60, cumulativeRp: 1080, kills: 5, damage: 2000, startOffset: 3600),
-      match(legend: 'Octane', mapKey: 'UNKNOWN', rpChange: 0, cumulativeRp: 999999, kills: 0, damage: 0, startOffset: 5400, gameMode: 'UNKNOWN'),
-      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 10, cumulativeRp: 1090, kills: 2, damage: 800, startOffset: 18000, axleTracker: true),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 40,
+        cumulativeRp: 1040,
+        kills: 3,
+        damage: 1000,
+        startOffset: 0,
+        axleTracker: true,
+      ),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: -20,
+        cumulativeRp: 1020,
+        kills: 1,
+        damage: 500,
+        startOffset: 1800,
+        axleTracker: true,
+      ),
+      match(
+        legend: 'Bangalore',
+        mapKey: 'storm_point_rotation',
+        rpChange: 60,
+        cumulativeRp: 1080,
+        kills: 5,
+        damage: 2000,
+        startOffset: 3600,
+      ),
+      match(
+        legend: 'Octane',
+        mapKey: 'UNKNOWN',
+        rpChange: 0,
+        cumulativeRp: 999999,
+        kills: 0,
+        damage: 0,
+        startOffset: 5400,
+        gameMode: 'UNKNOWN',
+      ),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 10,
+        cumulativeRp: 1090,
+        kills: 2,
+        damage: 800,
+        startOffset: 18000,
+        axleTracker: true,
+      ),
     ];
     ranked = rankedOnly(data);
   });
@@ -83,11 +131,35 @@ void main() {
 
   test('win/loss ignores RP-neutral and reset-outlier games', () {
     final withResets = rankedOnly([
-      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 40, cumulativeRp: 40, kills: 1, damage: 100, startOffset: 0),
-      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: -20, cumulativeRp: 20, kills: 1, damage: 100, startOffset: 60),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 40,
+        cumulativeRp: 40,
+        kills: 1,
+        damage: 100,
+        startOffset: 0,
+      ),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: -20,
+        cumulativeRp: 20,
+        kills: 1,
+        damage: 100,
+        startOffset: 60,
+      ),
       // End-of-split reset artifact: |rp| >= 1000 → effectiveRpChange 0, so it's
       // neither a win nor a loss (a played game, but RP-neutral).
-      match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: -1500, cumulativeRp: 0, kills: 0, damage: 0, startOffset: 120),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: -1500,
+        cumulativeRp: 0,
+        kills: 0,
+        damage: 0,
+        startOffset: 120,
+      ),
     ]);
     final s = summarize(withResets);
     expect(s.games, 3); // all three are ranked games
@@ -140,52 +212,89 @@ void main() {
     expect(m.last.losses, 0);
   });
 
+  test('mapBreakdowns merges map-key spelling variants into one row', () {
+    // 'edistrict' and 'edistrict_rotation' both name E-District (see
+    // kBattleRoyaleMaps) - grouping on the raw key would render two
+    // identically labelled "E-District" rows instead of merging their stats.
+    final variants = rankedOnly([
+      match(
+        legend: 'Axle',
+        mapKey: 'edistrict',
+        rpChange: 20,
+        cumulativeRp: 20,
+        kills: 1,
+        damage: 100,
+        startOffset: 0,
+      ),
+      match(
+        legend: 'Axle',
+        mapKey: 'edistrict_rotation',
+        rpChange: 30,
+        cumulativeRp: 50,
+        kills: 2,
+        damage: 200,
+        startOffset: 60,
+      ),
+    ]);
+    final m = mapBreakdowns(variants);
+    expect(m.length, 1);
+    expect(m.single.displayName, 'E-District');
+    expect(m.single.games, 2);
+    expect(m.single.totalRp, 50);
+    expect(m.single.totalKills, 3);
+  });
+
   test('legendMapBreakdowns groups by legend and map', () {
     final cells = legendMapBreakdowns(ranked);
     expect(cells.length, 2); // Axle+Olympus, Bangalore+Storm Point
 
-    final axleOlympus =
-        cells.firstWhere((c) => c.legend == 'Axle' && c.mapName == 'Olympus');
+    final axleOlympus = cells.firstWhere(
+      (c) => c.legend == 'Axle' && c.mapName == 'Olympus',
+    );
     expect(axleOlympus.games, 3);
     expect(axleOlympus.totalRp, 30); // +40 - 20 + 10
     expect(axleOlympus.wins, 2);
     expect(axleOlympus.losses, 1);
 
-    final bangaloreStormPoint = cells
-        .firstWhere((c) => c.legend == 'Bangalore' && c.mapName == 'Storm Point');
+    final bangaloreStormPoint = cells.firstWhere(
+      (c) => c.legend == 'Bangalore' && c.mapName == 'Storm Point',
+    );
     expect(bangaloreStormPoint.games, 1);
     expect(bangaloreStormPoint.totalRp, 60);
   });
 
-  test('legendMapBreakdowns drops a legend or map outside the constant lists', () {
-    final withUnknowns = rankedOnly([
-      ...ranked,
-      match(
-        legend: 'Not A Real Legend',
-        mapKey: 'olympus_rotation',
-        rpChange: 5,
-        cumulativeRp: 1095,
-        kills: 1,
-        damage: 100,
-        startOffset: 90000,
-      ),
-      match(
-        legend: 'Axle',
-        mapKey: 'not_a_real_map',
-        rpChange: 5,
-        cumulativeRp: 1100,
-        kills: 1,
-        damage: 100,
-        startOffset: 93600,
-      ),
-    ]);
-    final cells = legendMapBreakdowns(withUnknowns);
-    expect(
-      cells.length,
-      2,
-      reason: 'the unrecognised legend and map each drop their pair entirely',
-    );
-  });
+  test(
+    'legendMapBreakdowns drops a legend or map outside the constant lists',
+    () {
+      final withUnknowns = rankedOnly([
+        ...ranked,
+        match(
+          legend: 'Not A Real Legend',
+          mapKey: 'olympus_rotation',
+          rpChange: 5,
+          cumulativeRp: 1095,
+          kills: 1,
+          damage: 100,
+          startOffset: 90000,
+        ),
+        match(
+          legend: 'Axle',
+          mapKey: 'not_a_real_map',
+          rpChange: 5,
+          cumulativeRp: 1100,
+          kills: 1,
+          damage: 100,
+          startOffset: 93600,
+        ),
+      ]);
+      final cells = legendMapBreakdowns(withUnknowns);
+      expect(
+        cells.length,
+        2,
+        reason: 'the unrecognised legend and map each drop their pair entirely',
+      );
+    },
+  );
 
   test('sessionize splits on >2h gaps, newest session first', () {
     final sessions = sessionize(ranked);
@@ -196,44 +305,42 @@ void main() {
     expect(sessions[1].netRp, 80);
   });
 
-  test('aggregateTrackers keeps only high-coverage trackers', () {
-    final t = aggregateTrackers(ranked); // minCoverage 0.8
-    // BR Kills + BR Damage are in all 4 (1.0); axle tracker only 3/4 (0.75).
-    expect(t.map((e) => e.name), containsAll(['BR Kills', 'BR Damage']));
-    expect(t.any((e) => e.name.contains('Nitro')), false);
-    final kills = t.firstWhere((e) => e.name == 'BR Kills');
-    expect(kills.coverage, 1.0);
-    expect(kills.total, 11);
-  });
-
-  test('generateInsights surfaces net, best legend, strongest map', () {
-    final insights = generateInsights(ranked);
-    final labels = insights.map((i) => i.label).toList();
-    expect(labels, contains('Net gain'));
-    expect(labels, contains('Best legend'));
-    expect(labels, contains('Strongest map'));
-    final best = insights.firstWhere((i) => i.label == 'Best legend');
-    expect(best.detail, contains('Axle')); // only legend with >=3 games
-  });
-
-  test('generateInsightsFromAggregates matches generateInsights for the same window', () {
-    final fromMatches = generateInsights(ranked);
-    final fromAggregates = generateInsightsFromAggregates(
-      summarize(ranked),
-      legendBreakdowns(ranked),
-      mapBreakdowns(ranked),
-    );
-    expect(
-      fromAggregates.map((i) => i.detail),
-      fromMatches.map((i) => i.detail),
-      reason: 'the Lifetime path (aggregates) must read the same as the split '
-          'path (matches) for identical underlying data',
-    );
-  });
-
-  test('generateInsightsFromAggregates returns nothing for an empty window', () {
-    expect(generateInsightsFromAggregates(RankedSummary.empty, [], []), isEmpty);
-  });
+  test(
+    "sessionize's end is the latest endTime, not the start-sorted last match's",
+    () {
+      // A starts first but runs long past B's end — upstream reconstructs
+      // timestamps from polling gaps, so start order and end order can
+      // disagree even within one session.
+      final longThenShort = [
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus',
+          rpChange: 10,
+          cumulativeRp: 1010,
+          kills: 1,
+          damage: 100,
+          startOffset: 0,
+          length: 1000,
+        ),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus',
+          rpChange: 5,
+          cumulativeRp: 1015,
+          kills: 1,
+          damage: 100,
+          startOffset: 100,
+          length: 200,
+        ),
+      ];
+      final sessions = sessionize(longThenShort);
+      expect(sessions, hasLength(1));
+      expect(
+        sessions.first.end,
+        DateTime.fromMillisecondsSinceEpoch((t0 + 1000) * 1000, isUtc: true),
+      );
+    },
+  );
 
   test('timeOfDayBuckets covers all ranked games and conserves net RP', () {
     final buckets = timeOfDayBuckets(ranked);
@@ -255,28 +362,35 @@ void main() {
     expect(buckets.every((b) => b.weekday >= 1 && b.weekday <= 7), true);
   });
 
-  test('dayOfWeekBucketsFromRankedRows neutralizes outliers like the match path', () {
-    final rows = [(1782090000000, 40), (1782090000000, -2000)];
-    final buckets = dayOfWeekBucketsFromRankedRows(rows);
-    final totalRp = buckets.fold<int>(0, (a, b) => a + b.netRp);
-    expect(totalRp, 40, reason: 'the 2000 RP swing is a reset artifact, zeroed');
-    expect(buckets.fold<int>(0, (a, b) => a + b.games), 2);
-  });
+  test(
+    'dayOfWeekBucketsFromRankedRows neutralizes outliers like the match path',
+    () {
+      final rows = [(1782090000000, 40), (1782090000000, -2000)];
+      final buckets = dayOfWeekBucketsFromRankedRows(rows);
+      final totalRp = buckets.fold<int>(0, (a, b) => a + b.netRp);
+      expect(
+        totalRp,
+        40,
+        reason: 'the 2000 RP swing is a reset artifact, zeroed',
+      );
+      expect(buckets.fold<int>(0, (a, b) => a + b.games), 2);
+    },
+  );
 
   group('RankProgress Apex Predator cutoff', () {
     // Master starts at 16000 RP with no upper bound on kRankLadder, so these
     // cases sit at/above that floor to exercise the live-cutoff behaviour.
     RankedSummary summaryAt(int rp) => summarize([
-          match(
-            legend: 'Axle',
-            mapKey: 'olympus_rotation',
-            rpChange: 0,
-            cumulativeRp: rp,
-            kills: 0,
-            damage: 0,
-            startOffset: 0,
-          ),
-        ]);
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 0,
+        cumulativeRp: rp,
+        kills: 0,
+        damage: 0,
+        startOffset: 0,
+      ),
+    ]);
 
     test('below the live cutoff stays Master, not Predator', () {
       final progress = RankProgress.from(summaryAt(16500), predatorRp: 17000);
@@ -321,10 +435,34 @@ void main() {
 
     test('an RP-neutral reset-outlier game does not break a win streak', () {
       final withReset = rankedOnly([
-        match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 40, cumulativeRp: 40, kills: 1, damage: 100, startOffset: 0),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus_rotation',
+          rpChange: 40,
+          cumulativeRp: 40,
+          kills: 1,
+          damage: 100,
+          startOffset: 0,
+        ),
         // |rpChange| >= 1000 → effectiveRpChange 0: neither a win nor a loss.
-        match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: -1500, cumulativeRp: 0, kills: 0, damage: 0, startOffset: 60),
-        match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 30, cumulativeRp: 30, kills: 1, damage: 100, startOffset: 120),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus_rotation',
+          rpChange: -1500,
+          cumulativeRp: 0,
+          kills: 0,
+          damage: 0,
+          startOffset: 60,
+        ),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus_rotation',
+          rpChange: 30,
+          cumulativeRp: 30,
+          kills: 1,
+          damage: 100,
+          startOffset: 120,
+        ),
       ]);
       final r = personalRecords(withReset);
       expect(r.currentWinStreak, 2);
@@ -333,8 +471,24 @@ void main() {
 
     test('a loss (even -1) breaks a win streak', () {
       final withSmallLoss = rankedOnly([
-        match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: 40, cumulativeRp: 40, kills: 1, damage: 100, startOffset: 0),
-        match(legend: 'Axle', mapKey: 'olympus_rotation', rpChange: -1, cumulativeRp: 39, kills: 1, damage: 100, startOffset: 60),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus_rotation',
+          rpChange: 40,
+          cumulativeRp: 40,
+          kills: 1,
+          damage: 100,
+          startOffset: 0,
+        ),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus_rotation',
+          rpChange: -1,
+          cumulativeRp: 39,
+          kills: 1,
+          damage: 100,
+          startOffset: 60,
+        ),
       ]);
       final r = personalRecords(withSmallLoss);
       expect(r.currentWinStreak, 0);

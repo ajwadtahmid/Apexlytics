@@ -15,27 +15,33 @@ class SeasonalMaps {
   List<String> get pubsNames => pubs.map((m) => m.name).toList();
 
   factory SeasonalMaps.fromJson(Map<String, dynamic> json) {
-    final ranked = (json['ranked'] as List<dynamic>?)
+    final ranked =
+        (json['ranked'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>()
-            .map((m) => AppMap(
-                  id: m['id'] as String? ?? '',
-                  name: m['name'] as String? ?? '',
-                ))
+            .map(
+              (m) => AppMap(
+                id: m['id'] as String? ?? '',
+                name: m['name'] as String? ?? '',
+              ),
+            )
             .toList() ??
         [];
-    final pubs = (json['pubs'] as List<dynamic>?)
+    final pubs =
+        (json['pubs'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>()
-            .map((m) => AppMap(
-                  id: m['id'] as String? ?? '',
-                  name: m['name'] as String? ?? '',
-                ))
+            .map(
+              (m) => AppMap(
+                id: m['id'] as String? ?? '',
+                name: m['name'] as String? ?? '',
+              ),
+            )
             .toList() ??
         [];
     return SeasonalMaps(ranked: ranked, pubs: pubs);
   }
 
   Map<String, dynamic> toJson() => {
-        'ranked': ranked.map((m) => {'id': m.id, 'name': m.name}).toList(),
-        'pubs': pubs.map((m) => {'id': m.id, 'name': m.name}).toList(),
-      };
+    'ranked': ranked.map((m) => {'id': m.id, 'name': m.name}).toList(),
+    'pubs': pubs.map((m) => {'id': m.id, 'name': m.name}).toList(),
+  };
 }

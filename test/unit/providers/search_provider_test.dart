@@ -17,9 +17,7 @@ void main() {
 
     setUp(() {
       container = ProviderContainer(
-        overrides: [
-          sharedPreferencesProvider.overrideWithValue(prefs),
-        ],
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
     });
 
@@ -35,7 +33,9 @@ void main() {
         uid: '123',
       );
 
-      await container.read(searchStateProvider.notifier).toggleFavorite(playerRef);
+      await container
+          .read(searchStateProvider.notifier)
+          .toggleFavorite(playerRef);
 
       final state = container.read(searchStateProvider);
       expect(state.favorites, contains(playerRef));
@@ -56,12 +56,54 @@ void main() {
       expect(state.favorites, isEmpty);
     });
 
+    test(
+      'a case-different name+platform match is treated as a duplicate',
+      () async {
+        const player1 = PlayerRef(query: 'TestPlayer', platform: 'PC');
+        const player2 = PlayerRef(query: 'testplayer', platform: 'PC');
+
+        final notifier = container.read(searchStateProvider.notifier);
+        await notifier.toggleFavorite(player1);
+        await notifier.toggleFavorite(player2);
+
+        expect(container.read(searchStateProvider).favorites, isEmpty);
+      },
+    );
+
+    test(
+      'a name-only entry and a UID entry for the same player dedupe too',
+      () async {
+        const nameOnly = PlayerRef(query: 'TestPlayer', platform: 'PC');
+        const withUid = PlayerRef(
+          query: 'TestPlayer',
+          platform: 'PC',
+          uid: '123',
+        );
+
+        final notifier = container.read(searchStateProvider.notifier);
+        await notifier.toggleFavorite(nameOnly);
+        await notifier.toggleFavorite(withUid);
+
+        expect(container.read(searchStateProvider).favorites, isEmpty);
+      },
+    );
+
+    test('the favorites list is capped, evicting the oldest first', () async {
+      final notifier = container.read(searchStateProvider.notifier);
+      for (var i = 0; i < SearchNotifier.maxFavorites + 1; i++) {
+        await notifier.toggleFavorite(
+          PlayerRef(query: 'Player$i', platform: 'PC', uid: '$i'),
+        );
+      }
+
+      final favorites = container.read(searchStateProvider).favorites;
+      expect(favorites, hasLength(SearchNotifier.maxFavorites));
+      expect(favorites.any((f) => f.uid == '0'), isFalse);
+      expect(favorites.first.uid, '${SearchNotifier.maxFavorites}');
+    });
+
     test('deduplicates by UID when both entries have UIDs', () async {
-      const player1 = PlayerRef(
-        query: 'OldName',
-        platform: 'PC',
-        uid: '123',
-      );
+      const player1 = PlayerRef(query: 'OldName', platform: 'PC', uid: '123');
       const player2 = PlayerRef(
         query: 'TestPlayer2',
         platform: 'PC',
@@ -80,11 +122,7 @@ void main() {
     });
 
     test('syncs display name for existing favorites', () async {
-      const playerRef = PlayerRef(
-        query: 'OldName',
-        platform: 'PC',
-        uid: null,
-      );
+      const playerRef = PlayerRef(query: 'OldName', platform: 'PC', uid: null);
 
       final notifier = container.read(searchStateProvider.notifier);
       await notifier.toggleFavorite(playerRef);

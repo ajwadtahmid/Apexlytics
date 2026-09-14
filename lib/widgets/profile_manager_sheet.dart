@@ -9,7 +9,8 @@ class ProfileManagerSheet extends ConsumerStatefulWidget {
   const ProfileManagerSheet({super.key});
 
   @override
-  ConsumerState<ProfileManagerSheet> createState() => _ProfileManagerSheetState();
+  ConsumerState<ProfileManagerSheet> createState() =>
+      _ProfileManagerSheetState();
 }
 
 class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
@@ -17,7 +18,9 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
   int? _editingIndex; // null = list view; non-null = slot index being edited
 
   Future<void> _switchTo(int index) async {
-    await ref.read(playerSettingsProvider.notifier).setActiveProfileIndex(index);
+    await ref
+        .read(playerSettingsProvider.notifier)
+        .setActiveProfileIndex(index);
     if (mounted) Navigator.pop(context);
   }
 
@@ -40,19 +43,30 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
     await ref.read(playerSettingsProvider.notifier).removeProfile(index);
     // If the form was open for this specific slot, return to the list.
     if (_editingIndex == index && mounted) {
-      setState(() { _isAdding = false; _editingIndex = null; });
+      setState(() {
+        _isAdding = false;
+        _editingIndex = null;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final profiles = ref.watch(playerSettingsProvider.select((s) => s.profiles));
-    final activeProfileIndex =
-        ref.watch(playerSettingsProvider.select((s) => s.activeProfileIndex));
+    final profiles = ref.watch(
+      playerSettingsProvider.select((s) => s.profiles),
+    );
+    final activeProfileIndex = ref.watch(
+      playerSettingsProvider.select((s) => s.activeProfileIndex),
+    );
     final insets = MediaQuery.of(context).viewInsets.bottom;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(AppTheme.md, AppTheme.md, AppTheme.md, AppTheme.md + insets),
+      padding: EdgeInsets.fromLTRB(
+        AppTheme.md,
+        AppTheme.md,
+        AppTheme.md,
+        AppTheme.md + insets,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,7 +93,10 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
     );
   }
 
-  Widget _buildProfileList(List<PlayerProfile> profiles, int activeProfileIndex) {
+  Widget _buildProfileList(
+    List<PlayerProfile> profiles,
+    int activeProfileIndex,
+  ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,7 +126,10 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
               decoration: BoxDecoration(
                 color: AppTheme.surface2,
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                border: Border.all(color: AppTheme.muted.withAlpha(60), width: 1),
+                border: Border.all(
+                  color: AppTheme.muted.withAlpha(60),
+                  width: 1,
+                ),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -136,8 +156,8 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
     final notifier = ref.read(playerSettingsProvider.notifier);
     final editedProfile =
         !isAdding && _editingIndex != null && _editingIndex! < profiles.length
-            ? profiles[_editingIndex!]
-            : null;
+        ? profiles[_editingIndex!]
+        : null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -166,9 +186,10 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
           initialName: editedProfile?.name,
           initialPlatform: editedProfile?.platform,
           onPlayerFound: isAdding
-              ? (name, uid, platform) => notifier.addProfile(name, uid, platform)
+              ? (name, uid, platform) =>
+                    notifier.addProfile(name, uid, platform)
               : (name, uid, platform) =>
-                  notifier.updateProfile(_editingIndex!, name, uid, platform),
+                    notifier.updateProfile(_editingIndex!, name, uid, platform),
           onSuccess: () {
             if (mounted) setState(() => _editingIndex = null);
           },
@@ -225,17 +246,15 @@ class _ProfileTile extends StatelessWidget {
                   Text(
                     profile.name,
                     style: TextStyle(
-                      fontWeight:
-                          isActive ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isActive
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       fontSize: 14,
                     ),
                   ),
                   Text(
                     ApiConstants.labelFor(profile.platform),
-                    style: const TextStyle(
-                      color: AppTheme.muted,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
                   ),
                 ],
               ),

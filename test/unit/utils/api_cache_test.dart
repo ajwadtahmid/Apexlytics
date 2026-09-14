@@ -35,6 +35,21 @@ void main() {
       expect(cache.load('key'), isNull);
     });
 
+    test('a corrupt entry is evicted, not left to re-fail forever', () async {
+      SharedPreferences.setMockInitialValues({'api_cache:key': 'bad-json'});
+      final prefs = await SharedPreferences.getInstance();
+      final cache = ApiCache(prefs);
+      await prefs.setInt(
+        'api_cache_ts:key',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      expect(cache.load('key'), isNull);
+      // The removal is fire-and-forget; let it settle before asserting.
+      await Future<void>.delayed(Duration.zero);
+      expect(prefs.containsKey('api_cache:key'), isFalse);
+      expect(prefs.containsKey('api_cache_ts:key'), isFalse);
+    });
+
     test('load returns null when timestamp is missing', () async {
       final prefs = await SharedPreferences.getInstance();
       final cache = ApiCache(prefs);
@@ -119,15 +134,17 @@ void main() {
       expect(cache.load('/player'), isNull);
     });
 
-    test('load() prunes an expired entry so it stops counting toward the cap',
-        () async {
-      final prefs = await SharedPreferences.getInstance();
-      await setOldEntry(prefs, '/player', 24 * 60 + 1);
-      final cache = ApiCache(prefs);
-      expect(cache.load('/player'), isNull);
-      expect(prefs.getString('api_cache:/player'), isNull);
-      expect(prefs.getInt('api_cache_ts:/player'), isNull);
-    });
+    test(
+      'load() prunes an expired entry so it stops counting toward the cap',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await setOldEntry(prefs, '/player', 24 * 60 + 1);
+        final cache = ApiCache(prefs);
+        expect(cache.load('/player'), isNull);
+        expect(prefs.getString('api_cache:/player'), isNull);
+        expect(prefs.getInt('api_cache_ts:/player'), isNull);
+      },
+    );
   });
 
   group('Eviction cap', () {

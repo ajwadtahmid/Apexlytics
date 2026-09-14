@@ -125,13 +125,6 @@ class RankedDayOfWeekChart extends StatelessWidget {
   }
 
   /// DateTime.weekday (1=Monday..7=Sunday) → 3-letter label.
-  static String _weekdayLabel(int weekday) => const [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
-  ][weekday - 1];
+  static String _weekdayLabel(int weekday) =>
+      const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][weekday - 1];
 }

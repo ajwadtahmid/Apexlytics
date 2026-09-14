@@ -31,9 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.9
   dio: ^5.9.2
   flutter_riverpod: ^3.3.2
   shared_preferences: ^2.5.5
@@ -117,4 +114,4 @@ flutter:
 
 # No dependency_overrides. permission_handler_android was pinned to 13.0.1
 # because 14.0.0 needs compileSdk 37; that is now set explicitly in
-# android/app/build.gradle.kts and AGP 8.13 resolves it, so the pin is gone.
+# android/app/build.gradle.kts and AGP 9.3.0 resolves it, so the pin is gone.

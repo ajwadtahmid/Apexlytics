@@ -1,6 +1,8 @@
 library;
 
 export 'error_card.dart';
+export 'graph_season_picker.dart';
+export 'graph_week_tab_strip.dart';
 export 'icon_text_row.dart';
 export 'stat_display.dart';
 export 'error_view.dart';
@@ -12,6 +14,7 @@ export 'platform_picker.dart';
 export 'player_info_card.dart';
 export 'player_lookup_form.dart';
 export 'player_stats_tabs.dart';
+export 'profile_manager_sheet.dart';
 export 'ranked_info_card.dart';
 export 'server_summary_card.dart';
 export 'setting_row.dart';
@@ -23,3 +26,4 @@ export 'surface_card.dart';
 export 'tracker_info_sheet.dart';
 export 'uid_search_toggle.dart';
 export 'weapon_stats_section.dart';
+export 'win_loss_stat.dart';

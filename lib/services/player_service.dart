@@ -31,10 +31,11 @@ class PlayerService {
   final ApiService _api;
   PlayerService(this._api);
 
-  /// Normalizes a name for cache-key purposes, matching [playerRefreshKey]'s
-  /// cooldown key - otherwise "Bob" and "bob" produce two cache entries
-  /// sharing one cooldown. Only the key is normalized; upstream queries keep
-  /// the user's casing.
+  /// Normalizes a name for both the upstream query and the cache key.
+  /// Upstream name lookups are case-insensitive, so "Bob" and "bob" are the
+  /// same player — sending the lowercased form for both means they also share
+  /// one cache entry and one cooldown instead of two, and it's why
+  /// [nameToUid] normalizes the same way.
   static String _cacheName(String playerName) =>
       playerName.trim().toLowerCase();
 
@@ -106,7 +107,7 @@ class PlayerService {
   Future<PlayerUidResult> nameToUid(String playerName, String platform) async {
     final result = await _api.get(
       '/nametouid',
-      params: {'player': playerName.trim(), 'platform': platform},
+      params: {'player': _cacheName(playerName), 'platform': platform},
       noCache: true,
     );
     final lookup = PlayerUidResult.fromJson(result.data);

@@ -356,6 +356,23 @@ void main() {
       expect(container.read(playerSettingsProvider).activeProfile, isNull);
     });
 
+    test(
+      'a negative stored active_profile_index is clamped to 0, not left to throw',
+      () async {
+        final container = await makeContainer({
+          'player_profiles': jsonEncode([
+            {'name': 'P0', 'uid': '1000000000000', 'platform': 'PC'},
+          ]),
+          PrefsKeys.activeProfileIndex: -1,
+        });
+        addTearDown(container.dispose);
+
+        final settings = container.read(playerSettingsProvider);
+        expect(settings.activeProfileIndex, 0);
+        expect(settings.activeProfile?.name, 'P0');
+      },
+    );
+
     test('clearAll() resets UI prefs (defaultTab, statsRefreshMinutes, '
         'compactLegendCards, keepScreenOn)', () async {
       final container = await makeContainer();

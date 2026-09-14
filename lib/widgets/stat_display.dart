@@ -24,7 +24,8 @@ class StatDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labelColor = highlight ? AppTheme.accent : AppTheme.muted;
-    final valueColor = this.valueColor ?? (highlight ? AppTheme.accent : AppTheme.textPrimary);
+    final valueColor =
+        this.valueColor ?? (highlight ? AppTheme.accent : AppTheme.textPrimary);
     final labelSize = compact ? 9.0 : 10.0;
     final valueSize = compact ? 12.0 : 15.0;
     final pad = compact

@@ -16,6 +16,8 @@ class ApiConstants {
 
   static const String alsProfileBaseUrl =
       'https://apexlegendsstatus.com/profile/uid';
+  static const String alsProfileSearchUrl =
+      'https://apexlegendsstatus.com/profile/search/';
   static const List<String> platforms = ['PC', 'PS4', 'X1', 'SWITCH'];
 
   static const String mapRotationPath = '/maprotation';

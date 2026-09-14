@@ -31,16 +31,27 @@ void resetSnapshotCache() => _cache.clear();
 bool isSnapshotCachePrimed(String? uid) =>
     _cache.containsKey(PrefsKeys.snapshotKeyFor(uid));
 
+/// Parses a legacy prefs blob into snapshots, or an empty list when it can't
+/// be read at all.
+///
+/// Deliberately broad: `jsonDecode` succeeding on well-formed-but-wrong-shape
+/// JSON (e.g. `{"a":1}`) throws a [TypeError] on the `as List` cast, not a
+/// [FormatException] - narrower error handling here let that case escape
+/// [migrateSnapshotsFromPrefs] and abort the drain of every later key.
 List<StatSnapshot> _parseSnapshots(String? raw) {
   try {
-    final list = jsonDecode(raw ?? '[]') as List;
-    return list
+    final decoded = jsonDecode(raw ?? '[]');
+    if (decoded is! List) {
+      log.w('RP snapshot blob is not a list — treating as unparseable');
+      return const [];
+    }
+    return decoded
         .whereType<Map<String, dynamic>>()
         .map(StatSnapshot.fromJson)
         .toList();
-  } on FormatException catch (e) {
+  } catch (e) {
     log.w('RP snapshot JSON parse failed — returning empty list', error: e);
-    return [];
+    return const [];
   }
 }
 
@@ -51,6 +62,12 @@ List<StatSnapshot> _parseSnapshots(String? raw) {
 /// (which carries snapshots as prefs, not table rows) is imported later.
 /// Each key is removed only after its rows commit, and the insert is
 /// idempotent, so an interrupted or repeated run is safe.
+///
+/// A key whose blob fails to parse is left in place rather than removed: an
+/// empty result from [_parseSnapshots] is ambiguous between "nothing to
+/// migrate" and "couldn't read this" and only the former is safe to discard
+/// - deleting an unreadable blob would destroy the only copy of that
+/// player's RP history with no recovery path.
 Future<void> migrateSnapshotsFromPrefs(
   SharedPreferences prefs,
   RankedHistoryStore store,
@@ -63,9 +80,16 @@ Future<void> migrateSnapshotsFromPrefs(
       .toList();
   if (legacyKeys.isEmpty) return;
 
+  final drained = <String>[];
   for (final key in legacyKeys) {
-    final snaps = _parseSnapshots(prefs.getString(key));
-    if (snaps.isEmpty) continue;
+    final raw = prefs.getString(key);
+    final snaps = _parseSnapshots(raw);
+    if (snaps.isEmpty) {
+      // A genuinely empty or absent blob has nothing to lose by removing;
+      // anything else means the blob held content we couldn't read.
+      if (raw == null || raw.isEmpty || raw == '[]') drained.add(key);
+      continue;
+    }
     // The UID-less legacy key has no owner; it predates multi-profile support
     // and its data belongs to whoever was linked at the time. Keeping it under
     // the empty-uid bucket matches how snapshotKeyFor(null) already reads it.
@@ -74,9 +98,10 @@ Future<void> migrateSnapshotsFromPrefs(
         : key.substring(snapshotKeyPrefix.length);
     await store.appendSnapshotsFor(uid, snaps);
     log.i('Migrated ${snaps.length} RP snapshots to SQLite');
+    drained.add(key); // only after the rows commit
   }
 
-  for (final key in legacyKeys) {
+  for (final key in drained) {
     await prefs.remove(key);
   }
   // Anything already cached was read before the drain and is now incomplete.

@@ -22,8 +22,11 @@ class MapRpBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(positive ? Icons.arrow_upward : Icons.arrow_downward,
-              size: 12, color: color),
+          Icon(
+            positive ? Icons.arrow_upward : Icons.arrow_downward,
+            size: 12,
+            color: color,
+          ),
           const SizedBox(width: 2),
           Text(
             '${formatNumber(totalRp.abs())} RP',

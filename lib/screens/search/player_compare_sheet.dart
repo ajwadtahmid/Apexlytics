@@ -85,21 +85,27 @@ class _RankedCompare extends StatelessWidget {
     final higherRp = me.rankScore > them.rankScore;
 
     // RP needed is only colored when both players share the same rank tier
-    final sameRankTier = myInfo.tier != null && theirInfo.tier != null &&
+    final sameRankTier =
+        myInfo.tier != null &&
+        theirInfo.tier != null &&
         myInfo.tier == theirInfo.tier;
     final myNeededColor =
         sameRankTier &&
             myInfo.rpToNext != null &&
             theirInfo.rpToNext != null &&
             myInfo.rpToNext != theirInfo.rpToNext
-        ? (myInfo.rpToNext! < theirInfo.rpToNext! ? AppTheme.green : AppTheme.red)
+        ? (myInfo.rpToNext! < theirInfo.rpToNext!
+              ? AppTheme.green
+              : AppTheme.red)
         : AppTheme.textPrimary;
     final theirNeededColor =
         sameRankTier &&
             myInfo.rpToNext != null &&
             theirInfo.rpToNext != null &&
             myInfo.rpToNext != theirInfo.rpToNext
-        ? (theirInfo.rpToNext! < myInfo.rpToNext! ? AppTheme.green : AppTheme.red)
+        ? (theirInfo.rpToNext! < myInfo.rpToNext!
+              ? AppTheme.green
+              : AppTheme.red)
         : AppTheme.textPrimary;
 
     return Column(
@@ -138,10 +144,14 @@ class _RankedCompare extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
-              fontWeight: me.rankScore != them.rankScore ? FontWeight.bold : FontWeight.normal,
+              fontWeight: me.rankScore != them.rankScore
+                  ? FontWeight.bold
+                  : FontWeight.normal,
               color: higherRp
                   ? AppTheme.green
-                  : (me.rankScore != them.rankScore ? AppTheme.red : AppTheme.textPrimary),
+                  : (me.rankScore != them.rankScore
+                        ? AppTheme.red
+                        : AppTheme.textPrimary),
             ),
           ),
           theirChild: Text(
@@ -178,7 +188,9 @@ class _RankedCompare extends StatelessWidget {
           _CompareRow(
             label: 'RP needed',
             myChild: Text(
-              myInfo.rpToNext != null ? '${formatNumber(myInfo.rpToNext!)} RP' : '—',
+              myInfo.rpToNext != null
+                  ? '${formatNumber(myInfo.rpToNext!)} RP'
+                  : '—',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -189,7 +201,9 @@ class _RankedCompare extends StatelessWidget {
               ),
             ),
             theirChild: Text(
-              theirInfo.rpToNext != null ? '${formatNumber(theirInfo.rpToNext!)} RP' : '—',
+              theirInfo.rpToNext != null
+                  ? '${formatNumber(theirInfo.rpToNext!)} RP'
+                  : '—',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -250,8 +264,8 @@ class _LegendCompare extends StatelessWidget {
           final theirVal = theirStats[statName];
           final color = myVal != null && theirVal != null
               ? (myVal > theirVal
-                  ? AppTheme.green
-                  : (myVal < theirVal ? AppTheme.red : AppTheme.textPrimary))
+                    ? AppTheme.green
+                    : (myVal < theirVal ? AppTheme.red : AppTheme.textPrimary))
               : AppTheme.textPrimary;
 
           return _CompareRow(
@@ -261,7 +275,8 @@ class _LegendCompare extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: myVal != null && theirVal != null && myVal != theirVal
+                fontWeight:
+                    myVal != null && theirVal != null && myVal != theirVal
                     ? FontWeight.bold
                     : FontWeight.normal,
                 color: color,

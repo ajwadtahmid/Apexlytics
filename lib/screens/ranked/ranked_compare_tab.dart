@@ -125,7 +125,10 @@ class _SplitPicker extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: AppTheme.sm),
           child: Padding(
             padding: EdgeInsets.only(bottom: 10),
-            child: Text('vs', style: TextStyle(color: AppTheme.muted, fontSize: 13)),
+            child: Text(
+              'vs',
+              style: TextStyle(color: AppTheme.muted, fontSize: 13),
+            ),
           ),
         ),
         Expanded(
@@ -205,7 +208,10 @@ class _SplitDropdown extends StatelessWidget {
           style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
           items: [
             for (final b in splits)
-              DropdownMenuItem(value: b.id, child: Text(b.displayName, overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                value: b.id,
+                child: Text(b.displayName, overflow: TextOverflow.ellipsis),
+              ),
           ],
           onChanged: (id) {
             if (id != null) onChanged(id);
@@ -229,8 +235,12 @@ class _CompareBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final aAsync = ref.watch(rankedSplitDetailProvider((uid: uid, splitId: bucketA.id)));
-    final bAsync = ref.watch(rankedSplitDetailProvider((uid: uid, splitId: bucketB.id)));
+    final aAsync = ref.watch(
+      rankedSplitDetailProvider((uid: uid, splitId: bucketA.id)),
+    );
+    final bAsync = ref.watch(
+      rankedSplitDetailProvider((uid: uid, splitId: bucketB.id)),
+    );
 
     if (aAsync.isLoading || bAsync.isLoading) {
       return const Padding(
@@ -262,10 +272,16 @@ class _CompareBody extends ConsumerWidget {
         const SizedBox(height: AppTheme.md),
         const _SectionHeader('SQUAD'),
         _SplitLabel(bucketA.displayName),
-        RankedSquadBreakdownCard(full: a.squadBreakdown.full, partial: a.squadBreakdown.partial),
+        RankedSquadBreakdownCard(
+          full: a.squadBreakdown.full,
+          partial: a.squadBreakdown.partial,
+        ),
         const SizedBox(height: AppTheme.sm),
         _SplitLabel(bucketB.displayName),
-        RankedSquadBreakdownCard(full: b.squadBreakdown.full, partial: b.squadBreakdown.partial),
+        RankedSquadBreakdownCard(
+          full: b.squadBreakdown.full,
+          partial: b.squadBreakdown.partial,
+        ),
         const SizedBox(height: AppTheme.md),
         const _SectionHeader('PICK RATE'),
         _SplitLabel(bucketA.displayName),
@@ -387,7 +403,6 @@ class _SummarySection extends StatelessWidget {
     required this.b,
   });
 
-
   @override
   Widget build(BuildContext context) {
     final daysA = _elapsedDays(bucketA.season);
@@ -431,7 +446,9 @@ class _SummarySection extends StatelessWidget {
             'RP/day',
             rpPerDayA == null ? '—' : formatSigned(rpPerDayA),
             rpPerDayB == null ? '—' : formatSigned(rpPerDayB),
-            delta: (rpPerDayA != null && rpPerDayB != null) ? rpPerDayB - rpPerDayA : null,
+            delta: (rpPerDayA != null && rpPerDayB != null)
+                ? rpPerDayB - rpPerDayA
+                : null,
           ),
           _Row(
             'Avg RP/game',
@@ -491,20 +508,31 @@ class _Row extends StatelessWidget {
         children: [
           Expanded(
             flex: 2,
-            child: Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+            child: Text(
+              label,
+              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
           ),
           Expanded(
             child: Text(
               valueA,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           Expanded(
             child: Text(
               valueB,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           if (d != null)
@@ -539,14 +567,20 @@ class _PickRateList extends StatelessWidget {
     if (totalGames == 0 || legends.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: AppTheme.sm),
-        child: Text('No games', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+        child: Text(
+          'No games',
+          style: TextStyle(color: AppTheme.muted, fontSize: 12),
+        ),
       );
     }
     final sorted = [...legends]..sort((x, y) => y.games.compareTo(x.games));
     final shown = sorted.take(_kMaxShown).toList();
 
     return SurfaceCard(
-      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.md,
+        vertical: AppTheme.sm,
+      ),
       child: Column(
         children: [
           for (final l in shown)
@@ -557,7 +591,10 @@ class _PickRateList extends StatelessWidget {
                   Expanded(
                     child: Text(
                       l.legend,
-                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -569,7 +606,9 @@ class _PickRateList extends StatelessWidget {
                   Text(
                     '${l.avgRpPerGame >= 0 ? '+' : ''}${l.avgRpPerGame.toStringAsFixed(1)} RP',
                     style: TextStyle(
-                      color: l.avgRpPerGame >= 0 ? AppTheme.green : AppTheme.red,
+                      color: l.avgRpPerGame >= 0
+                          ? AppTheme.green
+                          : AppTheme.red,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),

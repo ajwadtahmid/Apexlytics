@@ -12,7 +12,9 @@ void main() {
     });
 
     test('returns empty list on corrupted JSON', () async {
-      SharedPreferences.setMockInitialValues({'legend_visit_stack': 'not-json'});
+      SharedPreferences.setMockInitialValues({
+        'legend_visit_stack': 'not-json',
+      });
       final prefs = await SharedPreferences.getInstance();
       expect(await loadLegendStack(prefs), isEmpty);
     });

@@ -15,7 +15,6 @@ import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/storage/storage.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
-import '../../widgets/profile_manager_sheet.dart';
 import '../../widgets/widgets.dart';
 import '../ranked/ranked_breakdown_body.dart';
 import '../ranked/widgets/ranked_info_sheet.dart';

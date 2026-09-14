@@ -19,12 +19,13 @@ class DayHeaderItem extends HistoryItem {
   final bool hasRanked;
   final int games;
   final bool isFirst;
-  DayHeaderItem(
-      {required this.day,
-      required this.netRp,
-      required this.hasRanked,
-      required this.games,
-      required this.isFirst});
+  DayHeaderItem({
+    required this.day,
+    required this.netRp,
+    required this.hasRanked,
+    required this.games,
+    required this.isFirst,
+  });
 }
 
 class GroupHeaderItem extends HistoryItem {
@@ -32,11 +33,12 @@ class GroupHeaderItem extends HistoryItem {
   final int games;
   final int netRp;
   final bool isFirst;
-  GroupHeaderItem(
-      {required this.name,
-      required this.games,
-      required this.netRp,
-      required this.isFirst});
+  GroupHeaderItem({
+    required this.name,
+    required this.games,
+    required this.netRp,
+    required this.isFirst,
+  });
 }
 
 class SessionBreakItem extends HistoryItem {
@@ -59,7 +61,9 @@ const int kHistoryPageSize = 50;
 /// than [kSessionGap] is found, so a page cut never lands mid-session — the
 /// same rule [buildDayItems] uses to place [SessionBreakItem]s.
 List<RankedMatch> _extendToSessionBoundary(
-    List<RankedMatch> matches, int limit) {
+  List<RankedMatch> matches,
+  int limit,
+) {
   if (limit >= matches.length) return matches;
   var end = limit;
   while (end < matches.length) {
@@ -76,8 +80,9 @@ List<RankedMatch> _extendToSessionBoundary(
 /// the end of whatever session they land in, so a session is never split
 /// across a page boundary.
 List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
-  final visible =
-      limit == null ? matches : _extendToSessionBoundary(matches, limit);
+  final visible = limit == null
+      ? matches
+      : _extendToSessionBoundary(matches, limit);
   final items = <HistoryItem>[];
   DateTime? curDay;
   final dayBuckets = <List<RankedMatch>>[];
@@ -95,13 +100,15 @@ List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
     final netRp = bucket.fold<int>(0, (a, m) => a + m.effectiveRpChange);
     final hasRanked = bucket.any((m) => m.isRanked);
     final day = bucket.first.endTime.toLocal();
-    items.add(DayHeaderItem(
-      day: DateTime(day.year, day.month, day.day),
-      netRp: netRp,
-      hasRanked: hasRanked,
-      games: bucket.length,
-      isFirst: identical(bucket, dayBuckets.first),
-    ));
+    items.add(
+      DayHeaderItem(
+        day: DateTime(day.year, day.month, day.day),
+        netRp: netRp,
+        hasRanked: hasRanked,
+        games: bucket.length,
+        isFirst: identical(bucket, dayBuckets.first),
+      ),
+    );
     for (var i = 0; i < bucket.length; i++) {
       if (i > 0) {
         // newest-first: bucket[i-1] is later than bucket[i].
@@ -118,7 +125,10 @@ List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
 
 /// Sections matches by [g], ordered by net (effective) RP descending, with
 /// matches newest-first inside each section. No session breaks in this mode.
-List<HistoryItem> buildGroupedItems(List<RankedMatch> matches, MatchGrouping g) {
+List<HistoryItem> buildGroupedItems(
+  List<RankedMatch> matches,
+  MatchGrouping g,
+) {
   final byKey = <String, List<RankedMatch>>{};
   for (final m in matches) {
     byKey.putIfAbsent(g.keyOf(m), () => []).add(m);
@@ -128,17 +138,18 @@ List<HistoryItem> buildGroupedItems(List<RankedMatch> matches, MatchGrouping g) 
     final sorted = ms.toList()..sort((a, b) => b.endTime.compareTo(a.endTime));
     final netRp = sorted.fold<int>(0, (a, m) => a + m.effectiveRpChange);
     return (name: g.nameOf(sorted.first), matches: sorted, netRp: netRp);
-  }).toList()
-    ..sort((a, b) => b.netRp.compareTo(a.netRp));
+  }).toList()..sort((a, b) => b.netRp.compareTo(a.netRp));
 
   final items = <HistoryItem>[];
   for (final grp in groups) {
-    items.add(GroupHeaderItem(
-      name: grp.name,
-      games: grp.matches.length,
-      netRp: grp.netRp,
-      isFirst: identical(grp, groups.first),
-    ));
+    items.add(
+      GroupHeaderItem(
+        name: grp.name,
+        games: grp.matches.length,
+        netRp: grp.netRp,
+        isFirst: identical(grp, groups.first),
+      ),
+    );
     for (final m in grp.matches) {
       items.add(MatchItem(m));
     }

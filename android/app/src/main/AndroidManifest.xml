@@ -1,12 +1,18 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.ajwadtahmid.apexlytics">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="Apexlytics"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+        <!-- Explicitly off rather than left at the true default: Android Auto
+             Backup/device-transfer works at whole-SharedPreferences-file
+             granularity, so it can't honor the same per-key exclusions
+             (api_cache: entries) that backup_service.dart's manual export
+             already applies correctly. The app's own export/import feature
+             is the supported backup path. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

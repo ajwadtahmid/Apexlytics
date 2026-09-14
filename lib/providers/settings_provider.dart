@@ -127,7 +127,8 @@ class PlayerSettings {
     this.favoritePubsMapNames = const [],
   });
 
-  PlayerProfile? get activeProfile => activeProfileIndex < profiles.length
+  PlayerProfile? get activeProfile =>
+      activeProfileIndex >= 0 && activeProfileIndex < profiles.length
       ? profiles[activeProfileIndex]
       : null;
 
@@ -280,6 +281,9 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
 
     if (activeIdx >= profiles.length && profiles.isNotEmpty) {
       activeIdx = profiles.length - 1;
+    }
+    if (activeIdx < 0) {
+      activeIdx = 0;
     }
 
     // One-time migration: copy legacy global timing to per-mode keys if needed.

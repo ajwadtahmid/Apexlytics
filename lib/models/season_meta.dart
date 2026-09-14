@@ -14,7 +14,9 @@ class SeasonMeta {
   // "br_ranked_s29_s1" → "Season 29 (Split 1)"
   static String _parseDisplayName(String id) {
     final match = RegExp(r's(\d+)_s(\d+)$').firstMatch(id);
-    if (match != null) return 'Season ${match.group(1)} (Split ${match.group(2)})';
+    if (match != null) {
+      return 'Season ${match.group(1)} (Split ${match.group(2)})';
+    }
     return id;
   }
 
@@ -23,20 +25,19 @@ class SeasonMeta {
     required String id,
     required int startSeconds,
     required int endSeconds,
-  }) =>
-      SeasonMeta(
-        id: id,
-        displayName: _parseDisplayName(id),
-        start: DateTime.fromMillisecondsSinceEpoch(startSeconds * 1000),
-        end: DateTime.fromMillisecondsSinceEpoch(endSeconds * 1000),
-      );
+  }) => SeasonMeta(
+    id: id,
+    displayName: _parseDisplayName(id),
+    start: DateTime.fromMillisecondsSinceEpoch(startSeconds * 1000),
+    end: DateTime.fromMillisecondsSinceEpoch(endSeconds * 1000),
+  );
 
   // displayName is not serialized — it is always re-derived from id on fromJson.
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'start': start.millisecondsSinceEpoch,
-        'end': end.millisecondsSinceEpoch,
-      };
+    'id': id,
+    'start': start.millisecondsSinceEpoch,
+    'end': end.millisecondsSinceEpoch,
+  };
 
   factory SeasonMeta.fromJson(Map<String, dynamic> json) {
     final id = json['id'] as String;

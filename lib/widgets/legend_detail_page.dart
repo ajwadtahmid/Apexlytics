@@ -13,8 +13,10 @@ import 'tracker_info_sheet.dart';
 final _brPrefixPattern = RegExp(r'^BR\s+');
 final _killsSuffixPattern = RegExp(r'\s+kills$');
 
-LegendTracker? _findByDisplayName(List<LegendTracker> trackers, String displayName) =>
-    findTracker(trackers, (t) => t.displayName.toLowerCase() == displayName);
+LegendTracker? _findByDisplayName(
+  List<LegendTracker> trackers,
+  String displayName,
+) => findTracker(trackers, (t) => t.displayName.toLowerCase() == displayName);
 
 class LegendDetailPage extends StatelessWidget {
   final LegendStat legend;
@@ -40,13 +42,23 @@ class LegendDetailPage extends StatelessWidget {
     // ── Stat lookups ─────────────────────────────────────────────────────────
 
     // Exact display-name matches (case-insensitive) to avoid substring collisions.
-    final kills = _isCareer ? null : _findByDisplayName(raw,TrackerKeys.brKills);
-    final wins = _isCareer ? null : _findByDisplayName(raw,TrackerKeys.brWins);
-    final gamesPlayed = _isCareer ? null : _findByDisplayName(raw,TrackerKeys.brGamesPlayed);
-    final killLeader = _isCareer ? null : _findByDisplayName(raw,TrackerKeys.brKillsAsKillLeader);
-    final top3 = _isCareer ? null : _findByDisplayName(raw,TrackerKeys.brTop3);
-    final revives = _isCareer ? null : _findByDisplayName(raw,TrackerKeys.brRevives);
-    final damage = _isCareer ? null : _findByDisplayName(raw,TrackerKeys.brDamage);
+    final kills = _isCareer
+        ? null
+        : _findByDisplayName(raw, TrackerKeys.brKills);
+    final wins = _isCareer ? null : _findByDisplayName(raw, TrackerKeys.brWins);
+    final gamesPlayed = _isCareer
+        ? null
+        : _findByDisplayName(raw, TrackerKeys.brGamesPlayed);
+    final killLeader = _isCareer
+        ? null
+        : _findByDisplayName(raw, TrackerKeys.brKillsAsKillLeader);
+    final top3 = _isCareer ? null : _findByDisplayName(raw, TrackerKeys.brTop3);
+    final revives = _isCareer
+        ? null
+        : _findByDisplayName(raw, TrackerKeys.brRevives);
+    final damage = _isCareer
+        ? null
+        : _findByDisplayName(raw, TrackerKeys.brDamage);
 
     // ── Calculations ─────────────────────────────────────────────────────────
 
@@ -389,9 +401,9 @@ class _WeaponRankCard extends StatelessWidget {
 
   // Medal colors: 1st place (gold), 2nd place (silver), 3rd place (bronze)
   static final _rankColors = [
-    kRankLadder.firstWhere((r) => r.tier == 'Gold').color,    // gold
-    kRankLadder.firstWhere((r) => r.tier == 'Silver').color,  // silver
-    kRankLadder.firstWhere((r) => r.tier == 'Bronze').color,  // bronze
+    kRankLadder.firstWhere((r) => r.tier == 'Gold').color, // gold
+    kRankLadder.firstWhere((r) => r.tier == 'Silver').color, // silver
+    kRankLadder.firstWhere((r) => r.tier == 'Bronze').color, // bronze
   ];
 
   @override

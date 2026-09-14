@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../constants/legend_constants.dart';
-import '../../constants/ranked_map_constants.dart';
+import '../../constants/map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
 import '../formatting/season_utils.dart';
@@ -428,7 +428,13 @@ class RankedHistoryStore {
   /// deliberately enforced here and not only in the edit form: an edit sets the
   /// edited flag, which stops every later sync from correcting the column, so
   /// an out-of-range value written through this method is permanent.
-  Future<void> editMatch(String id, Map<String, Object?> values) async {
+  ///
+  /// Returns `false` when no row matches [id] — a possible mismatch between
+  /// an in-memory match's `dedupKey` and what's actually stored (e.g. a
+  /// hand-edited or foreign backup imported with an `id` inconsistent with
+  /// its own `uid`/`start_ms`). The caller must not report success in that
+  /// case, since nothing was persisted.
+  Future<bool> editMatch(String id, Map<String, Object?> values) async {
     final invalid = values.keys.toSet().difference(kEditableMatchFields);
     if (invalid.isNotEmpty) {
       throw ArgumentError('Not editable: ${invalid.join(', ')}');
@@ -441,7 +447,7 @@ class RankedHistoryStore {
       kMinPlausibleRpChange,
       kRankedOutlierThreshold - 1,
     );
-    if (values.isEmpty) return;
+    if (values.isEmpty) return true;
     final db = await _open();
     final existing = await db.query(
       table,
@@ -450,7 +456,7 @@ class RankedHistoryStore {
       whereArgs: [id],
       limit: 1,
     );
-    if (existing.isEmpty) return;
+    if (existing.isEmpty) return false;
     final flags = {
       ...decodeEditedFields(existing.first['edited_fields']),
       ...values.keys,
@@ -461,6 +467,7 @@ class RankedHistoryStore {
       where: 'id = ?',
       whereArgs: [id],
     );
+    return true;
   }
 
   /// Throws when [values] carries [key] with a value outside `[min, max]`.
@@ -727,6 +734,12 @@ class RankedHistoryStore {
 
   /// Per-map breakdown for [uid] across [seasonId] (null = lifetime), sorted by
   /// games descending — matching [mapBreakdowns].
+  ///
+  /// Grouped by the raw `map_key` first since SQL can't canonicalize
+  /// map-key variants; rows are merged in Dart by [canonicalMapKey] after,
+  /// the same shape [legendMapBreakdownsFor] uses. Without this, `edistrict`
+  /// and `edistrict_rotation` rows for the same player would render as two
+  /// identically-labelled "E-District" entries.
   Future<List<MapBreakdown>> mapBreakdownsFor(
     String uid, {
     String? seasonId,
@@ -735,25 +748,57 @@ class RankedHistoryStore {
     final (where, args) = _rankedScope(uid, seasonId);
     final rows = await db.rawQuery(
       'SELECT map_key, $_aggCols FROM $table WHERE $where '
-      'GROUP BY map_key ORDER BY games DESC',
+      'GROUP BY map_key',
       args,
     );
-    return [
-      for (final r in rows)
+
+    final byMap = <String, List<Map<String, Object?>>>{};
+    final representativeKey = <String, String>{};
+    for (final r in rows) {
+      final rawKey = r['map_key'] as String? ?? 'UNKNOWN';
+      final canonical = canonicalMapKey(rawKey);
+      byMap.putIfAbsent(canonical, () => []).add(r);
+      representativeKey.putIfAbsent(canonical, () => rawKey);
+    }
+
+    final out = [
+      for (final entry in byMap.entries)
         MapBreakdown(
-          mapKey: r['map_key'] as String? ?? 'UNKNOWN',
-          displayName: rankedMapName(r['map_key'] as String? ?? 'UNKNOWN'),
-          games: (r['games'] as num).toInt(),
-          totalRp: (r['net_rp'] as num).toInt(),
-          totalKills: (r['kills'] as num).toInt(),
-          totalDamage: (r['damage'] as num).toInt(),
-          killsGames: (r['kills_games'] as num).toInt(),
-          damageGames: (r['damage_games'] as num).toInt(),
-          totalLengthSecs: (r['length_secs'] as num).toInt(),
-          wins: (r['wins'] as num).toInt(),
-          losses: (r['losses'] as num).toInt(),
+          mapKey: representativeKey[entry.key]!,
+          displayName: battleRoyaleMapName(representativeKey[entry.key]!),
+          games: entry.value.fold(0, (s, r) => s + (r['games'] as num).toInt()),
+          totalRp: entry.value.fold(
+            0,
+            (s, r) => s + (r['net_rp'] as num).toInt(),
+          ),
+          totalKills: entry.value.fold(
+            0,
+            (s, r) => s + (r['kills'] as num).toInt(),
+          ),
+          totalDamage: entry.value.fold(
+            0,
+            (s, r) => s + (r['damage'] as num).toInt(),
+          ),
+          killsGames: entry.value.fold(
+            0,
+            (s, r) => s + (r['kills_games'] as num).toInt(),
+          ),
+          damageGames: entry.value.fold(
+            0,
+            (s, r) => s + (r['damage_games'] as num).toInt(),
+          ),
+          totalLengthSecs: entry.value.fold(
+            0,
+            (s, r) => s + (r['length_secs'] as num).toInt(),
+          ),
+          wins: entry.value.fold(0, (s, r) => s + (r['wins'] as num).toInt()),
+          losses: entry.value.fold(
+            0,
+            (s, r) => s + (r['losses'] as num).toInt(),
+          ),
         ),
-    ];
+    ]..sort((a, b) => b.games.compareTo(a.games));
+    return out;
   }
 
   /// Per (legend, map) breakdown for [uid] across [seasonId] (null =
@@ -778,7 +823,7 @@ class RankedHistoryStore {
     for (final r in rows) {
       final legend =
           kLegendsByName[(r['legend'] as String? ?? '').toLowerCase()]?.name;
-      final mapName = rankedMapInfo(r['map_key'] as String? ?? '')?.name;
+      final mapName = battleRoyaleMapInfo(r['map_key'] as String? ?? '')?.name;
       if (legend == null || mapName == null) continue;
       byPair.putIfAbsent((legend, mapName), () => []).add(r);
     }
@@ -873,6 +918,12 @@ class RankedHistoryStore {
 
   /// Ranked matches for one map across [seasonId] (null = lifetime), newest
   /// first — the lazy drill-down query the Lifetime Maps tab uses on tap.
+  ///
+  /// Matches every raw spelling [battleRoyaleMapKeyVariants] considers the same map
+  /// as [mapKey] (e.g. `edistrict` and `edistrict_rotation`), not just the
+  /// exact string — [mapBreakdownsFor] already merges those into one row, so the
+  /// drill-down from that row must return every match behind it, not just
+  /// the ones under whichever raw key happened to be its representative.
   Future<List<RankedMatch>> matchesForMap(
     String uid,
     String mapKey, {
@@ -880,9 +931,12 @@ class RankedHistoryStore {
   }) async {
     final db = await _open();
     final (where, args) = _rankedScope(uid, seasonId);
+    final variants = battleRoyaleMapKeyVariants(mapKey);
+    final placeholders = List.filled(variants.length, '?').join(', ');
     final rows = await db.rawQuery(
-      'SELECT * FROM $table WHERE $where AND map_key = ? ORDER BY start_ms DESC',
-      [...args, mapKey],
+      'SELECT * FROM $table WHERE $where AND map_key IN ($placeholders) '
+      'ORDER BY start_ms DESC',
+      [...args, ...variants],
     );
     return rows.map(RankedMatch.fromStoredMap).toList();
   }

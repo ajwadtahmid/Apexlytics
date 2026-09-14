@@ -22,7 +22,9 @@ class AboutScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final info = ref.watch(packageInfoProvider).whenOrNull(data: (info) => info);
+    final info = ref
+        .watch(packageInfoProvider)
+        .whenOrNull(data: (info) => info);
     final version = info?.version ?? '—';
 
     return Scaffold(
@@ -39,7 +41,10 @@ class AboutScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: version));
-                    context.showMessage('Version copied', duration: const Duration(seconds: 2));
+                    context.showMessage(
+                      'Version copied',
+                      duration: const Duration(seconds: 2),
+                    );
                   },
                   child: Row(
                     children: [
@@ -48,7 +53,10 @@ class AboutScreen extends ConsumerWidget {
                       ),
                       Text(
                         version,
-                        style: const TextStyle(color: AppTheme.muted, fontSize: 14),
+                        style: const TextStyle(
+                          color: AppTheme.muted,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -62,7 +70,9 @@ class AboutScreen extends ConsumerWidget {
                   const Divider(color: AppTheme.surface2, height: 24),
                   _LinkRow(
                     label: 'Rate Apexlytics',
-                    url: Platform.isAndroid ? ApiConstants.playStoreUrl : ApiConstants.appStoreUrl,
+                    url: Platform.isAndroid
+                        ? ApiConstants.playStoreUrl
+                        : ApiConstants.appStoreUrl,
                   ),
                 ],
               ],
@@ -77,13 +87,15 @@ class AboutScreen extends ConsumerWidget {
               children: [
                 _CreditRow(
                   label: 'apexlegendsstatus.com',
-                  subtitle: 'Server status. You can check this website for more information.',
+                  subtitle:
+                      'Server status. You can check this website for more information.',
                   url: ApiConstants.apexStatusUrl,
                 ),
                 Divider(color: AppTheme.surface2, height: 24),
                 _CreditRow(
                   label: 'apexlegendsapi.com',
-                  subtitle: 'Player stats & legend data are provided by this API.',
+                  subtitle:
+                      'Player stats & legend data are provided by this API.',
                   url: ApiConstants.apexApiUrl,
                 ),
               ],
@@ -106,7 +118,11 @@ class AboutScreen extends ConsumerWidget {
               'Unofficial companion app. Not affiliated with or endorsed by '
               'Electronic Arts or Respawn Entertainment.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.accent, fontSize: 11, height: 1.4),
+              style: TextStyle(
+                color: AppTheme.accent,
+                fontSize: 11,
+                height: 1.4,
+              ),
             ),
           ),
           const SizedBox(height: AppTheme.sm),
@@ -159,11 +175,16 @@ class _LinkRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      onTap: () => unawaited(launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)),
+      onTap: () => unawaited(
+        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      ),
       child: Row(
         children: [
           Expanded(
-            child: Text(label, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+            child: Text(
+              label,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+            ),
           ),
           const Icon(Icons.open_in_new, color: AppTheme.muted, size: 14),
         ],
@@ -177,13 +198,19 @@ class _CreditRow extends StatelessWidget {
   final String subtitle;
   final String url;
 
-  const _CreditRow({required this.label, required this.subtitle, required this.url});
+  const _CreditRow({
+    required this.label,
+    required this.subtitle,
+    required this.url,
+  });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      onTap: () => unawaited(launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)),
+      onTap: () => unawaited(
+        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -191,9 +218,18 @@ class _CreditRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                ),
               ],
             ),
           ),

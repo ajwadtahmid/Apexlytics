@@ -1,5 +1,11 @@
+import '../app_logger.dart';
 import '../../models/season_meta.dart';
 import 'snapshot_types.dart';
+
+/// ~5 months of weeks — comfortably above any real split (typically 3-4
+/// months). Caps [computeWeeks] so a corrupt [SeasonMeta] (e.g. a
+/// seconds-vs-milliseconds epoch mix-up) can't allocate without bound.
+const int kMaxWeeksPerSplit = 21;
 
 class WeekRange {
   final DateTime start;
@@ -24,16 +30,25 @@ String seasonIdForEndTime(DateTime endTime, Iterable<SeasonMeta> seasons) {
 
 /// Divides a season into 7-day week windows. The final window may be shorter
 /// if the season length is not a multiple of 7 days — no hardcoding needed.
+/// Capped at [kMaxWeeksPerSplit].
 List<WeekRange> computeWeeks(SeasonMeta season) {
   final weeks = <WeekRange>[];
   var cursor = season.start;
-  while (cursor.isBefore(season.end)) {
+  while (cursor.isBefore(season.end) && weeks.length < kMaxWeeksPerSplit) {
     final next = cursor.add(const Duration(days: 7));
-    weeks.add(WeekRange(
-      start: cursor,
-      end: next.isAfter(season.end) ? season.end : next,
-    ));
+    weeks.add(
+      WeekRange(
+        start: cursor,
+        end: next.isAfter(season.end) ? season.end : next,
+      ),
+    );
     cursor = next;
+  }
+  if (weeks.length == kMaxWeeksPerSplit && cursor.isBefore(season.end)) {
+    log.w(
+      'Season window exceeds $kMaxWeeksPerSplit weeks — truncating; '
+      'metadata is likely corrupt',
+    );
   }
   return weeks;
 }
@@ -51,14 +66,13 @@ int currentWeekIndex(List<WeekRange> weeks, {DateTime? now}) {
 }
 
 /// Snapshots whose timestamp falls within [week].
-List<StatSnapshot> snapshotsForWeek(
-  List<StatSnapshot> all,
-  WeekRange week,
-) =>
+List<StatSnapshot> snapshotsForWeek(List<StatSnapshot> all, WeekRange week) =>
     all
-        .where((s) =>
-            !s.timestamp.isBefore(week.start) &&
-            s.timestamp.isBefore(week.end))
+        .where(
+          (s) =>
+              !s.timestamp.isBefore(week.start) &&
+              s.timestamp.isBefore(week.end),
+        )
         .toList();
 
 /// Timestamp just after a reset that landed inside [week], else null. A reset in
@@ -107,8 +121,7 @@ int? weekDelta(
   } else {
     floor = resetAt.isAfter(scopeStart) ? resetAt : scopeStart;
   }
-  bool inScope(StatSnapshot s) =>
-      floor == null || !s.timestamp.isBefore(floor);
+  bool inScope(StatSnapshot s) => floor == null || !s.timestamp.isBefore(floor);
 
   final before = all
       .where((s) => s.timestamp.isBefore(week.start) && inScope(s))

@@ -4,13 +4,17 @@ import 'package:apexlytics/providers/navigation_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-Future<ProviderContainer> containerWithProfile({required bool hasProfile}) async {
-  SharedPreferences.setMockInitialValues(hasProfile
-      ? {
-          'player_profiles':
-              '[{"name":"Aceu","uid":"1006838015507","platform":"PC"}]',
-        }
-      : <String, Object>{});
+Future<ProviderContainer> containerWithProfile({
+  required bool hasProfile,
+}) async {
+  SharedPreferences.setMockInitialValues(
+    hasProfile
+        ? {
+            'player_profiles':
+                '[{"name":"Aceu","uid":"1006838015507","platform":"PC"}]',
+          }
+        : <String, Object>{},
+  );
   final prefs = await SharedPreferences.getInstance();
   return ProviderContainer(
     overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],

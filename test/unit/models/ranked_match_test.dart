@@ -4,24 +4,28 @@ import 'package:apexlytics/models/ranked_match.dart';
 void main() {
   // Mirrors a real BATTLE_ROYALE row from /games (ZZephyrous sample).
   Map<String, dynamic> brMatch() => {
-        'uid': '1006838015507',
-        'name': 'ZZephyrous',
-        'legendPlayed': 'Axle',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 926,
-        'gameStartTimestamp': 1782093420,
-        'gameEndTimestamp': 1782094346,
-        'gameData': [
-          {'key': 'kills', 'value': 3, 'name': 'BR Kills'},
-          {'key': 'damage', 'value': 1387, 'name': 'BR Damage'},
-          {'key': 'axle_tactical', 'value': 13, 'name': 'Tactical: Nitro Gates Used'},
-        ],
-        'BRScoreChange': 44,
-        'BRScore': 12203,
-        'BRRankImg': 'https://api.mozambiquehe.re/assets/ranks/diamond4.png',
-        'isPartyFull': false,
-        'map': 'broken_moon_rotation',
-      };
+    'uid': '1006838015507',
+    'name': 'ZZephyrous',
+    'legendPlayed': 'Axle',
+    'gameMode': 'BATTLE_ROYALE',
+    'gameLengthSecs': 926,
+    'gameStartTimestamp': 1782093420,
+    'gameEndTimestamp': 1782094346,
+    'gameData': [
+      {'key': 'kills', 'value': 3, 'name': 'BR Kills'},
+      {'key': 'damage', 'value': 1387, 'name': 'BR Damage'},
+      {
+        'key': 'axle_tactical',
+        'value': 13,
+        'name': 'Tactical: Nitro Gates Used',
+      },
+    ],
+    'BRScoreChange': 44,
+    'BRScore': 12203,
+    'BRRankImg': 'https://api.mozambiquehe.re/assets/ranks/diamond4.png',
+    'isPartyFull': false,
+    'map': 'broken_moon_rotation',
+  };
 
   group('RankedMatch.fromJson', () {
     test('parses core fields', () {

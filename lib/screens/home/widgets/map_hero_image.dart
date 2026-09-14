@@ -27,14 +27,22 @@ class MapHeroImage extends StatelessWidget {
               errorWidget: (ctx, url, err) => const ColoredBox(
                 color: AppTheme.surface2,
                 child: Center(
-                  child: Icon(Icons.image_outlined, color: AppTheme.muted, size: 48),
+                  child: Icon(
+                    Icons.image_outlined,
+                    color: AppTheme.muted,
+                    size: 48,
+                  ),
                 ),
               ),
             )
           : const ColoredBox(
               color: AppTheme.surface2,
               child: Center(
-                child: Icon(Icons.map_outlined, color: AppTheme.muted, size: 48),
+                child: Icon(
+                  Icons.map_outlined,
+                  color: AppTheme.muted,
+                  size: 48,
+                ),
               ),
             ),
     );

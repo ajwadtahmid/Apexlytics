@@ -44,7 +44,10 @@ class RankedSquadBreakdownCard extends StatelessWidget {
                 Expanded(
                   child: _SquadColumn(label: 'Full squad', summary: full),
                 ),
-                const VerticalDivider(color: AppTheme.surface2, width: AppTheme.md),
+                const VerticalDivider(
+                  color: AppTheme.surface2,
+                  width: AppTheme.md,
+                ),
                 Expanded(
                   child: _SquadColumn(label: 'Partial squad', summary: partial),
                 ),
@@ -85,7 +88,10 @@ class _SquadColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppTheme.muted, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+        ),
         const SizedBox(height: 4),
         Text(
           '${formatNumber(summary.games)} games',

@@ -75,10 +75,13 @@ void main() {
 
     test('collects multiple stats for the same weapon', () {
       final legends = [
-        LegendStat(name: 'Wraith', trackers: [
-          tracker('R-301 Kills', 100),
-          tracker('R-301 Damage', 50000),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            tracker('R-301 Kills', 100),
+            tracker('R-301 Damage', 50000),
+          ],
+        ),
       ];
       final result = extractWeaponStats(legends);
       expect(result.values.first.length, 2);

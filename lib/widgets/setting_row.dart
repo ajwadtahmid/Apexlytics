@@ -73,7 +73,6 @@ class ActionRow extends StatelessWidget {
   }
 }
 
-
 class LinkRow extends StatelessWidget {
   final String label;
   final String subtitle;

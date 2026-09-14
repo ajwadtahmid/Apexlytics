@@ -7,7 +7,12 @@ import '../../../widgets/widgets.dart';
 class StatsRefreshSection extends ConsumerWidget {
   const StatsRefreshSection({super.key});
 
-  static const _tabOptions = [(0, 'Home'), (1, 'My Stats'), (2, 'Search'), (3, 'Settings')];
+  static const _tabOptions = [
+    (0, 'Home'),
+    (1, 'My Stats'),
+    (2, 'Search'),
+    (3, 'Settings'),
+  ];
 
   static String _tabLabel(int tab) =>
       _tabOptions.firstWhere((t) => t.$1 == tab, orElse: () => (0, 'Home')).$2;
@@ -17,13 +22,18 @@ class StatsRefreshSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final defaultTab = ref.watch(playerSettingsProvider.select((s) => s.defaultTab));
-    final statsRefreshMinutes =
-        ref.watch(playerSettingsProvider.select((s) => s.statsRefreshMinutes));
-    final compactLegendCards =
-        ref.watch(playerSettingsProvider.select((s) => s.compactLegendCards));
-    final keepScreenOn =
-        ref.watch(playerSettingsProvider.select((s) => s.keepScreenOn));
+    final defaultTab = ref.watch(
+      playerSettingsProvider.select((s) => s.defaultTab),
+    );
+    final statsRefreshMinutes = ref.watch(
+      playerSettingsProvider.select((s) => s.statsRefreshMinutes),
+    );
+    final compactLegendCards = ref.watch(
+      playerSettingsProvider.select((s) => s.compactLegendCards),
+    );
+    final keepScreenOn = ref.watch(
+      playerSettingsProvider.select((s) => s.keepScreenOn),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,52 +48,89 @@ class StatsRefreshSection extends ConsumerWidget {
                 onTap: () => _pickDefaultTab(context, ref, defaultTab),
                 child: Row(
                   children: [
-                    const Icon(Icons.tab_outlined, color: AppTheme.textPrimary, size: 20),
+                    const Icon(
+                      Icons.tab_outlined,
+                      color: AppTheme.textPrimary,
+                      size: 20,
+                    ),
                     const SizedBox(width: AppTheme.sm),
                     const Expanded(
-                      child: Text('Default tab', style: TextStyle(fontSize: 14)),
+                      child: Text(
+                        'Default tab',
+                        style: TextStyle(fontSize: 14),
+                      ),
                     ),
                     Text(
                       _tabLabel(defaultTab),
-                      style: const TextStyle(color: AppTheme.muted, fontSize: 14),
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(width: AppTheme.xs),
-                    const Icon(Icons.chevron_right, color: AppTheme.muted, size: 18),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: AppTheme.muted,
+                      size: 18,
+                    ),
                   ],
                 ),
               ),
               const Divider(color: AppTheme.surface2, height: 24),
               InkWell(
                 borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                onTap: () => _pickRefreshInterval(context, ref, statsRefreshMinutes),
+                onTap: () =>
+                    _pickRefreshInterval(context, ref, statsRefreshMinutes),
                 child: Row(
                   children: [
-                    const Icon(Icons.update, color: AppTheme.textPrimary, size: 20),
+                    const Icon(
+                      Icons.update,
+                      color: AppTheme.textPrimary,
+                      size: 20,
+                    ),
                     const SizedBox(width: AppTheme.sm),
                     const Expanded(
-                      child: Text('Stats update frequency', style: TextStyle(fontSize: 14)),
+                      child: Text(
+                        'Stats update frequency',
+                        style: TextStyle(fontSize: 14),
+                      ),
                     ),
                     Text(
                       _refreshLabel(statsRefreshMinutes),
-                      style: const TextStyle(color: AppTheme.muted, fontSize: 14),
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(width: AppTheme.xs),
-                    const Icon(Icons.chevron_right, color: AppTheme.muted, size: 18),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: AppTheme.muted,
+                      size: 18,
+                    ),
                   ],
                 ),
               ),
               const Divider(color: AppTheme.surface2, height: 24),
               Row(
                 children: [
-                  const Icon(Icons.view_list_outlined, color: AppTheme.textPrimary, size: 20),
+                  const Icon(
+                    Icons.view_list_outlined,
+                    color: AppTheme.textPrimary,
+                    size: 20,
+                  ),
                   const SizedBox(width: AppTheme.sm),
                   const Expanded(
-                    child: Text('Compact legend cards', style: TextStyle(fontSize: 14)),
+                    child: Text(
+                      'Compact legend cards',
+                      style: TextStyle(fontSize: 14),
+                    ),
                   ),
                   Switch(
                     value: compactLegendCards,
-                    onChanged: (v) =>
-                        ref.read(playerSettingsProvider.notifier).setCompactLegendCards(v),
+                    onChanged: (v) => ref
+                        .read(playerSettingsProvider.notifier)
+                        .setCompactLegendCards(v),
                     activeThumbColor: AppTheme.accent,
                     activeTrackColor: AppTheme.accent.withAlpha(120),
                   ),
@@ -92,16 +139,23 @@ class StatsRefreshSection extends ConsumerWidget {
               const Divider(color: AppTheme.surface2, height: 24),
               Row(
                 children: [
-                  const Icon(Icons.stay_current_portrait,
-                      color: AppTheme.textPrimary, size: 20),
+                  const Icon(
+                    Icons.stay_current_portrait,
+                    color: AppTheme.textPrimary,
+                    size: 20,
+                  ),
                   const SizedBox(width: AppTheme.sm),
                   const Expanded(
-                    child: Text('Keep screen on', style: TextStyle(fontSize: 14)),
+                    child: Text(
+                      'Keep screen on',
+                      style: TextStyle(fontSize: 14),
+                    ),
                   ),
                   Switch(
                     value: keepScreenOn,
-                    onChanged: (v) =>
-                        ref.read(playerSettingsProvider.notifier).setKeepScreenOn(v),
+                    onChanged: (v) => ref
+                        .read(playerSettingsProvider.notifier)
+                        .setKeepScreenOn(v),
                     activeThumbColor: AppTheme.accent,
                     activeTrackColor: AppTheme.accent.withAlpha(120),
                   ),
@@ -114,7 +168,11 @@ class StatsRefreshSection extends ConsumerWidget {
     );
   }
 
-  Future<void> _pickDefaultTab(BuildContext context, WidgetRef ref, int current) {
+  Future<void> _pickDefaultTab(
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) {
     final currentIndex = _tabOptions.indexWhere((t) => t.$1 == current);
     return _showPickerDialog(
       context: context,
@@ -122,16 +180,23 @@ class StatsRefreshSection extends ConsumerWidget {
       labels: _tabOptions.map((t) => t.$2).toList(),
       currentIndex: currentIndex < 0 ? 0 : currentIndex,
       onSelect: (i) async {
-        await ref.read(playerSettingsProvider.notifier).setDefaultTab(_tabOptions[i].$1);
+        await ref
+            .read(playerSettingsProvider.notifier)
+            .setDefaultTab(_tabOptions[i].$1);
       },
     );
   }
 
-  Future<void> _pickRefreshInterval(BuildContext context, WidgetRef ref, int current) {
+  Future<void> _pickRefreshInterval(
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) {
     // Clamping here as well as on read keeps the highlight honest even if the
     // dialog is opened before a legacy value has been rewritten.
-    final currentIndex =
-        kStatsRefreshOptions.indexOf(clampStatsRefreshMinutes(current));
+    final currentIndex = kStatsRefreshOptions.indexOf(
+      clampStatsRefreshMinutes(current),
+    );
     return _showPickerDialog(
       context: context,
       title: 'Stats update frequency',
@@ -171,11 +236,14 @@ class StatsRefreshSection extends ConsumerWidget {
                     entry.value,
                     style: TextStyle(
                       color: selected ? AppTheme.accent : AppTheme.textPrimary,
-                      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: selected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                   ),
                 ),
-                if (selected) const Icon(Icons.check, color: AppTheme.accent, size: 18),
+                if (selected)
+                  const Icon(Icons.check, color: AppTheme.accent, size: 18),
               ],
             ),
           );

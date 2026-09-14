@@ -259,6 +259,36 @@ void main() {
       await migrateSnapshotsFromPrefs(prefs, store);
       expect(await store.snapshotCount('u'), 0);
     });
+
+    test(
+      'an unreadable blob is kept, not deleted, so it can be recovered',
+      () async {
+        final prefs = await seedLegacy({'stat_snapshots_u': 'not json'});
+        await migrateSnapshotsFromPrefs(prefs, store);
+        // Deleting an unparseable blob would destroy the only copy of that
+        // player's RP history with no recovery path - only a genuinely empty
+        // blob is safe to remove.
+        expect(prefs.getString('stat_snapshots_u'), 'not json');
+      },
+    );
+
+    test(
+      'a well-formed but wrong-shape blob does not abort draining other keys',
+      () async {
+        final prefs = await seedLegacy({
+          // Valid JSON, but not a list - throws TypeError on the old `as
+          // List` cast, which only caught FormatException.
+          'stat_snapshots_bad': '{"a":1}',
+          'stat_snapshots_good': legacy([(1000, 100)]),
+        });
+
+        await migrateSnapshotsFromPrefs(prefs, store);
+
+        expect((await primeSnapshots(store, 'good')).single.rp, 100);
+        expect(prefs.getString('stat_snapshots_good'), isNull);
+        expect(prefs.getString('stat_snapshots_bad'), '{"a":1}');
+      },
+    );
   });
 
   group('computeDelta', () {

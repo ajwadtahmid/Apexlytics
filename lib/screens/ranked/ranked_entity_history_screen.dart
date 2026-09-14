@@ -116,15 +116,21 @@ class _SortToggle extends StatelessWidget {
     final icon = grouped ? Icons.category_outlined : Icons.calendar_today;
     return Container(
       padding: const EdgeInsets.fromLTRB(
-          AppTheme.md, AppTheme.sm, AppTheme.md, AppTheme.sm),
+        AppTheme.md,
+        AppTheme.sm,
+        AppTheme.md,
+        AppTheme.sm,
+      ),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppTheme.surface2)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          const Text('Sort:',
-              style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+          const Text(
+            'Sort:',
+            style: TextStyle(color: AppTheme.muted, fontSize: 12),
+          ),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onTap,

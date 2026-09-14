@@ -77,12 +77,22 @@ class MapTimingTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
         child: Row(
           children: [
-            const Icon(Icons.schedule_outlined, size: 14, color: AppTheme.muted),
+            const Icon(
+              Icons.schedule_outlined,
+              size: 14,
+              color: AppTheme.muted,
+            ),
             const SizedBox(width: AppTheme.sm),
             const Expanded(
-              child: Text('Alert timing', style: TextStyle(fontSize: 13, color: AppTheme.muted)),
+              child: Text(
+                'Alert timing',
+                style: TextStyle(fontSize: 13, color: AppTheme.muted),
+              ),
             ),
-            Text(label, style: const TextStyle(fontSize: 13, color: AppTheme.accent)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: AppTheme.accent),
+            ),
             const SizedBox(width: AppTheme.xs),
             const Icon(Icons.chevron_right, size: 16, color: AppTheme.muted),
           ],

@@ -40,8 +40,9 @@ Future<void> _pump(
 
 void main() {
   group('NotificationSettingsSection permission banner', () {
-    testWidgets('shows when a mode is active but permission is off',
-        (tester) async {
+    testWidgets('shows when a mode is active but permission is off', (
+      tester,
+    ) async {
       await _pump(
         tester,
         prefsValues: {
@@ -55,12 +56,14 @@ void main() {
       expect(find.text('Fix'), findsOneWidget);
     });
 
-    testWidgets('stays hidden when every mode is off, even with permission off',
-        (tester) async {
-      await _pump(tester, prefsValues: {}, permissionEnabled: false);
+    testWidgets(
+      'stays hidden when every mode is off, even with permission off',
+      (tester) async {
+        await _pump(tester, prefsValues: {}, permissionEnabled: false);
 
-      expect(find.text(_bannerText), findsNothing);
-    });
+        expect(find.text(_bannerText), findsNothing);
+      },
+    );
 
     testWidgets('stays hidden when permission is on', (tester) async {
       await _pump(
@@ -75,8 +78,9 @@ void main() {
       expect(find.text(_bannerText), findsNothing);
     });
 
-    testWidgets('stays hidden while the permission check is still in flight',
-        (tester) async {
+    testWidgets('stays hidden while the permission check is still in flight', (
+      tester,
+    ) async {
       await _pump(
         tester,
         prefsValues: {

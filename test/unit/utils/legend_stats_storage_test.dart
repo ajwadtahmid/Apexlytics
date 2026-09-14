@@ -41,16 +41,22 @@ void main() {
     test('updates existing tracker values', () async {
       final prefs = await SharedPreferences.getInstance();
       const first = [
-        LegendStat(name: 'Wraith', trackers: [
-          LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
+          ],
+        ),
       ];
       await mergeLegendStats(first, prefs);
 
       const second = [
-        LegendStat(name: 'Wraith', trackers: [
-          LegendTracker(key: 'kills', displayName: 'Kills', value: 200),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            LegendTracker(key: 'kills', displayName: 'Kills', value: 200),
+          ],
+        ),
       ];
       final result = await mergeLegendStats(second, prefs);
       final kills = result.first.trackers.firstWhere((t) => t.key == 'kills');
@@ -60,16 +66,22 @@ void main() {
     test('appends new trackers to an existing legend', () async {
       final prefs = await SharedPreferences.getInstance();
       await mergeLegendStats(const [
-        LegendStat(name: 'Wraith', trackers: [
-          LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
+          ],
+        ),
       ], prefs);
 
       final result = await mergeLegendStats(const [
-        LegendStat(name: 'Wraith', trackers: [
-          LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
-          LegendTracker(key: 'wins', displayName: 'Wins', value: 50),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
+            LegendTracker(key: 'wins', displayName: 'Wins', value: 50),
+          ],
+        ),
       ], prefs);
 
       expect(result.first.trackers.length, 2);
@@ -78,9 +90,12 @@ void main() {
     test('does not bump lastUpdated when trackers are unchanged', () async {
       final prefs = await SharedPreferences.getInstance();
       const legend = [
-        LegendStat(name: 'Wraith', trackers: [
-          LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
+          ],
+        ),
       ];
       await mergeLegendStats(legend, prefs);
       // Load from prefs so both timestamps are at millisecond precision
@@ -96,18 +111,24 @@ void main() {
     test('bumps lastUpdated when tracker value changes', () async {
       final prefs = await SharedPreferences.getInstance();
       await mergeLegendStats(const [
-        LegendStat(name: 'Wraith', trackers: [
-          LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
+          ],
+        ),
       ], prefs);
       final first = loadLegendStats(prefs);
       final firstUpdated = first.first.lastUpdated;
 
       await Future.delayed(const Duration(milliseconds: 5));
       await mergeLegendStats(const [
-        LegendStat(name: 'Wraith', trackers: [
-          LegendTracker(key: 'kills', displayName: 'Kills', value: 200),
-        ]),
+        LegendStat(
+          name: 'Wraith',
+          trackers: [
+            LegendTracker(key: 'kills', displayName: 'Kills', value: 200),
+          ],
+        ),
       ], prefs);
       final second = loadLegendStats(prefs);
       expect(second.first.lastUpdated, isNot(firstUpdated));
@@ -116,7 +137,9 @@ void main() {
     test('adds entirely new legends alongside existing ones', () async {
       final prefs = await SharedPreferences.getInstance();
       await mergeLegendStats([buildLegend(name: 'Wraith')], prefs);
-      final result = await mergeLegendStats([buildLegend(name: 'Lifeline')], prefs);
+      final result = await mergeLegendStats([
+        buildLegend(name: 'Lifeline'),
+      ], prefs);
       expect(result.length, 2);
       expect(result.map((l) => l.name), containsAll(['Wraith', 'Lifeline']));
     });

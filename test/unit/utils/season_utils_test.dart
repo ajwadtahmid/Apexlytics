@@ -40,13 +40,16 @@ void main() {
       expect(lastResetIndex(snaps), 1);
     });
 
-    test('flags a large drop when split ids are unknown (legacy snapshots)', () {
-      final snaps = [
-        snap(const Duration(days: -1), _prevSplitFinalRp),
-        snap(const Duration(hours: 8), _postResetRp),
-      ];
-      expect(lastResetIndex(snaps, splitStart: splitStart), 1);
-    });
+    test(
+      'flags a large drop when split ids are unknown (legacy snapshots)',
+      () {
+        final snaps = [
+          snap(const Duration(days: -1), _prevSplitFinalRp),
+          snap(const Duration(hours: 8), _postResetRp),
+        ];
+        expect(lastResetIndex(snaps, splitStart: splitStart), 1);
+      },
+    );
 
     test('ignores a legacy drop observed long after the split opened', () {
       final snaps = [
@@ -342,14 +345,20 @@ void main() {
       );
     });
 
-    test('falls back to the reset-aware snapshot path when history is null', () {
-      final snaps = [
-        snap(const Duration(days: -1), _prevSplitFinalRp, sid: _prevSplit),
-        snap(const Duration(hours: 8), _postResetRp, sid: _newSplit),
-        snap(const Duration(days: 2), 6170, sid: _newSplit),
-      ];
-      expect(computeWeekDelta(snaps, season, _currentRp), _rpEarnedSinceReset);
-    });
+    test(
+      'falls back to the reset-aware snapshot path when history is null',
+      () {
+        final snaps = [
+          snap(const Duration(days: -1), _prevSplitFinalRp, sid: _prevSplit),
+          snap(const Duration(hours: 8), _postResetRp, sid: _newSplit),
+          snap(const Duration(days: 2), 6170, sid: _newSplit),
+        ];
+        expect(
+          computeWeekDelta(snaps, season, _currentRp),
+          _rpEarnedSinceReset,
+        );
+      },
+    );
 
     test('falls back to the 24h delta when there is no season', () {
       final snaps = [

@@ -26,7 +26,9 @@ Future<void> showSnapshotBackupSheet(
     isScrollControlled: true,
     backgroundColor: AppTheme.surface,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppTheme.radiusLg),
+      ),
     ),
     builder: (_) => SafeArea(
       child: Padding(
@@ -56,7 +58,11 @@ Future<void> showSnapshotBackupSheet(
               'app is open, unlike the other graph, which comes from your '
               'match history from apexlegendsstatus.com. If the app isn\'t '
               'kept open, this one will have larger gaps.',
-              style: TextStyle(fontSize: 13, color: AppTheme.muted, height: 1.4),
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.muted,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: AppTheme.md),
             GraphCard(
@@ -180,9 +186,11 @@ class _GraphCardState extends State<GraphCard> {
             ? widget.snapshots.last
             : StatSnapshot(timestamp: season.start, rp: 0),
       );
-      weekIdx = weeks.indexWhere((w) =>
-          !lastSnap.timestamp.isBefore(w.start) &&
-          lastSnap.timestamp.isBefore(w.end));
+      weekIdx = weeks.indexWhere(
+        (w) =>
+            !lastSnap.timestamp.isBefore(w.start) &&
+            lastSnap.timestamp.isBefore(w.end),
+      );
       if (weekIdx < 0) weekIdx = 0;
     }
     setState(() {
@@ -267,8 +275,7 @@ class _GraphCardState extends State<GraphCard> {
                 '${_fmtDate(week.start)} – ${_fmtDate(week.end)}',
                 style: const TextStyle(color: AppTheme.muted, fontSize: 11),
               ),
-              if (delta != null)
-                _DeltaBadge(delta: delta),
+              if (delta != null) _DeltaBadge(delta: delta),
             ],
           ),
 
@@ -317,15 +324,13 @@ class _GraphCardState extends State<GraphCard> {
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => AppTheme.surface2,
             getTooltipItems: (touchedSpots) => touchedSpots.map((s) {
-              final idx =
-                  s.x.isNaN ? 0 : s.x.toInt().clamp(0, snaps.length - 1);
+              final idx = s.x.isNaN
+                  ? 0
+                  : s.x.toInt().clamp(0, snaps.length - 1);
               final snap = snaps[idx];
               return LineTooltipItem(
                 '${formatNumber(snap.rp)} RP\n${DateFormat('MMM d, h:mm a').format(snap.timestamp)}',
-                const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 11,
-                ),
+                const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
               );
             }).toList(),
           ),

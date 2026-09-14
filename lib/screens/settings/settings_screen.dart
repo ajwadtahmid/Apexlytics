@@ -73,26 +73,30 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Builder(builder: (context) {
-                  final info = ref.watch(packageInfoProvider).whenOrNull(data: (info) => info);
-                  final version = info?.version ?? '—';
-                  final build = info?.buildNumber ?? '—';
-                  return Column(
-                    children: [
-                      _SupportRow(
-                        icon: Icons.bug_report_outlined,
-                        label: 'Report a bug (GitHub)',
-                        url: _buildBugReportUrl(version, build),
-                      ),
-                      const Divider(color: AppTheme.surface2, height: 24),
-                      _SupportRow(
-                        icon: Icons.mail_outline,
-                        label: 'Report a bug (Email)',
-                        url: _buildBugReportEmailUrl(version, build),
-                      ),
-                    ],
-                  );
-                }),
+                Builder(
+                  builder: (context) {
+                    final info = ref
+                        .watch(packageInfoProvider)
+                        .whenOrNull(data: (info) => info);
+                    final version = info?.version ?? '—';
+                    final build = info?.buildNumber ?? '—';
+                    return Column(
+                      children: [
+                        _SupportRow(
+                          icon: Icons.bug_report_outlined,
+                          label: 'Report a bug (GitHub)',
+                          url: _buildBugReportUrl(version, build),
+                        ),
+                        const Divider(color: AppTheme.surface2, height: 24),
+                        _SupportRow(
+                          icon: Icons.mail_outline,
+                          label: 'Report a bug (Email)',
+                          url: _buildBugReportEmailUrl(version, build),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -114,7 +118,9 @@ class SettingsScreen extends ConsumerWidget {
                   icon: Icons.info_outline,
                   label: 'About Apexlytics',
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AboutScreen(),
+                    ),
                   ),
                 ),
               ],
@@ -143,14 +149,14 @@ class _SupportRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      onTap: () => unawaited(launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)),
+      onTap: () => unawaited(
+        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      ),
       child: Row(
         children: [
           Icon(icon, color: AppTheme.textPrimary, size: 20),
           const SizedBox(width: AppTheme.sm),
-          Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 14)),
-          ),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
           const Icon(Icons.open_in_new, color: AppTheme.muted, size: 14),
         ],
       ),

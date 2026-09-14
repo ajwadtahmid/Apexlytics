@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../constants/ranked_map_constants.dart';
+import '../../constants/map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../../providers/ranked_provider.dart';
 import '../../utils/formatting/format.dart' show formatNumber, formatSigned;
@@ -305,7 +305,7 @@ class _RecordCard extends StatelessWidget {
                 if (m != null) ...[
                   const SizedBox(height: 2),
                   Text(
-                    '${m.legend} · ${rankedMapName(m.mapKey)} · '
+                    '${m.legend} · ${battleRoyaleMapName(m.mapKey)} · '
                     '${_dateFmt.format(m.endTime.toLocal())}',
                     style: const TextStyle(color: AppTheme.muted, fontSize: 12),
                   ),

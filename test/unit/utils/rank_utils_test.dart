@@ -62,6 +62,26 @@ void main() {
     });
   });
 
+  group('rankAssetPathByTier', () {
+    test('returns the predator asset when isPredator is true', () {
+      expect(rankAssetPathByTier(true, 0), 'assets/ranks/apex_predator.webp');
+    });
+
+    test('returns the ladder asset for an in-range tier', () {
+      expect(rankAssetPathByTier(false, 0), kRankLadder[0].assetPath);
+    });
+
+    test('clamps an out-of-range tier instead of throwing', () {
+      // kPredatorGoalIndex (99) is stored in prefs the same way real ladder
+      // indices are, so a caller can pass it with isPredator: false.
+      expect(
+        rankAssetPathByTier(false, 99),
+        kRankLadder[kRankLadder.length - 1].assetPath,
+      );
+      expect(rankAssetPathByTier(false, -1), kRankLadder[0].assetPath);
+    });
+  });
+
   group('RankDivision.label', () {
     test('includes division for tiered ranks', () {
       expect(kRankLadder[0].label, 'Rookie IV');

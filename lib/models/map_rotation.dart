@@ -20,7 +20,8 @@ class MapRotation {
   });
 
   factory MapRotation.fromJson(Map<String, dynamic> json) {
-    final battleRoyaleJson = json['battle_royale'] as Map<String, dynamic>? ?? {};
+    final battleRoyaleJson =
+        json['battle_royale'] as Map<String, dynamic>? ?? {};
     final ranked = json['ranked'] as Map<String, dynamic>? ?? {};
     final ltm = json['ltm'] as Map<String, dynamic>?;
     final wildcard = json['wildcard'] as Map<String, dynamic>?;

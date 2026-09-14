@@ -111,8 +111,9 @@ void main() {
       expect(find.text('PC'), findsWidgets);
     });
 
-    testWidgets('UID mode strips non-digit characters as they are typed',
-        (tester) async {
+    testWidgets('UID mode strips non-digit characters as they are typed', (
+      tester,
+    ) async {
       final uidPrefs = await _prefsUidWarningSeen();
       await tester.pumpWidget(
         _wrap(const PlayerLookupForm(submitLabel: 'Find Player'), uidPrefs),
@@ -130,33 +131,36 @@ void main() {
     });
 
     testWidgets(
-        'switching to UID mode with an existing name keeps the text and '
-        'shows an error', (tester) async {
-      final uidPrefs = await _prefsUidWarningSeen();
-      await tester.pumpWidget(
-        _wrap(
-          const PlayerLookupForm(
-            submitLabel: 'Update',
-            initialName: 'Aceu',
-            initialPlatform: 'PC',
+      'switching to UID mode with an existing name keeps the text and '
+      'shows an error',
+      (tester) async {
+        final uidPrefs = await _prefsUidWarningSeen();
+        await tester.pumpWidget(
+          _wrap(
+            const PlayerLookupForm(
+              submitLabel: 'Update',
+              initialName: 'Aceu',
+              initialPlatform: 'PC',
+            ),
+            uidPrefs,
           ),
-          uidPrefs,
-        ),
-      );
-      await tester.pump();
-      expect(find.text('Aceu'), findsOneWidget);
+        );
+        await tester.pump();
+        expect(find.text('Aceu'), findsOneWidget);
 
-      await tester.tap(find.byType(Switch));
-      await tester.pump();
+        await tester.tap(find.byType(Switch));
+        await tester.pump();
 
-      // An accidental tap on the toggle must not wipe out a typed name.
-      final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.controller!.text, 'Aceu');
-      expect(find.text('UID must contain digits only.'), findsOneWidget);
-    });
+        // An accidental tap on the toggle must not wipe out a typed name.
+        final field = tester.widget<TextField>(find.byType(TextField));
+        expect(field.controller!.text, 'Aceu');
+        expect(find.text('UID must contain digits only.'), findsOneWidget);
+      },
+    );
 
-    testWidgets('the digits-only error clears once the user edits the field',
-        (tester) async {
+    testWidgets('the digits-only error clears once the user edits the field', (
+      tester,
+    ) async {
       final uidPrefs = await _prefsUidWarningSeen();
       await tester.pumpWidget(
         _wrap(
@@ -239,8 +243,9 @@ void main() {
       expect(find.byType(SearchScreen), findsOneWidget);
     });
 
-    testWidgets('UID mode strips non-digit characters as they are typed',
-        (tester) async {
+    testWidgets('UID mode strips non-digit characters as they are typed', (
+      tester,
+    ) async {
       final uidPrefs = await _prefsUidWarningSeen();
       final apiService = ApiService(uidPrefs);
       final container = ProviderContainer(
@@ -272,8 +277,7 @@ void main() {
       expect(field.controller!.text, '123');
     });
 
-    testWidgets(
-        'switching to UID mode with existing text keeps it and shows a '
+    testWidgets('switching to UID mode with existing text keeps it and shows a '
         'digits-only message', (tester) async {
       final uidPrefs = await _prefsUidWarningSeen();
       final apiService = ApiService(uidPrefs);

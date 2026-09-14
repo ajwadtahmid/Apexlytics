@@ -85,7 +85,7 @@ class _MapAlertsSheetContentState
     final effectiveShowAll = showAll || proxyMaps.isEmpty;
     final proxyNames = proxyMaps.map((m) => m.name).toSet();
     final result = [...proxyMaps.map((m) => m.name)];
-    for (final m in kBattleRoyaleMaps) {
+    for (final m in kBattleRoyaleMaps.values) {
       if (proxyNames.contains(m.name)) continue;
       if (effectiveShowAll || notifySet.contains(m.name)) result.add(m.name);
     }
@@ -93,11 +93,17 @@ class _MapAlertsSheetContentState
   }
 
   // Number of non-proxy, unselected maps still hidden behind the expand tile.
-  int _hiddenCount(List<AppMap> proxyMaps, Set<String> notifySet, bool showAll) {
+  int _hiddenCount(
+    List<AppMap> proxyMaps,
+    Set<String> notifySet,
+    bool showAll,
+  ) {
     if (showAll || proxyMaps.isEmpty) return 0;
     final proxyNames = proxyMaps.map((m) => m.name).toSet();
-    return kBattleRoyaleMaps
-        .where((m) => !proxyNames.contains(m.name) && !notifySet.contains(m.name))
+    return kBattleRoyaleMaps.values
+        .where(
+          (m) => !proxyNames.contains(m.name) && !notifySet.contains(m.name),
+        )
         .length;
   }
 
@@ -158,11 +164,14 @@ class _MapAlertsSheetContentState
                     _timingLabel(minutes),
                     style: TextStyle(
                       color: selected ? AppTheme.accent : AppTheme.textPrimary,
-                      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: selected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                   ),
                 ),
-                if (selected) const Icon(Icons.check, color: AppTheme.accent, size: 18),
+                if (selected)
+                  const Icon(Icons.check, color: AppTheme.accent, size: 18),
               ],
             ),
           );
@@ -198,7 +207,8 @@ class _MapAlertsSheetContentState
       if (currentTiming == 0) {
         final defaultMinutes = switch (mode) {
           _NotifMode.ranked || _NotifMode.pubs => _kDefaultBattleRoyaleMinutes,
-          _NotifMode.wildcard || _NotifMode.mixtape => _kDefaultOtherModesMinutes,
+          _NotifMode.wildcard ||
+          _NotifMode.mixtape => _kDefaultOtherModesMinutes,
         };
         switch (mode) {
           case _NotifMode.ranked:
@@ -253,7 +263,10 @@ class _MapAlertsSheetContentState
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('OK', style: TextStyle(color: AppTheme.accent)),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(color: AppTheme.accent),
+                  ),
                 ),
               ],
             ),
@@ -281,20 +294,26 @@ class _MapAlertsSheetContentState
     Set<String> allNames,
     Future<void> Function(List<String>) save,
   ) async {
-    setState(() => notifySet.contains(mapName)
-        ? notifySet.remove(mapName)
-        : notifySet.add(mapName));
+    setState(
+      () => notifySet.contains(mapName)
+          ? notifySet.remove(mapName)
+          : notifySet.add(mapName),
+    );
     final toSave =
         notifySet.containsAll(allNames) && allNames.containsAll(notifySet)
-            ? <String>[]
-            : notifySet.toList();
+        ? <String>[]
+        : notifySet.toList();
     await save(toSave);
     await _reschedule();
   }
 
   Future<void> _toggleRanked(String mapName) async {
     final allNames =
-        ref.read(seasonalMapsProvider).asData?.value.ranked
+        ref
+            .read(seasonalMapsProvider)
+            .asData
+            ?.value
+            .ranked
             .map((m) => m.name)
             .toSet() ??
         {};
@@ -310,7 +329,11 @@ class _MapAlertsSheetContentState
 
   Future<void> _togglePubs(String mapName) async {
     final allNames =
-        ref.read(seasonalMapsProvider).asData?.value.pubs
+        ref
+            .read(seasonalMapsProvider)
+            .asData
+            ?.value
+            .pubs
             .map((m) => m.name)
             .toSet() ??
         {};
@@ -348,21 +371,30 @@ class _MapAlertsSheetContentState
 
   @override
   Widget build(BuildContext context) {
-    final notifyRanked =
-        ref.watch(playerSettingsProvider.select((s) => s.notifyRankedMapRotation));
-    final rankedMinutesBefore =
-        ref.watch(playerSettingsProvider.select((s) => s.rankedNotifyMinutesBefore));
-    final notifyPubs = ref.watch(playerSettingsProvider.select((s) => s.notifyPubsMapRotation));
-    final pubsMinutesBefore =
-        ref.watch(playerSettingsProvider.select((s) => s.pubsNotifyMinutesBefore));
-    final notifyWildcard =
-        ref.watch(playerSettingsProvider.select((s) => s.notifyWildcardMapRotation));
-    final wildcardMinutesBefore =
-        ref.watch(playerSettingsProvider.select((s) => s.wildcardNotifyMinutesBefore));
-    final notifyMixtape =
-        ref.watch(playerSettingsProvider.select((s) => s.notifyMixtapeMapRotation));
-    final mixtapeMinutesBefore =
-        ref.watch(playerSettingsProvider.select((s) => s.mixtapeNotifyMinutesBefore));
+    final notifyRanked = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyRankedMapRotation),
+    );
+    final rankedMinutesBefore = ref.watch(
+      playerSettingsProvider.select((s) => s.rankedNotifyMinutesBefore),
+    );
+    final notifyPubs = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyPubsMapRotation),
+    );
+    final pubsMinutesBefore = ref.watch(
+      playerSettingsProvider.select((s) => s.pubsNotifyMinutesBefore),
+    );
+    final notifyWildcard = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyWildcardMapRotation),
+    );
+    final wildcardMinutesBefore = ref.watch(
+      playerSettingsProvider.select((s) => s.wildcardNotifyMinutesBefore),
+    );
+    final notifyMixtape = ref.watch(
+      playerSettingsProvider.select((s) => s.notifyMixtapeMapRotation),
+    );
+    final mixtapeMinutesBefore = ref.watch(
+      playerSettingsProvider.select((s) => s.mixtapeNotifyMinutesBefore),
+    );
     final seasonalMapsAsync = ref.watch(seasonalMapsProvider);
 
     return DraggableScrollableSheet(
@@ -399,7 +431,11 @@ class _MapAlertsSheetContentState
             const Text(
               'Tap a mode to enable or disable it. '
               'Green maps fire an alert; red maps are skipped.',
-              style: TextStyle(color: AppTheme.muted, fontSize: 13, height: 1.5),
+              style: TextStyle(
+                color: AppTheme.muted,
+                fontSize: 13,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: AppTheme.md),
 
@@ -411,27 +447,37 @@ class _MapAlertsSheetContentState
                     icon: Icons.leaderboard_outlined,
                     label: 'Ranked',
                     enabled: notifyRanked,
-                    onTap: () => _toggleMode(
-                      context,
-                      _NotifMode.ranked,
-                      !notifyRanked,
-                    ),
+                    onTap: () =>
+                        _toggleMode(context, _NotifMode.ranked, !notifyRanked),
                   ),
                   if (notifyRanked) ...[
                     MapTimingTile(
                       label: _timingLabel(rankedMinutesBefore),
                       onTap: () => _pickTiming(context, _NotifMode.ranked),
                     ),
-                    ..._visibleNames(seasonalMaps.ranked, _rankedNotify, _showAllRanked)
-                        .map((name) => MapAlertTile(
-                          name: name,
-                          notify: _rankedNotify.contains(name),
-                          onTap: () => _toggleRanked(name),
-                        )),
-                    if (_hiddenCount(seasonalMaps.ranked, _rankedNotify, _showAllRanked) > 0)
+                    ..._visibleNames(
+                      seasonalMaps.ranked,
+                      _rankedNotify,
+                      _showAllRanked,
+                    ).map(
+                      (name) => MapAlertTile(
+                        name: name,
+                        notify: _rankedNotify.contains(name),
+                        onTap: () => _toggleRanked(name),
+                      ),
+                    ),
+                    if (_hiddenCount(
+                          seasonalMaps.ranked,
+                          _rankedNotify,
+                          _showAllRanked,
+                        ) >
+                        0)
                       MapExpandTile(
                         count: _hiddenCount(
-                            seasonalMaps.ranked, _rankedNotify, _showAllRanked),
+                          seasonalMaps.ranked,
+                          _rankedNotify,
+                          _showAllRanked,
+                        ),
                         onTap: () => setState(() => _showAllRanked = true),
                       ),
                   ],
@@ -443,27 +489,37 @@ class _MapAlertsSheetContentState
                     icon: Icons.public,
                     label: 'Pubs',
                     enabled: notifyPubs,
-                    onTap: () => _toggleMode(
-                      context,
-                      _NotifMode.pubs,
-                      !notifyPubs,
-                    ),
+                    onTap: () =>
+                        _toggleMode(context, _NotifMode.pubs, !notifyPubs),
                   ),
                   if (notifyPubs) ...[
                     MapTimingTile(
                       label: _timingLabel(pubsMinutesBefore),
                       onTap: () => _pickTiming(context, _NotifMode.pubs),
                     ),
-                    ..._visibleNames(seasonalMaps.pubs, _pubsNotify, _showAllPubs)
-                        .map((name) => MapAlertTile(
-                          name: name,
-                          notify: _pubsNotify.contains(name),
-                          onTap: () => _togglePubs(name),
-                        )),
-                    if (_hiddenCount(seasonalMaps.pubs, _pubsNotify, _showAllPubs) > 0)
+                    ..._visibleNames(
+                      seasonalMaps.pubs,
+                      _pubsNotify,
+                      _showAllPubs,
+                    ).map(
+                      (name) => MapAlertTile(
+                        name: name,
+                        notify: _pubsNotify.contains(name),
+                        onTap: () => _togglePubs(name),
+                      ),
+                    ),
+                    if (_hiddenCount(
+                          seasonalMaps.pubs,
+                          _pubsNotify,
+                          _showAllPubs,
+                        ) >
+                        0)
                       MapExpandTile(
                         count: _hiddenCount(
-                            seasonalMaps.pubs, _pubsNotify, _showAllPubs),
+                          seasonalMaps.pubs,
+                          _pubsNotify,
+                          _showAllPubs,
+                        ),
                         onTap: () => setState(() => _showAllPubs = true),
                       ),
                   ],

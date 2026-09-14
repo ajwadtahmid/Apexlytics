@@ -6,7 +6,7 @@ library;
 
 import '../../constants/legend_constants.dart';
 import '../../constants/rank_constants.dart';
-import '../../constants/ranked_map_constants.dart';
+import '../../constants/map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../formatting/rank_utils.dart' show rankIndex;
 
@@ -260,10 +260,22 @@ class MapBreakdown {
 
 /// Per-map breakdown, sorted by games played (descending).
 /// Assumes [matches] is already ranked-only filtered.
+///
+/// Grouped by [canonicalMapKey], not the raw `map_key`: `edistrict` and
+/// `edistrict_rotation` name the same map (see [kBattleRoyaleMaps]), and
+/// grouping on the raw key would split one map into several
+/// identically-labelled rows. Matches the canonicalization
+/// [legendMapBreakdowns] already applies. Each group's [MapBreakdown.mapKey]
+/// is one representative raw key from that group — drill-down callers must
+/// resolve every variant back via [battleRoyaleMapKeyVariants] (or an equivalent
+/// [canonicalMapKey] comparison), not an exact match on that key.
 List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
   final byMap = <String, List<RankedMatch>>{};
+  final representativeKey = <String, String>{};
   for (final m in matches) {
-    byMap.putIfAbsent(m.mapKey, () => []).add(m);
+    final canonical = canonicalMapKey(m.mapKey);
+    byMap.putIfAbsent(canonical, () => []).add(m);
+    representativeKey.putIfAbsent(canonical, () => m.mapKey);
   }
   final out = byMap.entries.map((e) {
     var rp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;
@@ -287,9 +299,10 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
         losses++;
       }
     }
+    final rawKey = representativeKey[e.key]!;
     return MapBreakdown(
-      mapKey: e.key,
-      displayName: rankedMapName(e.key),
+      mapKey: rawKey,
+      displayName: battleRoyaleMapName(rawKey),
       games: e.value.length,
       totalRp: rp,
       totalKills: kills,
@@ -331,7 +344,7 @@ class LegendMapCell {
 }
 
 /// Per (legend, map) breakdown, restricted to legends in [kLegends] and maps in
-/// [kRankedMaps] — a raw or "Unknown" value from either is dropped rather than
+/// [kBattleRoyaleMaps] — a raw or "Unknown" value from either is dropped rather than
 /// shown as its own row/column. Both names are canonicalized through their
 /// constant lookup, so map-key variants that mean the same map (e.g.
 /// `worlds_edge` and `worlds_edge_rotation`) land in one cell. Only pairs with
@@ -341,7 +354,7 @@ List<LegendMapCell> legendMapBreakdowns(List<RankedMatch> matches) {
   final byPair = <(String, String), List<RankedMatch>>{};
   for (final m in matches) {
     final legend = kLegendsByName[m.legend.toLowerCase()]?.name;
-    final mapName = rankedMapInfo(m.mapKey)?.name;
+    final mapName = battleRoyaleMapInfo(m.mapKey)?.name;
     if (legend == null || mapName == null) continue;
     byPair.putIfAbsent((legend, mapName), () => []).add(m);
   }
@@ -432,7 +445,12 @@ List<RankedSession> sessionize(
     sessions.add(
       RankedSession(
         start: bucket.first.startTime,
-        end: bucket.last.endTime,
+        // bucket is sorted by *start* time, so the start-sorted last match
+        // isn't necessarily the one that ends last — upstream reconstructs
+        // timestamps from polling gaps, so an out-of-order end is reachable.
+        end: bucket
+            .map((m) => m.endTime)
+            .reduce((a, b) => a.isAfter(b) ? a : b),
         games: bucket.length,
         netRp: rp,
         totalKills: kills,
@@ -563,178 +581,6 @@ class RankProgress {
     return (rp / avgRpPerGame).ceil();
   }
 }
-
-// ── Tracker coverage / aggregation (the dynamic stat row) ───────────────────
-
-class TrackerAggregate {
-  final String name;
-  final int matchesPresent;
-  final int totalMatches;
-  final num total;
-
-  const TrackerAggregate({
-    required this.name,
-    required this.matchesPresent,
-    required this.totalMatches,
-    required this.total,
-  });
-
-  /// Fraction of matches in the window that carried this tracker (0..1).
-  double get coverage => totalMatches == 0 ? 0 : matchesPresent / totalMatches;
-  double get avgPerGame => matchesPresent == 0 ? 0 : total / matchesPresent;
-}
-
-/// Aggregates trackers that appear in at least [minCoverage] of the window's
-/// ranked matches, so the stat row reflects *whatever the player actually runs*
-/// rather than a hardcoded set. Sorted by coverage (desc), then total (desc).
-/// Assumes [matches] is already ranked-only filtered.
-List<TrackerAggregate> aggregateTrackers(
-  List<RankedMatch> matches, {
-  double minCoverage = 0.8,
-}) {
-  if (matches.isEmpty) return [];
-
-  final present = <String, int>{};
-  final totals = <String, num>{};
-  for (final m in matches) {
-    final seen = <String>{};
-    for (final t in m.trackers) {
-      if (seen.add(t.name)) {
-        present[t.name] = (present[t.name] ?? 0) + 1;
-        totals[t.name] = (totals[t.name] ?? 0) + t.value;
-      }
-    }
-  }
-
-  final out =
-      totals.keys
-          .map(
-            (name) => TrackerAggregate(
-              name: name,
-              matchesPresent: present[name] ?? 0,
-              totalMatches: matches.length,
-              total: totals[name] ?? 0,
-            ),
-          )
-          .where((t) => t.coverage >= minCoverage)
-          .toList()
-        ..sort((a, b) {
-          final byCoverage = b.coverage.compareTo(a.coverage);
-          return byCoverage != 0 ? byCoverage : b.total.compareTo(a.total);
-        });
-  return out;
-}
-
-// ── Auto-insights (strengths & weaknesses) ──────────────────────────────────
-
-enum InsightTone { positive, negative, neutral }
-
-class RankedInsight {
-  final String label; // short headline, e.g. "Best legend"
-  final String detail; // e.g. "Axle · +38 RP/game over 59 games"
-  final InsightTone tone;
-
-  const RankedInsight({
-    required this.label,
-    required this.detail,
-    required this.tone,
-  });
-}
-
-/// Derives a small set of the most useful strengths/weaknesses for the window.
-/// Assumes [matches] is already ranked-only filtered.
-List<RankedInsight> generateInsights(List<RankedMatch> matches) {
-  if (matches.isEmpty) return [];
-  return generateInsightsFromAggregates(
-    summarize(matches),
-    legendBreakdowns(matches),
-    mapBreakdowns(matches),
-  );
-}
-
-/// Same as [generateInsights], but from already-computed aggregates rather
-/// than a match list — the Lifetime scope has [summary]/[legends]/[maps] from
-/// SQL `GROUP BY` queries and never hydrates a [RankedMatch] list at all.
-List<RankedInsight> generateInsightsFromAggregates(
-  RankedSummary summary,
-  List<LegendBreakdown> legends,
-  List<MapBreakdown> maps,
-) {
-  if (summary.games == 0) return [];
-
-  final insights = <RankedInsight>[];
-
-  // Net RP headline.
-  insights.add(
-    RankedInsight(
-      label: summary.netRp >= 0 ? 'Net gain' : 'Net loss',
-      detail:
-          '${summary.netRp >= 0 ? '+' : ''}${summary.netRp} RP over ${summary.games} games',
-      tone: summary.netRp >= 0 ? InsightTone.positive : InsightTone.negative,
-    ),
-  );
-
-  // Best / worst legend (min games guard).
-  final qualifyingLegends = legends
-      .where((l) => l.games >= kMinGamesForInsight)
-      .toList();
-  if (qualifyingLegends.isNotEmpty) {
-    final best = qualifyingLegends.reduce(
-      (a, b) => a.avgRpPerGame >= b.avgRpPerGame ? a : b,
-    );
-    insights.add(
-      RankedInsight(
-        label: 'Best legend',
-        detail:
-            '${best.legend} · ${_signed(best.avgRpPerGame)} RP/game over ${best.games} games',
-        tone: best.avgRpPerGame >= 0
-            ? InsightTone.positive
-            : InsightTone.neutral,
-      ),
-    );
-    if (qualifyingLegends.length > 1) {
-      final worst = qualifyingLegends.reduce(
-        (a, b) => a.avgRpPerGame <= b.avgRpPerGame ? a : b,
-      );
-      if (worst.legend != best.legend) {
-        insights.add(
-          RankedInsight(
-            label: 'Weakest legend',
-            detail:
-                '${worst.legend} · ${_signed(worst.avgRpPerGame)} RP/game over ${worst.games} games',
-            tone: worst.avgRpPerGame >= 0
-                ? InsightTone.neutral
-                : InsightTone.negative,
-          ),
-        );
-      }
-    }
-  }
-
-  // Strongest map.
-  final qualifyingMaps = maps
-      .where((m) => m.games >= kMinGamesForInsight)
-      .toList();
-  if (qualifyingMaps.isNotEmpty) {
-    final best = qualifyingMaps.reduce(
-      (a, b) => a.avgRpPerGame >= b.avgRpPerGame ? a : b,
-    );
-    insights.add(
-      RankedInsight(
-        label: 'Strongest map',
-        detail:
-            '${best.displayName} · ${_signed(best.avgRpPerGame)} RP/game over ${best.games} games',
-        tone: best.avgRpPerGame >= 0
-            ? InsightTone.positive
-            : InsightTone.neutral,
-      ),
-    );
-  }
-
-  return insights;
-}
-
-String _signed(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}';
 
 // ── Time-of-day performance ─────────────────────────────────────────────────
 

@@ -96,15 +96,21 @@ void main() {
       expect(stats.isOnline, false);
       expect(stats.isInGame, false);
     });
-
   });
 
   group('PlayerStats.presence', () {
     PlayerStats make({required bool isOnline, required bool isInGame}) =>
         PlayerStats(
-          name: 'x', uid: '1', level: 1, rank: 'Gold', rankScore: 0,
-          platform: 'PC', currentLegend: 'Wraith',
-          isOnline: isOnline, isInGame: isInGame, trackers: [],
+          name: 'x',
+          uid: '1',
+          level: 1,
+          rank: 'Gold',
+          rankScore: 0,
+          platform: 'PC',
+          currentLegend: 'Wraith',
+          isOnline: isOnline,
+          isInGame: isInGame,
+          trackers: [],
         );
 
     test('returns "In Game" when inGame', () {
@@ -125,7 +131,11 @@ void main() {
     });
 
     test('killCount returns kills tracker value', () {
-      const tracker = LegendTracker(key: 'kills', displayName: 'Kills', value: 500);
+      const tracker = LegendTracker(
+        key: 'kills',
+        displayName: 'Kills',
+        value: 500,
+      );
       const stat = LegendStat(name: 'Wraith', trackers: [tracker]);
       expect(stat.killCount, 500);
     });
@@ -133,7 +143,9 @@ void main() {
     test('merge combines trackers', () {
       const base = LegendStat(
         name: 'Wraith',
-        trackers: [LegendTracker(key: 'kills', displayName: 'Kills', value: 100)],
+        trackers: [
+          LegendTracker(key: 'kills', displayName: 'Kills', value: 100),
+        ],
       );
       const incoming = LegendStat(
         name: 'Wraith',
@@ -150,7 +162,9 @@ void main() {
     test('toJson / fromJson roundtrip preserves data', () {
       final stat = LegendStat(
         name: 'Bangalore',
-        trackers: const [LegendTracker(key: 'kills', displayName: 'Kills', value: 999)],
+        trackers: const [
+          LegendTracker(key: 'kills', displayName: 'Kills', value: 999),
+        ],
         lastUpdated: DateTime(2024, 1, 1),
       );
       final json = stat.toJson();

@@ -80,6 +80,10 @@ class SearchState {
 }
 
 class SearchNotifier extends Notifier<SearchState> {
+  /// Oldest favourites are evicted once the list grows past this — matches
+  /// the spirit of the 5-profile cap, scaled up since favourites are cheaper.
+  static const int maxFavorites = 20;
+
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
   @override
@@ -123,8 +127,8 @@ class SearchNotifier extends Notifier<SearchState> {
       final f = favorites[i];
       final uidMatch = f.uid == uid;
       // Enrich name-based entries: match on display name so they get a UID.
-      final nameEnrich = f.uid == null &&
-          f.query.toLowerCase() == canonicalName.toLowerCase();
+      final nameEnrich =
+          f.uid == null && f.query.toLowerCase() == canonicalName.toLowerCase();
       if (uidMatch || nameEnrich) {
         if (f.uid != uid || f.query != canonicalName) {
           favorites[i] = PlayerRef(
@@ -147,19 +151,20 @@ class SearchNotifier extends Notifier<SearchState> {
     final idx = favorites.indexWhere((f) {
       // Prefer UID matching when both entries have a UID (stable across renames).
       if (playerRef.hasUid && f.hasUid) return f.uid == playerRef.uid;
-      // Fall back to query+platform only when neither has a UID.
-      if (!playerRef.hasUid && !f.hasUid) {
-        return f.query == playerRef.query && f.platform == playerRef.platform;
-      }
-      // One has a UID and the other doesn't — can't safely dedupe here.
-      // syncDisplayName enriches name-based entries with UIDs on first view,
-      // so this case is rare after the first successful player lookup.
-      return false;
+      // Otherwise (neither has a UID, or only one does) fall back to a
+      // case-insensitive name+platform match, so the same player can't be
+      // favorited twice under a stale casing or before syncDisplayName
+      // enriches one side with a UID.
+      return f.platform == playerRef.platform &&
+          f.query.toLowerCase() == playerRef.query.toLowerCase();
     });
     if (idx >= 0) {
       favorites.removeAt(idx);
     } else {
       favorites.insert(0, playerRef);
+      if (favorites.length > maxFavorites) {
+        favorites.removeLast();
+      }
     }
     await _save(PrefsKeys.searchFavorites, favorites);
     state = state.copyWith(favorites: favorites);

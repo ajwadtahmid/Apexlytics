@@ -1,13 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/utils/formatting/format.dart';
-import 'package:apexlytics/utils/formatting/season_utils.dart' show SplitContext;
+import 'package:apexlytics/utils/formatting/season_utils.dart'
+    show SplitContext;
 
 void main() {
   group('formatNumber', () {
     test('formats zero', () => expect(formatNumber(0), '0'));
     test('formats hundreds', () => expect(formatNumber(999), '999'));
-    test('formats thousands with comma', () => expect(formatNumber(1000), '1,000'));
-    test('formats large numbers', () => expect(formatNumber(1234567), '1,234,567'));
+    test(
+      'formats thousands with comma',
+      () => expect(formatNumber(1000), '1,000'),
+    );
+    test(
+      'formats large numbers',
+      () => expect(formatNumber(1234567), '1,234,567'),
+    );
   });
 
   group('formatSigned', () {
@@ -15,20 +22,38 @@ void main() {
       expect(formatSigned(4.2), '+4.2');
       expect(formatSigned(0), '+0.0');
     });
-    test('leaves the sign alone for negatives', () => expect(formatSigned(-4.2), '-4.2'));
+    test(
+      'leaves the sign alone for negatives',
+      () => expect(formatSigned(-4.2), '-4.2'),
+    );
   });
 
   group('formatSignedInt', () {
-    test('adds a + and thousands separators', () => expect(formatSignedInt(1500), '+1,500'));
-    test('leaves negatives alone', () => expect(formatSignedInt(-1500), '-1,500'));
+    test(
+      'adds a + and thousands separators',
+      () => expect(formatSignedInt(1500), '+1,500'),
+    );
+    test(
+      'leaves negatives alone',
+      () => expect(formatSignedInt(-1500), '-1,500'),
+    );
   });
 
   group('capitalize', () {
-    test('capitalizes first letter', () => expect(capitalize('hello'), 'Hello'));
-    test('leaves already-capitalized unchanged', () => expect(capitalize('Hello'), 'Hello'));
+    test(
+      'capitalizes first letter',
+      () => expect(capitalize('hello'), 'Hello'),
+    );
+    test(
+      'leaves already-capitalized unchanged',
+      () => expect(capitalize('Hello'), 'Hello'),
+    );
     test('handles single char', () => expect(capitalize('a'), 'A'));
     test('handles empty string', () => expect(capitalize(''), ''));
-    test('capitalizes only first letter', () => expect(capitalize('hello world'), 'Hello world'));
+    test(
+      'capitalizes only first letter',
+      () => expect(capitalize('hello world'), 'Hello world'),
+    );
   });
 
   group('timeAgo', () {

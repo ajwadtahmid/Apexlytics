@@ -92,7 +92,12 @@ class RankedWeekStrip extends ConsumerWidget implements PreferredSizeWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(AppTheme.md, 2, AppTheme.md, AppTheme.sm),
+      padding: const EdgeInsets.fromLTRB(
+        AppTheme.md,
+        2,
+        AppTheme.md,
+        AppTheme.sm,
+      ),
       // Centre the chips when they fit; fall back to horizontal scrolling when
       // there are too many weeks to fit on one line.
       child: LayoutBuilder(

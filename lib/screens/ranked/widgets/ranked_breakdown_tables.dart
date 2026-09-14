@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../constants/ranked_map_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
     show formatNumber, formatDuration;
@@ -385,7 +385,7 @@ class _MapCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final positive = row.avgRpPerGame >= 0;
     final rpColor = positive ? AppTheme.green : AppTheme.red;
-    final asset = rankedMapAsset(row.mapKey);
+    final asset = battleRoyaleMapAsset(row.mapKey);
 
     return SurfaceCard(
       padding: EdgeInsets.zero,

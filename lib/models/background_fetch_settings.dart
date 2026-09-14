@@ -37,7 +37,9 @@ class BackgroundFetchSettings {
         prefs.getBool(PrefsKeys.notifyMixtapeMapRotation) ?? false;
     final notifyWildcard =
         prefs.getBool(PrefsKeys.notifyWildcardMapRotation) ?? false;
-    if (!notifyPubs && !notifyRanked && !notifyMixtape && !notifyWildcard) return null;
+    if (!notifyPubs && !notifyRanked && !notifyMixtape && !notifyWildcard) {
+      return null;
+    }
 
     final legacy = prefs.getInt(PrefsKeys.mapNotifyMinutes) ?? 0;
     final ranked = prefs.getInt(PrefsKeys.rankedNotifyMinutes) ?? legacy;
@@ -45,7 +47,8 @@ class BackgroundFetchSettings {
     final mixtape = prefs.getInt(PrefsKeys.mixtapeNotifyMinutes) ?? legacy;
     final wildcard = prefs.getInt(PrefsKeys.wildcardNotifyMinutes) ?? 0;
 
-    final anyTiming = (notifyRanked && ranked > 0) ||
+    final anyTiming =
+        (notifyRanked && ranked > 0) ||
         (notifyPubs && pubs > 0) ||
         (notifyMixtape && mixtape > 0) ||
         (notifyWildcard && wildcard > 0);
@@ -60,10 +63,12 @@ class BackgroundFetchSettings {
       pubsMinutesBefore: pubs,
       mixtapeMinutesBefore: mixtape,
       wildcardMinutesBefore: wildcard,
-      favoriteRankedMapNames:
-          parseStringList(prefs.getString(PrefsKeys.favoriteRankedMapNames)),
-      favoritePubsMapNames:
-          parseStringList(prefs.getString(PrefsKeys.favoritePubsMapNames)),
+      favoriteRankedMapNames: parseStringList(
+        prefs.getString(PrefsKeys.favoriteRankedMapNames),
+      ),
+      favoritePubsMapNames: parseStringList(
+        prefs.getString(PrefsKeys.favoritePubsMapNames),
+      ),
     );
   }
 

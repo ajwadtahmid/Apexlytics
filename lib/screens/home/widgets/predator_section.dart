@@ -14,29 +14,31 @@ class PredatorSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ref.watch(predatorProvider).when(
-      data: (result) {
-        final count = result.data.rp.values.fold(
-          0,
-          (sum, p) => sum + p.totalMastersAndPreds,
-        );
-        return SummaryCard(
-          leading: const FaIcon(
-            FontAwesomeIcons.skull,
-            color: AppTheme.accent,
-            size: AppTheme.iconSizeMedium,
+    return ref
+        .watch(predatorProvider)
+        .when(
+          data: (result) {
+            final count = result.data.rp.values.fold(
+              0,
+              (sum, p) => sum + p.totalMastersAndPreds,
+            );
+            return SummaryCard(
+              leading: const FaIcon(
+                FontAwesomeIcons.skull,
+                color: AppTheme.accent,
+                size: AppTheme.iconSizeMedium,
+              ),
+              title: 'Pred Cutoff',
+              subtitle: '$count Masters & Preds across all platforms',
+              onTap: () => context.pushPage(PredatorPage(data: result.data)),
+            );
+          },
+          loading: () => const SummaryTileSkeleton(),
+          error: (e, _) => ErrorCard(
+            message: 'Pred Cutoff',
+            compact: true,
+            onRetry: () => ref.invalidate(predatorProvider),
           ),
-          title: 'Pred Cutoff',
-          subtitle: '$count Masters & Preds across all platforms',
-          onTap: () => context.pushPage(PredatorPage(data: result.data)),
         );
-      },
-      loading: () => const SummaryTileSkeleton(),
-      error: (e, _) => ErrorCard(
-        message: 'Pred Cutoff',
-        compact: true,
-        onRetry: () => ref.invalidate(predatorProvider),
-      ),
-    );
   }
 }

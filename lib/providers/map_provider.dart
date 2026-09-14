@@ -71,7 +71,8 @@ class SeasonalMapsNotifier extends AsyncNotifier<SeasonalMaps> {
   bool _hasChanged(SeasonalMaps? old, SeasonalMaps? fresh) {
     if (old == null || fresh == null) return true;
 
-    if (old.ranked.length != fresh.ranked.length || old.pubs.length != fresh.pubs.length) {
+    if (old.ranked.length != fresh.ranked.length ||
+        old.pubs.length != fresh.pubs.length) {
       return true;
     }
 

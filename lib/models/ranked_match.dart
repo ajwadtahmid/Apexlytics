@@ -7,6 +7,8 @@ library;
 
 import 'dart:convert';
 
+import '../constants/tracker_constants.dart';
+
 /// RP swings at or beyond this magnitude are rank-reset artifacts
 /// (end-of-split/season placement drops), not real per-game RP. The match still
 /// counts as a played game; only its RP value is neutralized in RP aggregates.
@@ -293,11 +295,11 @@ class RankedMatch {
 
   /// Kills recorded in [trackers], or null when the tracker is absent.
   static int? killsFrom(List<MatchTracker> trackers) =>
-      _trackerInt(trackers, 'br kills');
+      _trackerInt(trackers, TrackerKeys.brKills);
 
   /// Damage recorded in [trackers], or null when the tracker is absent.
   static int? damageFrom(List<MatchTracker> trackers) =>
-      _trackerInt(trackers, 'br damage');
+      _trackerInt(trackers, TrackerKeys.brDamage);
 
   static int? _trackerInt(List<MatchTracker> trackers, String lowerName) {
     for (final t in trackers) {

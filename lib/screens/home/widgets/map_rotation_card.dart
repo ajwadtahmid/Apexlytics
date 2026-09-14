@@ -76,7 +76,11 @@ class _ModeData {
   final String label;
   final MapMode current;
   final MapMode next;
-  const _ModeData({required this.label, required this.current, required this.next});
+  const _ModeData({
+    required this.label,
+    required this.current,
+    required this.next,
+  });
 }
 
 // ── Mode picker ───────────────────────────────────────────────────────────────
@@ -210,7 +214,11 @@ class _MapCardState extends State<_MapCard> {
     return _endTimeFormat.format(end);
   }
 
-  static String _formatMapDisplay(String mapName, String? eventName, bool isMixtape) {
+  static String _formatMapDisplay(
+    String mapName,
+    String? eventName,
+    bool isMixtape,
+  ) {
     if (isMixtape && eventName != null && eventName.isNotEmpty) {
       return '$mapName ($eventName)';
     }
@@ -256,7 +264,11 @@ class _MapCardState extends State<_MapCard> {
                 const SizedBox(height: AppTheme.sm),
                 Row(
                   children: [
-                    const Icon(Icons.timer_outlined, color: AppTheme.accent, size: 14),
+                    const Icon(
+                      Icons.timer_outlined,
+                      color: AppTheme.accent,
+                      size: 14,
+                    ),
                     const SizedBox(width: AppTheme.xs),
                     Text(
                       '${_formatCountdown(_remaining)} remaining',

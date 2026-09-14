@@ -28,7 +28,9 @@ class _FakeStatsNotifier extends MyPlayerStatsNotifier {
   Future<void> softRefresh() async {}
 }
 
-Future<SharedPreferences> _prefsWithProfile({String name = 'TestPlayer'}) async {
+Future<SharedPreferences> _prefsWithProfile({
+  String name = 'TestPlayer',
+}) async {
   SharedPreferences.setMockInitialValues({
     'player_profiles': jsonEncode([
       {'name': name, 'uid': 'uid123', 'platform': 'PC'},
@@ -45,10 +47,7 @@ Widget _app(SharedPreferences prefs, {ApiResult<PlayerStats?>? result}) {
       if (result != null)
         myPlayerStatsProvider.overrideWith(() => _FakeStatsNotifier(result)),
     ],
-    child: MaterialApp(
-      theme: ThemeData.dark(),
-      home: const StatsScreen(),
-    ),
+    child: MaterialApp(theme: ThemeData.dark(), home: const StatsScreen()),
   );
 }
 
@@ -63,7 +62,9 @@ void main() {
     expect(find.text('Get Started'), findsOneWidget);
   });
 
-  testWidgets('renders the stats body (not skeleton) for fresh data', (tester) async {
+  testWidgets('renders the stats body (not skeleton) for fresh data', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -100,29 +101,31 @@ void main() {
     expect(find.textContaining('Last synced'), findsOneWidget);
   });
 
-  testWidgets('a long player name ellipsizes instead of overflowing the AppBar',
-      (tester) async {
-    // Width chosen deliberately: narrow enough that the unfixed AppBar
-    // overflows by 156px with this name (verified), but wide enough to stay
-    // clear of unrelated, pre-existing overflow in PlayerInfoCard/
-    // RankedInfoCard's fixed-width rows that a narrower surface also trips —
-    // this test is only about the AppBar title.
-    tester.view.physicalSize = const Size(500, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'a long player name ellipsizes instead of overflowing the AppBar',
+    (tester) async {
+      // Width chosen deliberately: narrow enough that the unfixed AppBar
+      // overflows by 156px with this name (verified), but wide enough to stay
+      // clear of unrelated, pre-existing overflow in PlayerInfoCard/
+      // RankedInfoCard's fixed-width rows that a narrower surface also trips —
+      // this test is only about the AppBar title.
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final prefs = await _prefsWithProfile(name: 'Twitch.tv/ChaoticMuch');
+      final prefs = await _prefsWithProfile(name: 'Twitch.tv/ChaoticMuch');
 
-    await tester.pumpWidget(
-      _app(prefs, result: ApiResult<PlayerStats?>(buildStats())),
-    );
-    await tester.pump();
+      await tester.pumpWidget(
+        _app(prefs, result: ApiResult<PlayerStats?>(buildStats())),
+      );
+      await tester.pump();
 
-    expect(tester.takeException(), isNull);
+      expect(tester.takeException(), isNull);
 
-    final text = tester.widget<Text>(find.text('Twitch.tv/ChaoticMuch'));
-    expect(text.overflow, TextOverflow.ellipsis);
-    expect(text.maxLines, 1);
-  });
+      final text = tester.widget<Text>(find.text('Twitch.tv/ChaoticMuch'));
+      expect(text.overflow, TextOverflow.ellipsis);
+      expect(text.maxLines, 1);
+    },
+  );
 }

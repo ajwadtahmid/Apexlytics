@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart' show formatNumber;
-import '../../../constants/ranked_map_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
@@ -98,14 +98,17 @@ class _RankedRpChartState extends State<RankedRpChart> {
   }
 
   List<RankedMatch> _matchesForSelection(
-      List<RankedSession> sessions, int selected) {
+    List<RankedSession> sessions,
+    int selected,
+  ) {
     final chrono = widget.matches.where((m) => m.isRanked).toList()
       ..sort((a, b) => a.endTime.compareTo(b.endTime));
     if (selected < 0) return chrono;
     final s = sessions[selected];
     return chrono
-        .where((m) =>
-            !m.startTime.isBefore(s.start) && !m.endTime.isAfter(s.end))
+        .where(
+          (m) => !m.startTime.isBefore(s.start) && !m.endTime.isAfter(s.end),
+        )
         .toList();
   }
 
@@ -132,7 +135,7 @@ class _RankedRpChartState extends State<RankedRpChart> {
               final sign = m.rpChange >= 0 ? '+' : '';
               return LineTooltipItem(
                 '${formatNumber(m.cumulativeRp)} RP  ($sign${m.rpChange})\n'
-                '${m.legend} · ${rankedMapName(m.mapKey)}\n'
+                '${m.legend} · ${battleRoyaleMapName(m.mapKey)}\n'
                 '${DateFormat('MMM d, h:mm a').format(m.endTime.toLocal())}',
                 const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
               );

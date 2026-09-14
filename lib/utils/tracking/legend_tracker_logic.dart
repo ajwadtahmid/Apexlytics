@@ -28,7 +28,15 @@ const kTopWeaponCategories = 3;
 
 /// Returns up to [kTopWeaponCategories] weapon-category kill trackers, sorted by value descending.
 List<LegendTracker> findTopWeaponCategories(List<LegendTracker> trackers) {
-  const keywords = ['ar', 'smg', 'shotgun', 'lmg', 'sniper', 'marksman', 'pistol'];
+  const keywords = [
+    'ar',
+    'smg',
+    'shotgun',
+    'lmg',
+    'sniper',
+    'marksman',
+    'pistol',
+  ];
   final matches = <LegendTracker>[];
   for (final t in trackers) {
     final lower = t.displayName.toLowerCase();

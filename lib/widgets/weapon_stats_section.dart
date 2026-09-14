@@ -117,7 +117,10 @@ class _WeaponRow extends StatelessWidget {
         : null;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.md,
+        vertical: 10,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -150,10 +153,18 @@ class _WeaponRow extends StatelessWidget {
                   Row(
                     children: [
                       if (kills != null)
-                        StatDisplay(label: 'Kills', value: formatNumber(kills), compact: true),
+                        StatDisplay(
+                          label: 'Kills',
+                          value: formatNumber(kills),
+                          compact: true,
+                        ),
                       if (damage != null) ...[
                         const SizedBox(width: 5),
-                        StatDisplay(label: 'Damage', value: formatNumber(damage), compact: true),
+                        StatDisplay(
+                          label: 'Damage',
+                          value: formatNumber(damage),
+                          compact: true,
+                        ),
                       ],
                       if (damagePerKill != null) ...[
                         const SizedBox(width: 5),
@@ -175,4 +186,3 @@ class _WeaponRow extends StatelessWidget {
     );
   }
 }
-

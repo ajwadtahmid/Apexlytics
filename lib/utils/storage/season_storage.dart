@@ -26,15 +26,10 @@ Map<String, SeasonMeta> loadAllSeasonsSync(SharedPreferences prefs) =>
 /// Returns whether it actually wrote a new/changed entry, so callers can
 /// invalidate anything caching the season list (e.g. the ranked seasons
 /// provider).
-Future<bool> upsertSeason(
-  SeasonMeta season,
-  SharedPreferences prefs,
-) async {
+Future<bool> upsertSeason(SeasonMeta season, SharedPreferences prefs) async {
   final existing = loadAllSeasonsSync(prefs);
   final prev = existing[season.id];
-  if (prev != null &&
-      prev.start == season.start &&
-      prev.end == season.end) {
+  if (prev != null && prev.start == season.start && prev.end == season.end) {
     return false;
   }
   existing[season.id] = season;

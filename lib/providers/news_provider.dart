@@ -24,10 +24,10 @@ class NewsNotifier extends AsyncNotifier<ApiResult<List<NewsArticle>>> {
       final apiArticles = result.data
           .where((article) => !pinnedLinks.contains(article.link))
           .toList();
-      return ApiResult(
-        [..._pinnedNews, ...apiArticles],
-        staleAt: result.staleAt,
-      );
+      return ApiResult([
+        ..._pinnedNews,
+        ...apiArticles,
+      ], staleAt: result.staleAt);
     } catch (e, st) {
       log.w('news fetch failed', error: e, stackTrace: st);
       // If news API fails, return just the pinned news

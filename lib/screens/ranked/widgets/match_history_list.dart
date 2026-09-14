@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../../constants/ranked_map_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
     show formatNumber, timeAgo, formatDuration;
@@ -127,7 +127,9 @@ class _MatchHistoryListState extends State<MatchHistoryList> {
                           child: Text(
                             widget.emptyLabel,
                             style: const TextStyle(
-                                color: AppTheme.muted, fontSize: 13),
+                              color: AppTheme.muted,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ),
@@ -136,16 +138,22 @@ class _MatchHistoryListState extends State<MatchHistoryList> {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(
-                        AppTheme.md, AppTheme.sm, AppTheme.md, AppTheme.md),
+                      AppTheme.md,
+                      AppTheme.sm,
+                      AppTheme.md,
+                      AppTheme.md,
+                    ),
                     itemCount: items.length,
                     itemBuilder: (_, i) => switch (items[i]) {
                       final DayHeaderItem h => _DayHeader(item: h),
                       final GroupHeaderItem h => _GroupHeader(item: h),
-                      final SessionBreakItem s => _SessionBreak(gapSecs: s.gapSecs),
+                      final SessionBreakItem s => _SessionBreak(
+                        gapSecs: s.gapSecs,
+                      ),
                       final MatchItem m => _MatchRow(
-                          match: m.match,
-                          onMatchUpdated: widget.onMatchUpdated,
-                        ),
+                        match: m.match,
+                        onMatchUpdated: widget.onMatchUpdated,
+                      ),
                     },
                   ),
           ),
@@ -186,7 +194,9 @@ class _DayHeader extends StatelessWidget {
           ),
         Padding(
           padding: EdgeInsets.only(
-              top: item.isFirst ? AppTheme.sm : AppTheme.md, bottom: 6),
+            top: item.isFirst ? AppTheme.sm : AppTheme.md,
+            bottom: 6,
+          ),
           child: Row(
             children: [
               Text(
@@ -253,7 +263,9 @@ class _GroupHeader extends StatelessWidget {
           ),
         Padding(
           padding: EdgeInsets.only(
-              top: item.isFirst ? AppTheme.sm : AppTheme.md, bottom: 6),
+            top: item.isFirst ? AppTheme.sm : AppTheme.md,
+            bottom: 6,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -271,15 +283,17 @@ class _GroupHeader extends StatelessWidget {
                     ),
                     Text(
                       '${item.games} games · ${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(1)} avg',
-                      style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: AppTheme.sm),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
                 decoration: BoxDecoration(
                   color: color.withAlpha(30),
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
@@ -377,7 +391,7 @@ class _MatchRow extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${rankedMapName(match.mapKey)} · ${timeAgo(match.endTime)}',
+                    '${battleRoyaleMapName(match.mapKey)} · ${timeAgo(match.endTime)}',
                     style: const TextStyle(color: AppTheme.muted, fontSize: 12),
                   ),
                 ],
@@ -396,10 +410,14 @@ class _MatchRow extends StatelessWidget {
                       ],
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: rpColor.withAlpha(30),
-                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.radiusSm,
+                          ),
                         ),
                         child: Text(
                           '${up ? '+' : ''}${match.rpChange} RP',
@@ -436,8 +454,9 @@ class _MatchRow extends StatelessWidget {
       backgroundColor: AppTheme.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusLg),
+        ),
       ),
       builder: (_) => _MatchDetailSheet(match: m),
     );
@@ -591,9 +610,10 @@ class _MatchDetailSheet extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Ranked Points',
-                          style:
-                              TextStyle(color: AppTheme.muted, fontSize: 11)),
+                      const Text(
+                        'Ranked Points',
+                        style: TextStyle(color: AppTheme.muted, fontSize: 11),
+                      ),
                       Text(
                         formatNumber(match.cumulativeRp),
                         style: const TextStyle(
@@ -634,7 +654,7 @@ class _MatchDetailSheet extends StatelessWidget {
             ],
             // Meta line.
             Text(
-              '${rankedMapName(match.mapKey)} · ${_fmt.format(match.endTime.toLocal())}',
+              '${battleRoyaleMapName(match.mapKey)} · ${_fmt.format(match.endTime.toLocal())}',
               style: const TextStyle(color: AppTheme.muted, fontSize: 13),
             ),
             const SizedBox(height: 2),
@@ -661,7 +681,9 @@ class _MatchDetailSheet extends StatelessWidget {
                         child: Text(
                           t.name,
                           style: const TextStyle(
-                              color: AppTheme.muted, fontSize: 13),
+                            color: AppTheme.muted,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                       const SizedBox(width: AppTheme.sm),

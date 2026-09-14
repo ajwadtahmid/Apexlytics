@@ -626,10 +626,17 @@ void main() {
       );
     });
 
-    test('editing an unknown match is a no-op', () async {
+    test('editing an unknown match is a no-op and reports failure', () async {
       final store = await storeWithMatch(match('1', 100));
-      await store.editMatch('nope', {'kills': 1});
+      final saved = await store.editMatch('nope', {'kills': 1});
+      expect(saved, false);
       expect(await store.count('1'), 1);
+    });
+
+    test('editing a known match reports success', () async {
+      final m = match('1', 100);
+      final store = await storeWithMatch(m);
+      expect(await store.editMatch(m.dedupKey, {'kills': 9}), true);
     });
   });
 
@@ -986,6 +993,30 @@ void main() {
       final storm = await store.matchesForMap('1', 'storm_point_rotation');
       expect(storm.every((m) => m.mapKey == 'storm_point_rotation'), true);
       expect(storm.length, 1); // the pub (0 RP) is excluded
+    });
+
+    test('mapBreakdownsFor merges map-key spelling variants, and matchesForMap '
+        'resolves every variant behind the merged row', () async {
+      // 'edistrict' and 'edistrict_rotation' both name E-District (see
+      // kBattleRoyaleMaps) - grouping on the raw key would render two
+      // identically-labelled rows instead of one merged row, and a
+      // drill-down keyed to just one raw spelling would miss the matches
+      // recorded under the other.
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [
+        match('1', 0, mapKey: 'edistrict', rp: 20),
+        match('1', 700, mapKey: 'edistrict_rotation', rp: 30),
+      ]);
+
+      final maps = await store.mapBreakdownsFor('1');
+      expect(maps.length, 1);
+      expect(maps.single.displayName, 'E-District');
+      expect(maps.single.games, 2);
+      expect(maps.single.totalRp, 50);
+
+      final drillDown = await store.matchesForMap('1', maps.single.mapKey);
+      expect(drillDown.length, 2);
     });
 
     test(

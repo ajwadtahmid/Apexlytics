@@ -26,7 +26,8 @@ void main() {
           noCache: any(named: 'noCache'),
         ),
       ).thenAnswer(
-        (_) async => const ApiResult({'uid': '', 'name': 'Unknown', 'avatar': ''}),
+        (_) async =>
+            const ApiResult({'uid': '', 'name': 'Unknown', 'avatar': ''}),
       );
 
       expect(
@@ -49,8 +50,11 @@ void main() {
           noCache: any(named: 'noCache'),
         ),
       ).thenAnswer(
-        (_) async =>
-            const ApiResult({'uid': '12345', 'name': 'SomePlayer', 'avatar': ''}),
+        (_) async => const ApiResult({
+          'uid': '12345',
+          'name': 'SomePlayer',
+          'avatar': '',
+        }),
       );
 
       final result = await service.nameToUid('SomePlayer', 'PC');
@@ -58,31 +62,39 @@ void main() {
       expect(result.name, 'SomePlayer');
     });
 
-    test('passes player name and platform as query params', () async {
-      when(
-        () => mockApi.get(
-          '/nametouid',
-          params: any(named: 'params'),
-          noCache: any(named: 'noCache'),
-        ),
-      ).thenAnswer(
-        (_) async => const ApiResult({'uid': '99', 'name': 'x', 'avatar': ''}),
-      );
+    test(
+      'passes a lowercased player name and the platform as query params',
+      () async {
+        // Upstream name lookups are case-insensitive, so nameToUid normalizes
+        // casing the same way getPlayerStats/getCachedStats do - otherwise the
+        // two name-based lookup paths could send different strings for the
+        // same input.
+        when(
+          () => mockApi.get(
+            '/nametouid',
+            params: any(named: 'params'),
+            noCache: any(named: 'noCache'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              const ApiResult({'uid': '99', 'name': 'x', 'avatar': ''}),
+        );
 
-      await service.nameToUid('TestName', 'X1');
+        await service.nameToUid('TestName', 'X1');
 
-      final captured = verify(
-        () => mockApi.get(
-          '/nametouid',
-          params: captureAny(named: 'params'),
-          noCache: true,
-        ),
-      ).captured;
+        final captured = verify(
+          () => mockApi.get(
+            '/nametouid',
+            params: captureAny(named: 'params'),
+            noCache: true,
+          ),
+        ).captured;
 
-      final params = captured.single as Map<String, dynamic>;
-      expect(params['player'], 'TestName');
-      expect(params['platform'], 'X1');
-    });
+        final params = captured.single as Map<String, dynamic>;
+        expect(params['player'], 'testname');
+        expect(params['platform'], 'X1');
+      },
+    );
   });
 
   group('PlayerService.getPlayerStatsByUid', () {
@@ -124,10 +136,7 @@ void main() {
         ),
       ).thenThrow(Exception('Invalid response'));
 
-      expect(
-        () => service.getPlayerStatsByUid('42', 'PC'),
-        throwsException,
-      );
+      expect(() => service.getPlayerStatsByUid('42', 'PC'), throwsException);
     });
   });
 
@@ -149,10 +158,7 @@ void main() {
 
     test('returns PlayerStats when API succeeds', () async {
       when(
-        () => mockApi.get(
-          '/player',
-          params: any(named: 'params'),
-        ),
+        () => mockApi.get('/player', params: any(named: 'params')),
       ).thenAnswer((_) async => ApiResult(fakeStatsJson));
 
       final result = await service.getPlayerStats('Player2', 'PS4');
@@ -178,10 +184,7 @@ void main() {
 
     test('returns null when no cache exists', () {
       when(
-        () => mockApi.loadCached(
-          any(),
-          params: any(named: 'params'),
-        ),
+        () => mockApi.loadCached(any(), params: any(named: 'params')),
       ).thenReturn(null);
 
       final result = service.getCachedStats('Player', 'PC');
@@ -190,10 +193,7 @@ void main() {
 
     test('returns cached stats when available', () {
       when(
-        () => mockApi.loadCached(
-          '/player',
-          params: any(named: 'params'),
-        ),
+        () => mockApi.loadCached('/player', params: any(named: 'params')),
       ).thenReturn(ApiResult(fakeStatsJson));
 
       final result = service.getCachedStats('CachedPlayer', 'PC');
@@ -203,19 +203,13 @@ void main() {
 
     test('uses UID endpoint when searchByUid is true', () {
       when(
-        () => mockApi.loadCached(
-          '/player/uid',
-          params: any(named: 'params'),
-        ),
+        () => mockApi.loadCached('/player/uid', params: any(named: 'params')),
       ).thenReturn(ApiResult(fakeStatsJson));
 
       service.getCachedStats('111', 'PC', searchByUid: true);
 
       verify(
-        () => mockApi.loadCached(
-          '/player/uid',
-          params: any(named: 'params'),
-        ),
+        () => mockApi.loadCached('/player/uid', params: any(named: 'params')),
       ).called(1);
     });
   });

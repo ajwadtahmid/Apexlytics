@@ -36,11 +36,7 @@ LegendTracker buildTracker({
   String? displayName,
   int value = 100,
 }) {
-  return LegendTracker(
-    key: key,
-    displayName: displayName ?? key,
-    value: value,
-  );
+  return LegendTracker(key: key, displayName: displayName ?? key, value: value);
 }
 
 /// Builds a [LegendStat] for use in tests.
@@ -48,8 +44,5 @@ LegendStat buildLegend({
   String name = 'Wraith',
   List<LegendTracker>? trackers,
 }) {
-  return LegendStat(
-    name: name,
-    trackers: trackers ?? [buildTracker()],
-  );
+  return LegendStat(name: name, trackers: trackers ?? [buildTracker()]);
 }

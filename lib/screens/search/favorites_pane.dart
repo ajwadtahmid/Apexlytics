@@ -31,7 +31,10 @@ class FavoritesPane extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: AppTheme.muted)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.muted),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -80,9 +83,7 @@ class FavoritesPane extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
-          _FavoritesHeader(
-            onClear: () => _confirmClear(context, ref),
-          ),
+          _FavoritesHeader(onClear: () => _confirmClear(context, ref)),
           ...favorites.map(
             (r) => _FavoriteTile(playerRef: r, onTap: () => onPick(r)),
           ),
@@ -157,11 +158,9 @@ class _FavoriteTile extends ConsumerWidget {
     final byUid = playerRef.hasUid;
     final query = byUid ? playerRef.uid! : playerRef.query;
 
-    return service.getCachedStats(
-      query,
-      playerRef.platform,
-      searchByUid: byUid,
-    )?.data;
+    return service
+        .getCachedStats(query, playerRef.platform, searchByUid: byUid)
+        ?.data;
   }
 
   @override
@@ -245,7 +244,6 @@ class _FavoriteTile extends ConsumerWidget {
       onTap: onTap,
     );
   }
-
 }
 
 class _RankSubtitle extends StatelessWidget {
@@ -270,10 +268,7 @@ class _RankSubtitle extends StatelessWidget {
           style: const TextStyle(color: AppTheme.muted, fontSize: 12),
         ),
         const SizedBox(width: AppTheme.xs),
-        const Text(
-          '·',
-          style: TextStyle(color: AppTheme.muted, fontSize: 12),
-        ),
+        const Text('·', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
         const SizedBox(width: AppTheme.xs),
         SizedBox(
           width: 12,

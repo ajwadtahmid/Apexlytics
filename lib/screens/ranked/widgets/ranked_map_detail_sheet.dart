@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../constants/ranked_map_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
     show formatNumber, formatDuration, formatSigned;
@@ -24,9 +24,12 @@ Future<void> showMapDetailSheet(
     backgroundColor: AppTheme.surface,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppTheme.radiusLg),
+      ),
     ),
-    builder: (_) => _MapDetailSheet(map: map, matchesFor: matchesFor, onRefresh: onRefresh),
+    builder: (_) =>
+        _MapDetailSheet(map: map, matchesFor: matchesFor, onRefresh: onRefresh),
   );
 }
 
@@ -52,11 +55,15 @@ class _MapDetailSheet extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => RankedEntityHistoryScreen(
           title: map.displayName,
-          subtitle: '${map.games} ranked games · ${formatSigned(map.avgRpPerGame)} RP/game',
+          subtitle:
+              '${map.games} ranked games · ${formatSigned(map.avgRpPerGame)} RP/game',
           matches: games,
           onRefresh: onRefresh,
           groupLabel: 'legend',
-          grouping: MatchGrouping(keyOf: (m) => m.legend, nameOf: (m) => m.legend),
+          grouping: MatchGrouping(
+            keyOf: (m) => m.legend,
+            nameOf: (m) => m.legend,
+          ),
         ),
       ),
     );
@@ -64,7 +71,7 @@ class _MapDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final asset = rankedMapAsset(map.mapKey);
+    final asset = battleRoyaleMapAsset(map.mapKey);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.lg),
@@ -84,7 +91,8 @@ class _MapDetailSheet extends StatelessWidget {
                             asset,
                             fit: BoxFit.cover,
                             cacheWidth: 400,
-                            errorBuilder: (_, _, _) => Container(color: AppTheme.surface2),
+                            errorBuilder: (_, _, _) =>
+                                Container(color: AppTheme.surface2),
                           )
                         : Container(color: AppTheme.surface2),
                   ),
@@ -108,7 +116,9 @@ class _MapDetailSheet extends StatelessWidget {
                 StatDisplay(
                   label: 'Avg RP',
                   value: formatSigned(map.avgRpPerGame),
-                  valueColor: map.avgRpPerGame >= 0 ? AppTheme.green : AppTheme.red,
+                  valueColor: map.avgRpPerGame >= 0
+                      ? AppTheme.green
+                      : AppTheme.red,
                 ),
                 StatDisplay(
                   label: 'Total RP',
@@ -116,11 +126,26 @@ class _MapDetailSheet extends StatelessWidget {
                   valueColor: map.totalRp >= 0 ? AppTheme.green : AppTheme.red,
                 ),
                 WinLossStat(wins: map.wins, losses: map.losses),
-                StatDisplay(label: 'Total Kills', value: formatNumber(map.totalKills)),
-                StatDisplay(label: 'Avg Kills', value: map.avgKills.toStringAsFixed(1)),
-                StatDisplay(label: 'Total Dmg', value: formatNumber(map.totalDamage)),
-                StatDisplay(label: 'Avg Dmg', value: formatNumber(map.avgDamage.round())),
-                StatDisplay(label: 'Total Time', value: formatDuration(map.totalLengthSecs)),
+                StatDisplay(
+                  label: 'Total Kills',
+                  value: formatNumber(map.totalKills),
+                ),
+                StatDisplay(
+                  label: 'Avg Kills',
+                  value: map.avgKills.toStringAsFixed(1),
+                ),
+                StatDisplay(
+                  label: 'Total Dmg',
+                  value: formatNumber(map.totalDamage),
+                ),
+                StatDisplay(
+                  label: 'Avg Dmg',
+                  value: formatNumber(map.avgDamage.round()),
+                ),
+                StatDisplay(
+                  label: 'Total Time',
+                  value: formatDuration(map.totalLengthSecs),
+                ),
                 StatDisplay(
                   label: 'Avg Time',
                   value: formatDuration(map.avgLengthSecs.round()),

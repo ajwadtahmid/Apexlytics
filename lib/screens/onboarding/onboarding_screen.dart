@@ -144,7 +144,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       duration: AppTheme.shortAnimation,
                       child: IconButton(
                         onPressed: _isFirstPage ? null : _back,
-                        icon: const Icon(Icons.arrow_back, color: AppTheme.muted),
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: AppTheme.muted,
+                        ),
                       ),
                     ),
                   ),

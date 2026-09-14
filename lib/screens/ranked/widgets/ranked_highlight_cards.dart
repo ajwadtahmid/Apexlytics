@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../constants/ranked_map_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart' show formatNumber, formatSigned;
 import '../../../utils/ranked/ranked_aggregates.dart';
@@ -158,7 +158,8 @@ class _CompactLegend extends StatelessWidget {
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.sm + 2),
-      onTap: () => showLegendDetailSheet(context, breakdown, matchesFor, onRefresh),
+      onTap: () =>
+          showLegendDetailSheet(context, breakdown, matchesFor, onRefresh),
       child: Row(
         children: [
           ClipRRect(
@@ -228,7 +229,7 @@ class _MapHighlight extends StatelessWidget {
   Widget build(BuildContext context) {
     final positive = map.avgRpPerGame >= 0;
     final accent = positive ? AppTheme.green : AppTheme.red;
-    final asset = rankedMapAsset(map.mapKey);
+    final asset = battleRoyaleMapAsset(map.mapKey);
 
     return SurfaceCard(
       padding: EdgeInsets.zero,

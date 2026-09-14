@@ -32,7 +32,11 @@ class PredatorPage extends StatelessWidget {
             child: Text(
               predatorPageInfo,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.5),
+              style: TextStyle(
+                color: AppTheme.muted,
+                fontSize: 12,
+                height: 1.5,
+              ),
             ),
           ),
         ],
@@ -54,10 +58,26 @@ class PlatformCard extends StatelessWidget {
   });
 
   static Widget _icon(String platformKey) => switch (platformKey) {
-    'PS4' => const FaIcon(FontAwesomeIcons.playstation, color: AppTheme.blue, size: 16),
-    'X1'  => const FaIcon(FontAwesomeIcons.xbox, color: AppTheme.green, size: 16),
-    'SWITCH' => const FaIcon(FontAwesomeIcons.gamepad, color: AppTheme.red, size: 16),
-    _ => const FaIcon(FontAwesomeIcons.desktop, color: AppTheme.muted, size: 16),
+    'PS4' => const FaIcon(
+      FontAwesomeIcons.playstation,
+      color: AppTheme.blue,
+      size: 16,
+    ),
+    'X1' => const FaIcon(
+      FontAwesomeIcons.xbox,
+      color: AppTheme.green,
+      size: 16,
+    ),
+    'SWITCH' => const FaIcon(
+      FontAwesomeIcons.gamepad,
+      color: AppTheme.red,
+      size: 16,
+    ),
+    _ => const FaIcon(
+      FontAwesomeIcons.desktop,
+      color: AppTheme.muted,
+      size: 16,
+    ),
   };
 
   @override

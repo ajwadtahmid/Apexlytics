@@ -29,15 +29,28 @@ android {
 
     signingConfigs {
         create("release") {
-            val keyProps = Properties()
             val keyPropsFile = rootProject.file("key.properties")
-            if (keyPropsFile.exists()) {
-                keyProps.load(FileInputStream(keyPropsFile))
+            // Only fail release builds — debug builds (and any other task)
+            // configure this block too, so gating on the task graph avoids
+            // breaking `flutter run` on a machine with no signing set up.
+            val buildingRelease = gradle.startParameter.taskNames.any {
+                it.contains("Release", ignoreCase = true)
             }
-            storeFile = keyProps.getProperty("storeFile")?.let { path -> file(path) }
-            storePassword = keyProps.getProperty("storePassword")
-            keyAlias = keyProps.getProperty("keyAlias")
-            keyPassword = keyProps.getProperty("keyPassword")
+            if (!keyPropsFile.exists()) {
+                if (buildingRelease) {
+                    throw GradleException(
+                        "android/key.properties is missing — a release build would be " +
+                            "unsigned. See the release runbook, or build a debug variant instead."
+                    )
+                }
+            } else {
+                val keyProps = Properties()
+                keyProps.load(FileInputStream(keyPropsFile))
+                storeFile = keyProps.getProperty("storeFile")?.let { path -> file(path) }
+                storePassword = keyProps.getProperty("storePassword")
+                keyAlias = keyProps.getProperty("keyAlias")
+                keyPassword = keyProps.getProperty("keyPassword")
+            }
         }
     }
 

@@ -21,23 +21,25 @@ class MapNotificationService {
       // alert be named, not just the next one. Falls back to generic copy if the
       // sequence hasn't loaded yet.
       final seasonal = ref.read(seasonalMapsProvider).asData?.value;
-      unawaited(NotificationService.scheduleAll(
-        data,
-        notifyRanked: s.notifyRankedMapRotation,
-        rankedMinutesBefore: s.rankedNotifyMinutesBefore,
-        notifyPubs: s.notifyPubsMapRotation,
-        pubsMinutesBefore: s.pubsNotifyMinutesBefore,
-        notifyMixtape: s.notifyMixtapeMapRotation,
-        mixtapeMinutesBefore: s.mixtapeNotifyMinutesBefore,
-        notifyWildcard: s.notifyWildcardMapRotation,
-        wildcardMinutesBefore: s.wildcardNotifyMinutesBefore,
-        favoriteRankedMapNames: s.favoriteRankedMapNames,
-        favoritePubsMapNames: s.favoritePubsMapNames,
-        rankedSequence: seasonal?.rankedNames ?? const [],
-        pubsSequence: seasonal?.pubsNames ?? const [],
-      ).catchError((Object e) {
-        log.e('Notification scheduling failed', error: e);
-      }));
+      unawaited(
+        NotificationService.scheduleAll(
+          data,
+          notifyRanked: s.notifyRankedMapRotation,
+          rankedMinutesBefore: s.rankedNotifyMinutesBefore,
+          notifyPubs: s.notifyPubsMapRotation,
+          pubsMinutesBefore: s.pubsNotifyMinutesBefore,
+          notifyMixtape: s.notifyMixtapeMapRotation,
+          mixtapeMinutesBefore: s.mixtapeNotifyMinutesBefore,
+          notifyWildcard: s.notifyWildcardMapRotation,
+          wildcardMinutesBefore: s.wildcardNotifyMinutesBefore,
+          favoriteRankedMapNames: s.favoriteRankedMapNames,
+          favoritePubsMapNames: s.favoritePubsMapNames,
+          rankedSequence: seasonal?.rankedNames ?? const [],
+          pubsSequence: seasonal?.pubsNames ?? const [],
+        ).catchError((Object e) {
+          log.e('Notification scheduling failed', error: e);
+        }),
+      );
     } else {
       unawaited(NotificationService.cancelAll());
     }

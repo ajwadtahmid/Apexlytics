@@ -89,7 +89,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           wildcardMinutes: n.wildcardNotifyMinutesBefore,
         ),
       );
-      if (ref.read(mapRotationProvider) case AsyncData<ApiResult<MapRotation>>(:final value)) {
+      if (ref.read(mapRotationProvider) case AsyncData<ApiResult<MapRotation>>(
+        :final value,
+      )) {
         MapNotificationService.schedule(ref, value.data);
       }
     });
@@ -151,7 +153,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final playerName = ref.watch(
-      playerSettingsProvider.select((s) => s.name.isNotEmpty ? s.name : 'Guest'),
+      playerSettingsProvider.select(
+        (s) => s.name.isNotEmpty ? s.name : 'Guest',
+      ),
     );
     final mapAsync = ref.watch(mapRotationProvider);
     final serverAsync = ref.watch(serverStatusProvider);
@@ -169,16 +173,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             await Future.wait([
               ref
                   .read(mapRotationProvider.future)
-                  .then((_) {}, onError: (e) => log.w('Map refresh failed', error: e)),
+                  .then(
+                    (_) {},
+                    onError: (e) => log.w('Map refresh failed', error: e),
+                  ),
               ref
                   .read(serverStatusProvider.future)
-                  .then((_) {}, onError: (e) => log.w('Server refresh failed', error: e)),
+                  .then(
+                    (_) {},
+                    onError: (e) => log.w('Server refresh failed', error: e),
+                  ),
               ref
                   .read(newsProvider.future)
-                  .then((_) {}, onError: (e) => log.w('News refresh failed', error: e)),
+                  .then(
+                    (_) {},
+                    onError: (e) => log.w('News refresh failed', error: e),
+                  ),
               ref
                   .read(predatorProvider.future)
-                  .then((_) {}, onError: (e) => log.w('Predator refresh failed', error: e)),
+                  .then(
+                    (_) {},
+                    onError: (e) => log.w('Predator refresh failed', error: e),
+                  ),
             ]);
           },
           child: ListView(
@@ -228,7 +244,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                     title: 'Latest News',
                     subtitle: newsSubtitle,
-                    onTap: () => context.pushPage(NewsPage(articles: result.data)),
+                    onTap: () =>
+                        context.pushPage(NewsPage(articles: result.data)),
                   );
                 },
                 loading: () => const SummaryTileSkeleton(),
@@ -244,7 +261,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               serverAsync.when(
                 data: (result) => ServerSummaryCard(
                   status: result.data,
-                  onTap: () => context.pushPage(ServerStatusPage(status: result.data)),
+                  onTap: () =>
+                      context.pushPage(ServerStatusPage(status: result.data)),
                 ),
                 loading: () => const SummaryTileSkeleton(),
                 error: (e, _) => ErrorCard(

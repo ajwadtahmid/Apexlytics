@@ -54,18 +54,21 @@ void main() {
       expect(result, RankedSyncOutcome.cooldown);
     });
 
-    test('falls back to cooldown when the stored name is unrecognised', () async {
-      final container = await makeContainer({
-        PrefsKeys.gamesNextSync(uid): DateTime.now()
-            .add(const Duration(hours: 1))
-            .millisecondsSinceEpoch,
-        PrefsKeys.gamesLastOutcome(uid): 'someRemovedOutcome',
-      });
-      addTearDown(container.dispose);
+    test(
+      'falls back to cooldown when the stored name is unrecognised',
+      () async {
+        final container = await makeContainer({
+          PrefsKeys.gamesNextSync(uid): DateTime.now()
+              .add(const Duration(hours: 1))
+              .millisecondsSinceEpoch,
+          PrefsKeys.gamesLastOutcome(uid): 'someRemovedOutcome',
+        });
+        addTearDown(container.dispose);
 
-      final result = await container.read(rankedSyncProvider(uid).future);
+        final result = await container.read(rankedSyncProvider(uid).future);
 
-      expect(result, RankedSyncOutcome.cooldown);
-    });
+        expect(result, RankedSyncOutcome.cooldown);
+      },
+    );
   });
 }

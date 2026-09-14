@@ -21,11 +21,11 @@ extension LegendRoleLabel on LegendRole {
   };
 
   Color get color => switch (this) {
-    LegendRole.assault => const Color(0xFFEF5350),    // red
+    LegendRole.assault => const Color(0xFFEF5350), // red
     LegendRole.controller => const Color(0xFF66BB6A), // green
-    LegendRole.recon => const Color(0xFFAB47BC),      // purple
+    LegendRole.recon => const Color(0xFFAB47BC), // purple
     LegendRole.skirmisher => const Color(0xFFFFCA28), // yellow
-    LegendRole.support => const Color(0xFF42A5F5),    // blue
+    LegendRole.support => const Color(0xFF42A5F5), // blue
   };
 }
 

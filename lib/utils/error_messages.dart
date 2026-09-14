@@ -13,11 +13,10 @@ String friendlyError(Object? error) {
   if (error is AppException) return error.message;
   if (error is DioException) {
     return switch (error.type) {
-      DioExceptionType.connectionTimeout ||
-      DioExceptionType.receiveTimeout =>
-          'Request timed out. The server may be waking up — try again in a moment.',
+      DioExceptionType.connectionTimeout || DioExceptionType.receiveTimeout =>
+        'Request timed out. The server may be waking up — try again in a moment.',
       DioExceptionType.connectionError =>
-          'No connection. Check your internet and try again.',
+        'No connection. Check your internet and try again.',
       _ => switch (error.response?.statusCode) {
         400 => 'Bad request. Try again in a few minutes.',
         401 => 'Unauthorized. Check your proxy configuration.',

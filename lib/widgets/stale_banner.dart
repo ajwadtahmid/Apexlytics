@@ -19,11 +19,7 @@ class StaleBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.history,
-            size: 14,
-            color: AppTheme.orange,
-          ),
+          const Icon(Icons.history, size: 14, color: AppTheme.orange),
           const SizedBox(width: 6),
           Text(
             'Last synced ${timeAgo(staleAt)}',

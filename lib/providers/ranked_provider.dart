@@ -10,6 +10,7 @@ import '../utils/ranked/ranked_period.dart';
 import '../utils/storage/ranked_history_store.dart';
 import '../utils/storage/season_storage.dart';
 import 'api_provider.dart';
+import 'player_provider.dart';
 import 'settings_provider.dart';
 
 /// App-lifetime handle to the local ranked-history database.
@@ -350,3 +351,29 @@ final rankedSplitDetailProvider = FutureProvider.autoDispose
         ),
       );
     });
+
+/// Every provider whose value is derived from the local ranked store or the
+/// active profile. Any destructive or restorative data action (clear all,
+/// import backup) must invalidate all of them — add new derived providers
+/// here, not at the call site.
+///
+/// Defined once, next to the providers it names, for the same reason
+/// [PlayerSettingsNotifier.clearAll]'s survivors allowlist is defined next to
+/// the keys it sweeps: a list maintained three files away from what it
+/// describes rots the moment a provider is added and this isn't updated. The
+/// `autoDispose` split/lifetime providers stay subscribed (and so keep
+/// serving stale data) as long as the Stats tab's `IndexedStack` entry is
+/// mounted, which a Settings-screen visit alone doesn't tear down.
+void invalidatePlayerDerivedProviders(WidgetRef ref) {
+  ref.invalidate(rankedSyncProvider);
+  ref.invalidate(rankedSplitsProvider);
+  ref.invalidate(rankedSplitMatchesProvider);
+  ref.invalidate(rankedSplitViewProvider);
+  ref.invalidate(rankedLifetimeAggregatesProvider);
+  ref.invalidate(rankedPersonalBestProvider);
+  ref.invalidate(rankedSplitDetailProvider);
+  ref.invalidate(weeklyNetRpProvider);
+  ref.invalidate(gamesEligibilityProvider);
+  ref.invalidate(rankedSeasonsProvider);
+  ref.invalidate(myPlayerStatsProvider);
+}

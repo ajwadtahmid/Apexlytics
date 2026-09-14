@@ -49,8 +49,10 @@ class PlayerStats {
 
   factory PlayerStats.fromJson(Map<String, dynamic> json) {
     final global = (json['global'] as Map?)?.cast<String, dynamic>() ?? {};
-    final legendsBlock = (json['legends'] as Map?)?.cast<String, dynamic>() ?? {};
-    final selected = (legendsBlock['selected'] as Map?)?.cast<String, dynamic>() ?? {};
+    final legendsBlock =
+        (json['legends'] as Map?)?.cast<String, dynamic>() ?? {};
+    final selected =
+        (legendsBlock['selected'] as Map?)?.cast<String, dynamic>() ?? {};
     final realtime = (json['realtime'] as Map?)?.cast<String, dynamic>() ?? {};
     final rankMap = (global['rank'] as Map?)?.cast<String, dynamic>();
 
@@ -67,7 +69,8 @@ class PlayerStats {
       isInGame: _parseBool(realtime['isInGame']),
       trackers: _parseTrackers(selected['data'] as List? ?? []),
       legendStats: _parseLegendStats(
-          (legendsBlock['all'] as Map?)?.cast<String, dynamic>() ?? {}),
+        (legendsBlock['all'] as Map?)?.cast<String, dynamic>() ?? {},
+      ),
       rankedSeason: _parseRankedSeason(rankMap),
     );
   }
@@ -81,10 +84,12 @@ class PlayerStats {
         log.w(msg);
         continue;
       }
-      trackers.add(EquippedTracker(
-        name: stat['name'] as String? ?? '',
-        value: _parseInt(stat['value']),
-      ));
+      trackers.add(
+        EquippedTracker(
+          name: stat['name'] as String? ?? '',
+          value: _parseInt(stat['value']),
+        ),
+      );
     }
     return trackers;
   }
@@ -99,11 +104,13 @@ class PlayerStats {
         if (stat is! Map) continue;
         final key = stat['key'] as String? ?? '';
         if (key.isEmpty) continue;
-        trackers.add(LegendTracker(
-          key: key,
-          displayName: stat['name'] as String? ?? key,
-          value: _parseInt(stat['value']),
-        ));
+        trackers.add(
+          LegendTracker(
+            key: key,
+            displayName: stat['name'] as String? ?? key,
+            value: _parseInt(stat['value']),
+          ),
+        );
       }
       if (trackers.isNotEmpty) {
         legendStats.add(LegendStat(name: legendName, trackers: trackers));
@@ -114,14 +121,17 @@ class PlayerStats {
 
   static SeasonMeta? _parseRankedSeason(Map<String, dynamic>? rankMap) {
     final seasonId = rankMap?['rankedSeason'] as String?;
-    final seasonMetaRaw =
-        (rankMap?['rankedSeasonMeta'] as Map?)?.cast<String, dynamic>();
+    final seasonMetaRaw = (rankMap?['rankedSeasonMeta'] as Map?)
+        ?.cast<String, dynamic>();
     if (seasonId == null || seasonMetaRaw == null) return null;
     final startTs = (seasonMetaRaw['start'] as num?)?.toInt();
     final endTs = (seasonMetaRaw['end'] as num?)?.toInt();
     if (startTs == null || endTs == null) return null;
     return SeasonMeta.fromApi(
-        id: seasonId, startSeconds: startTs, endSeconds: endTs);
+      id: seasonId,
+      startSeconds: startTs,
+      endSeconds: endTs,
+    );
   }
 
   @override
@@ -143,19 +153,19 @@ class PlayerStats {
 
   @override
   int get hashCode => Object.hash(
-        uid,
-        platform,
-        name,
-        level,
-        rank,
-        rankScore,
-        currentLegend,
-        isOnline,
-        isInGame,
-        rankedSeason,
-        Object.hashAll(trackers),
-        Object.hashAll(legendStats),
-      );
+    uid,
+    platform,
+    name,
+    level,
+    rank,
+    rankScore,
+    currentLegend,
+    isOnline,
+    isInGame,
+    rankedSeason,
+    Object.hashAll(trackers),
+    Object.hashAll(legendStats),
+  );
 }
 
 class EquippedTracker {
@@ -284,4 +294,3 @@ class LegendStat {
         : null,
   );
 }
-

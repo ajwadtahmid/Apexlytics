@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../constants/ranked_map_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/theme.dart';
 import 'match_history_items.dart';
@@ -30,22 +30,22 @@ class _RankedMatchListState extends State<RankedMatchList> {
   _HistorySort _sort = _HistorySort.date;
 
   List<RankedMatch> get _visible => switch (_filter) {
-        _Filter.all => widget.matches,
-        _Filter.ranked => widget.matches.where((m) => m.isRanked).toList(),
-        _Filter.casual => widget.matches.where((m) => !m.isRanked).toList(),
-      };
+    _Filter.all => widget.matches,
+    _Filter.ranked => widget.matches.where((m) => m.isRanked).toList(),
+    _Filter.casual => widget.matches.where((m) => !m.isRanked).toList(),
+  };
 
   MatchGrouping? get _grouping => switch (_sort) {
-        _HistorySort.date => null,
-        _HistorySort.legend => MatchGrouping(
-            keyOf: (m) => m.legend,
-            nameOf: (m) => m.legend,
-          ),
-        _HistorySort.map => MatchGrouping(
-            keyOf: (m) => m.mapKey,
-            nameOf: (m) => rankedMapName(m.mapKey),
-          ),
-      };
+    _HistorySort.date => null,
+    _HistorySort.legend => MatchGrouping(
+      keyOf: (m) => m.legend,
+      nameOf: (m) => m.legend,
+    ),
+    _HistorySort.map => MatchGrouping(
+      keyOf: (m) => m.mapKey,
+      nameOf: (m) => battleRoyaleMapName(m.mapKey),
+    ),
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +124,11 @@ class _HistoryControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(
-          AppTheme.md, AppTheme.sm, AppTheme.md, AppTheme.sm),
+        AppTheme.md,
+        AppTheme.sm,
+        AppTheme.md,
+        AppTheme.sm,
+      ),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppTheme.surface2)),
       ),
@@ -168,7 +172,10 @@ class _ControlPill extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(prefix, style: const TextStyle(color: AppTheme.muted, fontSize: 12)),
+        Text(
+          prefix,
+          style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+        ),
         const SizedBox(width: 4),
         GestureDetector(
           onTap: onTap,

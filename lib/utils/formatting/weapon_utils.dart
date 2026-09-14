@@ -18,8 +18,8 @@ Weapon? findWeaponFromTracker(String displayName) {
       if (cLower.length <= bestLen) continue;
       if (!lower.startsWith(cLower)) continue;
       final nextIdx = cLower.length;
-      final atBoundary = nextIdx >= lower.length ||
-          !_reAlphanumeric.hasMatch(lower[nextIdx]);
+      final atBoundary =
+          nextIdx >= lower.length || !_reAlphanumeric.hasMatch(lower[nextIdx]);
       if (!atBoundary) continue;
       // Longest match ensures "R-301 Carbine" is preferred over "R-99" when
       // matching tracker names like "R-301 Carbine Kills".

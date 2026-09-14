@@ -24,10 +24,12 @@ class RankInfo {
     }
     final idx = rankIndex(s.rankScore);
     final division = kRankLadder[idx];
-    final String? nextLabel =
-        idx < kRankLadder.length - 1 ? kRankLadder[idx + 1].label : null;
-    final int? rpToNext =
-        idx < kRankLadder.length - 1 ? kRankLadder[idx + 1].rp - s.rankScore : null;
+    final String? nextLabel = idx < kRankLadder.length - 1
+        ? kRankLadder[idx + 1].label
+        : null;
+    final int? rpToNext = idx < kRankLadder.length - 1
+        ? kRankLadder[idx + 1].rp - s.rankScore
+        : null;
     return RankInfo(
       label: division.label,
       color: division.color,

@@ -18,7 +18,11 @@ void main() {
     });
 
     test('deduplicates case-insensitively, keeping highest value', () {
-      final trackers = [_t('BR Kills', 500), _t('BR Kills', 1200), _t('BR Kills', 800)];
+      final trackers = [
+        _t('BR Kills', 500),
+        _t('BR Kills', 1200),
+        _t('BR Kills', 800),
+      ];
       final result = deduplicateTrackers(trackers);
       expect(result.length, 1);
       expect(result.first.value, 1200);

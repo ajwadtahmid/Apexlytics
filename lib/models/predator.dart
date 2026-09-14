@@ -34,9 +34,7 @@ class PlatformPredator {
       minRp: (json['val'] as num?)?.toInt() ?? 0,
       totalMastersAndPreds:
           (json['totalMastersAndPreds'] as num?)?.toInt() ?? 0,
-      updatedAt: ts > 0
-          ? DateTime.fromMillisecondsSinceEpoch(ts * 1000)
-          : null,
+      updatedAt: ts > 0 ? DateTime.fromMillisecondsSinceEpoch(ts * 1000) : null,
     );
   }
 }

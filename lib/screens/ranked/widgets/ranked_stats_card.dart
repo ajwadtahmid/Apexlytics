@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../utils/formatting/format.dart' show formatDuration, formatNumber;
+import '../../../utils/formatting/format.dart'
+    show formatDuration, formatNumber;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/stat_display.dart';
@@ -44,16 +45,23 @@ class RankedStatsCard extends StatelessWidget {
               StatDisplay(label: 'Games', value: '${s.games}'),
               WinLossStat(wins: s.wins, losses: s.losses),
               StatDisplay(
-                  label: 'Avg Kills', value: s.avgKills.toStringAsFixed(1)),
+                label: 'Avg Kills',
+                value: s.avgKills.toStringAsFixed(1),
+              ),
               StatDisplay(label: 'Kills', value: formatNumber(s.totalKills)),
               StatDisplay(
-                  label: 'Avg Dmg', value: formatNumber(s.avgDamage.round())),
+                label: 'Avg Dmg',
+                value: formatNumber(s.avgDamage.round()),
+              ),
               StatDisplay(label: 'Dmg', value: formatNumber(s.totalDamage)),
               StatDisplay(
-                  label: 'Avg Time',
-                  value: formatDuration(s.avgGameLengthSecs.round())),
+                label: 'Avg Time',
+                value: formatDuration(s.avgGameLengthSecs.round()),
+              ),
               StatDisplay(
-                  label: 'Time', value: formatDuration(s.totalLengthSecs)),
+                label: 'Time',
+                value: formatDuration(s.totalLengthSecs),
+              ),
             ],
           ),
         ],

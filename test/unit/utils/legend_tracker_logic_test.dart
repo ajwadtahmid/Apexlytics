@@ -60,10 +60,7 @@ void main() {
     });
 
     test('does not include non-kill weapon trackers', () {
-      final trackers = [
-        cat('SMG Damage', 10000),
-        cat('Sniper Kills', 50),
-      ];
+      final trackers = [cat('SMG Damage', 10000), cat('Sniper Kills', 50)];
       final result = findTopWeaponCategories(trackers);
       expect(result.length, 1);
       expect(result.first.displayName, 'Sniper Kills');

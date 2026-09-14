@@ -13,7 +13,9 @@ class GeneralSettingsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isPlayerSet = ref.watch(playerSettingsProvider.select((s) => s.isPlayerSet));
+    final isPlayerSet = ref.watch(
+      playerSettingsProvider.select((s) => s.isPlayerSet),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -22,9 +24,15 @@ class GeneralSettingsSection extends ConsumerWidget {
         SettingsCard(
           child: isPlayerSet
               ? _PlayerInfoContent(
-                  onChangeTap: () => ref.read(currentTabProvider.notifier).setTab(AppTab.stats),
+                  onChangeTap: () => ref
+                      .read(currentTabProvider.notifier)
+                      .setTab(AppTab.stats),
                 )
-              : _NoPlayerContent(onTap: () => ref.read(currentTabProvider.notifier).setTab(AppTab.stats)),
+              : _NoPlayerContent(
+                  onTap: () => ref
+                      .read(currentTabProvider.notifier)
+                      .setTab(AppTab.stats),
+                ),
         ),
       ],
     );
@@ -38,7 +46,9 @@ class _PlayerInfoContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final name = ref.watch(playerSettingsProvider.select((s) => s.name));
-    final platform = ref.watch(playerSettingsProvider.select((s) => s.platform));
+    final platform = ref.watch(
+      playerSettingsProvider.select((s) => s.platform),
+    );
     final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
 
     return Column(
@@ -49,7 +59,11 @@ class _PlayerInfoContent extends ConsumerWidget {
           onTap: onChangeTap,
           child: Row(
             children: [
-              const Icon(Icons.person_outline, color: AppTheme.accent, size: 20),
+              const Icon(
+                Icons.person_outline,
+                color: AppTheme.accent,
+                size: 20,
+              ),
               const SizedBox(width: AppTheme.sm),
               Expanded(
                 child: Column(
@@ -57,11 +71,17 @@ class _PlayerInfoContent extends ConsumerWidget {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                     Text(
                       ApiConstants.labelFor(platform),
-                      style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -84,7 +104,10 @@ class _PlayerInfoContent extends ConsumerWidget {
           },
           child: Row(
             children: [
-              const Text('UID', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+              const Text(
+                'UID',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
               const SizedBox(width: AppTheme.sm),
               Expanded(
                 child: Text(
@@ -120,9 +143,15 @@ class _NoPlayerContent extends StatelessWidget {
           Icon(Icons.person_outline, color: AppTheme.textPrimary, size: 20),
           SizedBox(width: AppTheme.sm),
           Expanded(
-            child: Text('No player set up', style: TextStyle(color: AppTheme.textPrimary)),
+            child: Text(
+              'No player set up',
+              style: TextStyle(color: AppTheme.textPrimary),
+            ),
           ),
-          Text('Go to My Stats', style: TextStyle(color: AppTheme.accent, fontSize: 13)),
+          Text(
+            'Go to My Stats',
+            style: TextStyle(color: AppTheme.accent, fontSize: 13),
+          ),
           SizedBox(width: AppTheme.xs),
           Icon(Icons.arrow_forward, color: AppTheme.accent, size: 18),
         ],

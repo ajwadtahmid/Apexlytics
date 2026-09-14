@@ -8,7 +8,6 @@ import '../app_logger.dart';
 /// Included in backups to preserve legend statistics across app reinstalls.
 const String legendStatsKeyPrefix = '${PrefsKeys.legendStats}_';
 
-
 List<LegendStat> _parseLegendStats(String? raw) {
   try {
     final list = jsonDecode(raw ?? '[]') as List;
@@ -22,10 +21,7 @@ List<LegendStat> _parseLegendStats(String? raw) {
   }
 }
 
-List<LegendStat> loadLegendStats(
-  SharedPreferences prefs, {
-  String? uid,
-}) {
+List<LegendStat> loadLegendStats(SharedPreferences prefs, {String? uid}) {
   return _parseLegendStats(prefs.getString(PrefsKeys.legendStatsKeyFor(uid)));
 }
 
@@ -44,7 +40,6 @@ Future<List<LegendStat>> mergeLegendStats(
 
   if (incoming.isEmpty) return stored;
 
-
   final now = DateTime.now();
   final map = <String, LegendStat>{
     for (final legendStat in stored) legendStat.name: legendStat,
@@ -54,7 +49,8 @@ Future<List<LegendStat>> mergeLegendStats(
     final merged = existing != null ? existing.merge(legend) : legend;
 
     // Only bump lastUpdated when this is a new legend or tracker values changed.
-    final newTimestamp = (existing == null || _legendStatsChanged(existing, merged))
+    final newTimestamp =
+        (existing == null || _legendStatsChanged(existing, merged))
         ? now
         : existing.lastUpdated;
 

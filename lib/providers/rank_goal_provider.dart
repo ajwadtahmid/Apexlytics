@@ -8,8 +8,8 @@ import 'settings_provider.dart' show sharedPreferencesProvider;
 /// tracks the next division automatically).
 final rankGoalProvider =
     NotifierProvider.family<RankGoalNotifier, int?, String>(
-  RankGoalNotifier.new,
-);
+      RankGoalNotifier.new,
+    );
 
 class RankGoalNotifier extends Notifier<int?> {
   RankGoalNotifier(this.uid);

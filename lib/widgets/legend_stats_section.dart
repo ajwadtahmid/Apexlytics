@@ -33,7 +33,9 @@ class LegendStatsSection extends StatelessWidget {
                     // Skip Career/Global tracker if it only has weapon trackers
                     if (legend.name.toLowerCase() == 'global') {
                       final nonWeaponTrackers = legend.trackers
-                          .where((t) => findWeaponFromTracker(t.displayName) == null)
+                          .where(
+                            (t) => findWeaponFromTracker(t.displayName) == null,
+                          )
                           .toList();
                       return nonWeaponTrackers.isNotEmpty;
                     }
@@ -43,55 +45,56 @@ class LegendStatsSection extends StatelessWidget {
                   .map((record) {
                     final (index, legend) = record;
                     final isLast = index == legends.length - 1;
-                return Column(
-                  key: ValueKey(legend.name),
-                  children: [
-                    InkWell(
-                      onTap: () => _openDetail(context, legend),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppTheme.md,
-                          vertical: 11,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                legendDisplayName(legend.name),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 14,
+                    return Column(
+                      key: ValueKey(legend.name),
+                      children: [
+                        InkWell(
+                          onTap: () => _openDetail(context, legend),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppTheme.md,
+                              vertical: 11,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    legendDisplayName(legend.name),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                Text(
+                                  legend.killCount > 0
+                                      ? '${formatNumber(legend.killCount)} kills'
+                                      : 'No kills',
+                                  style: const TextStyle(
+                                    color: AppTheme.muted,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  size: 16,
+                                  color: AppTheme.muted,
+                                ),
+                              ],
                             ),
-                            Text(
-                              legend.killCount > 0
-                                  ? '${formatNumber(legend.killCount)} kills'
-                                  : 'No kills',
-                              style: const TextStyle(
-                                color: AppTheme.muted,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.chevron_right,
-                              size: 16,
-                              color: AppTheme.muted,
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    if (!isLast)
-                      const Divider(
-                        color: AppTheme.surface2,
-                        height: 1,
-                        indent: 16,
-                      ),
-                  ],
-                );
-              }).toList(),
+                        if (!isLast)
+                          const Divider(
+                            color: AppTheme.surface2,
+                            height: 1,
+                            indent: 16,
+                          ),
+                      ],
+                    );
+                  })
+                  .toList(),
             ),
           )
         else
@@ -100,7 +103,9 @@ class LegendStatsSection extends StatelessWidget {
                 // Skip Career/Global tracker if it only has weapon trackers
                 if (legend.name.toLowerCase() == 'global') {
                   final nonWeaponTrackers = legend.trackers
-                      .where((t) => findWeaponFromTracker(t.displayName) == null)
+                      .where(
+                        (t) => findWeaponFromTracker(t.displayName) == null,
+                      )
                       .toList();
                   return nonWeaponTrackers.isNotEmpty;
                 }
@@ -214,13 +219,15 @@ class _LegendCard extends StatelessWidget {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: trackers
-                            .map((t) => Container(
-                                  margin: const EdgeInsets.only(right: 8),
-                                  child: StatDisplay(
-                                    label: t.displayName,
-                                    value: formatNumber(t.value),
-                                  ),
-                                ))
+                            .map(
+                              (t) => Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                child: StatDisplay(
+                                  label: t.displayName,
+                                  value: formatNumber(t.value),
+                                ),
+                              ),
+                            )
                             .toList(),
                       ),
                     ),
@@ -234,5 +241,3 @@ class _LegendCard extends StatelessWidget {
     );
   }
 }
-
-

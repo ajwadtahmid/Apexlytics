@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../constants/api_constants.dart';
 import '../utils/theme.dart';
 
 /// Apply to a [TextField.inputFormatters] whenever UID search mode is active,
@@ -29,7 +30,7 @@ class UidSearchToggle extends StatelessWidget {
 
   Future<void> _openLink() async {
     await launchUrl(
-      Uri.parse('https://apexlegendsstatus.com/profile/search/'),
+      Uri.parse(ApiConstants.alsProfileSearchUrl),
       mode: LaunchMode.externalApplication,
     );
   }

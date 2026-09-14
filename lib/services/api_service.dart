@@ -80,7 +80,9 @@ class ApiService {
     // Defensive fallback: wrap non-map responses (e.g. scalars, lists) so the
     // caller always receives a Map<String, dynamic>. The wrapped value is in '_raw'.
     normalizer: (d) {
-      if (d is Map && d.containsKey('error')) throw AppException(d['error']);
+      if (d is Map && d.containsKey('error')) {
+        throw AppException(d['error'].toString());
+      }
       return d is Map<String, dynamic> ? d : {'_raw': d};
     },
     cacheNormalizer: (d) => d as Map<String, dynamic>,
@@ -99,7 +101,9 @@ class ApiService {
     noCache: noCache,
     normalizer: (d) {
       if (d is List) return d;
-      if (d is Map && d.containsKey('error')) throw AppException(d['error']);
+      if (d is Map && d.containsKey('error')) {
+        throw AppException(d['error'].toString());
+      }
       return <dynamic>[];
     },
     cacheNormalizer: (d) => d as List<dynamic>,

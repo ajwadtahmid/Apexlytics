@@ -33,7 +33,11 @@ class RankedPickRateEntry extends StatelessWidget {
           padding: EdgeInsets.all(AppTheme.md),
           child: Row(
             children: [
-              Icon(Icons.bubble_chart_outlined, size: 18, color: AppTheme.accent),
+              Icon(
+                Icons.bubble_chart_outlined,
+                size: 18,
+                color: AppTheme.accent,
+              ),
               SizedBox(width: AppTheme.sm),
               Expanded(
                 child: Text(
@@ -130,7 +134,11 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
         title: const Text('Pick Rate'),
         actions: [
           IconButton(
-            icon: Icon(_tableView ? Icons.bubble_chart_outlined : Icons.table_rows_outlined),
+            icon: Icon(
+              _tableView
+                  ? Icons.bubble_chart_outlined
+                  : Icons.table_rows_outlined,
+            ),
             tooltip: _tableView ? 'Show chart' : 'Show table',
             onPressed: () => setState(() => _tableView = !_tableView),
           ),
@@ -148,8 +156,8 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
                 onShowAll: () => setState(() => _showAll = true),
               )
             : _tableView
-                ? _LegendStatsTable(pool: pool, totalGames: total)
-                : _buildBody(pool, total),
+            ? _LegendStatsTable(pool: pool, totalGames: total)
+            : _buildBody(pool, total),
       ),
     );
   }
@@ -160,7 +168,9 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
       backgroundColor: AppTheme.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusLg),
+        ),
       ),
       builder: (_) => _CustomizeSheet(
         showAll: _showAll,
@@ -179,8 +189,9 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
   Widget _buildBody(List<LegendBreakdown> pool, int total) {
     final pickRateOf = {for (final l in pool) l.legend: l.games / total};
     final equalShareRate = 1 / pool.length;
-    final rpBaseline =
-        _useOwnAverageBaseline ? widget.summary.avgRpPerGame : 0.0;
+    final rpBaseline = _useOwnAverageBaseline
+        ? widget.summary.avgRpPerGame
+        : 0.0;
     final maxAbsRp = pool
         .map((l) => l.avgRpPerGame.abs())
         .fold(10.0, (a, b) => a > b ? a : b);
@@ -240,7 +251,10 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
                       reservedSize: 32,
                       getTitlesWidget: (value, _) => Text(
                         value.toStringAsFixed(0),
-                        style: const TextStyle(color: AppTheme.muted, fontSize: 9),
+                        style: const TextStyle(
+                          color: AppTheme.muted,
+                          fontSize: 9,
+                        ),
                       ),
                     ),
                   ),
@@ -250,7 +264,10 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
                       reservedSize: 22,
                       getTitlesWidget: (value, _) => Text(
                         '${value.toStringAsFixed(0)}%',
-                        style: const TextStyle(color: AppTheme.muted, fontSize: 9),
+                        style: const TextStyle(
+                          color: AppTheme.muted,
+                          fontSize: 9,
+                        ),
                       ),
                     ),
                   ),
@@ -345,11 +362,11 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
               title: 'What counts as "good"',
               subtitle: _useOwnAverage
                   ? 'Comparing against your average this scope '
-                      '(${widget.ownAverage >= 0 ? '+' : ''}'
-                      '${widget.ownAverage.toStringAsFixed(1)} RP/game)'
+                        '(${widget.ownAverage >= 0 ? '+' : ''}'
+                        '${widget.ownAverage.toStringAsFixed(1)} RP/game)'
                   : 'Comparing against 0 RP/game — turn on to compare '
-                      "against your own average instead, so a rough split "
-                      "doesn't paint every legend as a comfort trap",
+                        "against your own average instead, so a rough split "
+                        "doesn't paint every legend as a comfort trap",
               value: _useOwnAverage,
               onChanged: (v) {
                 setState(() => _useOwnAverage = v);
@@ -433,7 +450,10 @@ class _KeyChip extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(color: quadrant.color, shape: BoxShape.circle),
+          decoration: BoxDecoration(
+            color: quadrant.color,
+            shape: BoxShape.circle,
+          ),
         ),
         const SizedBox(width: 4),
         Text(
@@ -547,35 +567,52 @@ class _LegendStatsTable extends StatelessWidget {
                     child: Text(
                       'GAMES',
                       textAlign: TextAlign.end,
-                      style: TextStyle(color: AppTheme.muted, fontSize: 10, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       'PICK',
                       textAlign: TextAlign.end,
-                      style: TextStyle(color: AppTheme.muted, fontSize: 10, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       'WIN',
                       textAlign: TextAlign.end,
-                      style: TextStyle(color: AppTheme.muted, fontSize: 10, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       'RP/GAME',
                       textAlign: TextAlign.end,
-                      style: TextStyle(color: AppTheme.muted, fontSize: 10, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
             const Divider(color: AppTheme.surface2, height: 1),
-            for (final l in sorted) _LegendStatsRow(legend: l, totalGames: totalGames),
+            for (final l in sorted)
+              _LegendStatsRow(legend: l, totalGames: totalGames),
           ],
         ),
       ),
@@ -601,7 +638,11 @@ class _LegendStatsRow extends StatelessWidget {
             flex: 2,
             child: Text(
               legend.legend,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),

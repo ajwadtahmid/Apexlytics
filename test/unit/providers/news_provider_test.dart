@@ -16,17 +16,15 @@ void main() {
   setUp(() {
     mockNewsService = MockNewsService();
     container = ProviderContainer(
-      overrides: [
-        newsServiceProvider.overrideWithValue(mockNewsService),
-      ],
+      overrides: [newsServiceProvider.overrideWithValue(mockNewsService)],
     );
   });
 
   group('NewsNotifier', () {
     test('returns pinned news when API returns empty list', () async {
-      when(() => mockNewsService.getNews()).thenAnswer(
-        (_) async => const ApiResult([]),
-      );
+      when(
+        () => mockNewsService.getNews(),
+      ).thenAnswer((_) async => const ApiResult([]));
 
       final result = await container.read(newsProvider.future);
       expect(result.data, isNotEmpty);
@@ -49,9 +47,9 @@ void main() {
         ),
       ];
 
-      when(() => mockNewsService.getNews()).thenAnswer(
-        (_) async => ApiResult(apiArticles),
-      );
+      when(
+        () => mockNewsService.getNews(),
+      ).thenAnswer((_) async => ApiResult(apiArticles));
 
       final result = await container.read(newsProvider.future);
       expect(
@@ -61,7 +59,9 @@ void main() {
     });
 
     test('returns pinned news on API failure', () async {
-      when(() => mockNewsService.getNews()).thenThrow(Exception('Network error'));
+      when(
+        () => mockNewsService.getNews(),
+      ).thenThrow(Exception('Network error'));
 
       final result = await container.read(newsProvider.future);
       expect(result.data, isNotEmpty);
@@ -71,17 +71,14 @@ void main() {
     test('preserves API staleness metadata', () async {
       final staleAt = DateTime.now().add(const Duration(hours: 1));
       when(() => mockNewsService.getNews()).thenAnswer(
-        (_) async => ApiResult(
-          [
-            const NewsArticle(
-              title: 'Test',
-              description: 'Test',
-              link: 'https://example.com',
-              imageUrl: '',
-            ),
-          ],
-          staleAt: staleAt,
-        ),
+        (_) async => ApiResult([
+          const NewsArticle(
+            title: 'Test',
+            description: 'Test',
+            link: 'https://example.com',
+            imageUrl: '',
+          ),
+        ], staleAt: staleAt),
       );
 
       final result = await container.read(newsProvider.future);

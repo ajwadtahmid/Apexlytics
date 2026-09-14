@@ -50,28 +50,34 @@ class _SentryOutput extends LogOutput {
         stackTrace: event.origin.stackTrace,
       );
       // Add as a breadcrumb too so it appears in the trail on related events.
-      Sentry.addBreadcrumb(Breadcrumb(
-        message: message,
-        level: SentryLevel.error,
-        category: 'app.log',
-        timestamp: timestamp,
-        data: errorData,
-      ));
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: message,
+          level: SentryLevel.error,
+          category: 'app.log',
+          timestamp: timestamp,
+          data: errorData,
+        ),
+      );
     } else if (event.level >= Level.warning) {
-      Sentry.addBreadcrumb(Breadcrumb(
-        message: message,
-        level: SentryLevel.warning,
-        category: 'app.log',
-        timestamp: timestamp,
-        data: errorData,
-      ));
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: message,
+          level: SentryLevel.warning,
+          category: 'app.log',
+          timestamp: timestamp,
+          data: errorData,
+        ),
+      );
     } else {
-      Sentry.addBreadcrumb(Breadcrumb(
-        message: message,
-        level: SentryLevel.info,
-        category: 'app.log',
-        timestamp: timestamp,
-      ));
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: message,
+          level: SentryLevel.info,
+          category: 'app.log',
+          timestamp: timestamp,
+        ),
+      );
     }
   }
 }

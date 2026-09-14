@@ -13,5 +13,6 @@ List<LegendTracker> deduplicateTrackers(List<LegendTracker> trackers) {
 
 /// Returns a display-name → value map from deduplicated [trackers].
 Map<String, int> trackerValueMap(List<LegendTracker> trackers) => {
-  for (final t in deduplicateTrackers(trackers)) t.displayName.toLowerCase(): t.value,
+  for (final t in deduplicateTrackers(trackers))
+    t.displayName.toLowerCase(): t.value,
 };

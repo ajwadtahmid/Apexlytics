@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/prefs_keys.dart';
+import '../../constants/map_constants.dart' show canonicalMapKey;
 import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
@@ -345,8 +346,13 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     // byte-identical pair of its own.
     Future<List<RankedMatch>> legendMatches(String legend) async =>
         filtered.where((m) => m.legend == legend).toList();
-    Future<List<RankedMatch>> mapMatches(String mapKey) async =>
-        filtered.where((m) => m.mapKey == mapKey).toList();
+    // Compares canonically, not by exact key: mapBreakdowns already merges
+    // map-key variants (e.g. `edistrict`/`edistrict_rotation`) into one row,
+    // so its drill-down must return every match behind that row, not just
+    // the ones under whichever raw key happened to be its representative.
+    Future<List<RankedMatch>> mapMatches(String mapKey) async => filtered
+        .where((m) => canonicalMapKey(m.mapKey) == canonicalMapKey(mapKey))
+        .toList();
 
     return _tabShell(
       'split',

@@ -69,7 +69,14 @@ Future<void> _backgroundFetchAndSchedule() async {
 
     prefs = await SharedPreferences.getInstance();
     final settings = BackgroundFetchSettings.fromPrefs(prefs);
-    if (settings == null) return;
+    if (settings == null) {
+      // No modes enabled — actively cancel rather than leaving whatever was
+      // last scheduled armed. "Clear all data" hits exactly this path: it
+      // wipes every notification pref but nothing else here would otherwise
+      // tear down alerts scheduled before the clear.
+      await NotificationService.cancelAll();
+      return;
+    }
 
     // Headless tasks run in a detached isolate — no provider tree is available,
     // so ApiService cannot be used here. Create a minimal Dio client directly,

@@ -74,7 +74,7 @@ class ApiCache {
       unawaited(_removeEntry(key));
       return null;
     }
-    return _decode(raw, savedAt);
+    return _decode(key, raw, savedAt);
   }
 
   /// Loads cached data by [key] regardless of TTL — for the offline-fallback
@@ -84,21 +84,25 @@ class ApiCache {
     final raw = _prefs.getString('$_cacheKeyPrefix$key');
     final ts = _prefs.getInt('$_cacheTimestampKeyPrefix$key');
     if (raw == null || ts == null) return null;
-    return _decode(raw, DateTime.fromMillisecondsSinceEpoch(ts));
+    return _decode(key, raw, DateTime.fromMillisecondsSinceEpoch(ts));
   }
 
-  CachedEntry? _decode(String raw, DateTime savedAt) {
+  /// Decodes a cache entry's JSON, evicting it on failure — a corrupt entry
+  /// that stayed on disk would keep occupying a slot in [_maxEntries] and
+  /// re-fail on every subsequent read.
+  CachedEntry? _decode(String key, String raw, DateTime savedAt) {
     try {
       return CachedEntry(data: jsonDecode(raw), savedAt: savedAt);
     } on FormatException {
+      unawaited(_removeEntry(key));
       return null;
     }
   }
 
   Future<void> _removeEntry(String key) => Future.wait([
-        _prefs.remove('$_cacheKeyPrefix$key'),
-        _prefs.remove('$_cacheTimestampKeyPrefix$key'),
-      ]);
+    _prefs.remove('$_cacheKeyPrefix$key'),
+    _prefs.remove('$_cacheTimestampKeyPrefix$key'),
+  ]);
 
   /// Evicts the oldest entries (by saved-at timestamp) once the cache holds
   /// more than [_maxEntries], so unbounded player lookups can't grow the
@@ -114,9 +118,7 @@ class ApiCache {
       return;
     }
 
-    final byAge = tsKeys
-        .map((k) => MapEntry(k, _prefs.getInt(k) ?? 0))
-        .toList()
+    final byAge = tsKeys.map((k) => MapEntry(k, _prefs.getInt(k) ?? 0)).toList()
       ..sort((a, b) => a.value.compareTo(b.value));
 
     for (final entry in byAge.take(overflow)) {
@@ -129,7 +131,9 @@ class ApiCache {
   /// Removes every cached response and its timestamp — used by "Clear all data".
   Future<void> clear() async {
     final keys = _prefs.getKeys().where(
-      (k) => k.startsWith(_cacheKeyPrefix) || k.startsWith(_cacheTimestampKeyPrefix),
+      (k) =>
+          k.startsWith(_cacheKeyPrefix) ||
+          k.startsWith(_cacheTimestampKeyPrefix),
     );
     for (final key in keys.toList()) {
       await _prefs.remove(key);

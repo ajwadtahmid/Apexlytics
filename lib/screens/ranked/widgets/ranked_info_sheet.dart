@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../constants/api_constants.dart';
 import '../../../utils/theme.dart';
 
 Future<void> _openProfileSearch() async {
   await launchUrl(
-    Uri.parse('https://apexlegendsstatus.com/profile/search/'),
+    Uri.parse(ApiConstants.alsProfileSearchUrl),
     mode: LaunchMode.externalApplication,
   );
 }

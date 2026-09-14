@@ -4,6 +4,8 @@ import '../../../providers/api_provider.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../providers/search_provider.dart';
 import '../../../providers/settings_provider.dart';
+import '../../../services/background_service.dart';
+import '../../../services/notification_service.dart';
 import '../../../utils/error_messages.dart';
 import '../../../utils/notifications.dart';
 import '../../../utils/storage/backup_service.dart';
@@ -49,7 +51,7 @@ class CacheSettingsSection extends ConsumerWidget {
                       'are kept.',
                   confirmLabel: 'Clear',
                   confirmColor: AppTheme.orange,
-                  onConfirm: () => _clearProfilesAndFavorites(ref),
+                  onConfirm: () => _clearProfilesAndFavorites(context, ref),
                 ),
               ),
               const Divider(color: AppTheme.surface2, height: 24),
@@ -77,7 +79,7 @@ class CacheSettingsSection extends ConsumerWidget {
                           'backup first if you might want it back.\n\n'
                           'Permanently erase all data?',
                       confirmLabel: 'Erase everything',
-                      onConfirm: () => _clearAll(ref),
+                      onConfirm: () => _clearAll(context, ref),
                     );
                   },
                 ),
@@ -90,22 +92,37 @@ class CacheSettingsSection extends ConsumerWidget {
   }
 
   /// Drops saved profiles and favourites, keeping everything else.
-  Future<void> _clearProfilesAndFavorites(WidgetRef ref) async {
+  Future<void> _clearProfilesAndFavorites(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
     await ref.read(playerSettingsProvider.notifier).clearProfilesAndFavorites();
     await ref.read(searchStateProvider.notifier).clearFavorites();
+    if (context.mounted) {
+      context.showMessage('Profiles & favorites cleared.');
+    }
   }
 
   /// Erases every persisted surface: prefs (bar first-run state), the ranked
   /// match database, and the API response cache.
-  Future<void> _clearAll(WidgetRef ref) async {
+  Future<void> _clearAll(BuildContext context, WidgetRef ref) async {
     await ref.read(searchStateProvider.notifier).clearFavorites();
     await ref.read(playerSettingsProvider.notifier).clearAll();
     await ref.read(rankedHistoryStoreProvider).deleteAll();
     await ref.read(apiServiceProvider).clearCache();
-    // Both read through a cache that deleteAll() alone won't invalidate,
-    // so they'd otherwise keep serving erased data until relaunch.
+    // clearAll() wipes every notification pref, but nothing else tears down
+    // alerts already scheduled with the OS or resets the background-fetch
+    // cadence — without this, up to 56 map-rotation alerts (some surviving a
+    // reboot) keep firing after the user erased everything.
+    await NotificationService.cancelAll();
+    await BackgroundService.updateInterval(0);
+    // These read through caches that deleteAll() alone won't invalidate, so
+    // they'd otherwise keep serving erased data until relaunch.
     resetSnapshotCache();
-    ref.invalidate(rankedSeasonsProvider);
+    invalidatePlayerDerivedProviders(ref);
+    if (context.mounted) {
+      context.showMessage('All data cleared.');
+    }
   }
 
   Future<void> _exportData(BuildContext context, WidgetRef ref) async {
@@ -178,10 +195,7 @@ class CacheSettingsSection extends ConsumerWidget {
         ref.invalidate(searchStateProvider);
         // Same UID as before restore, so these families' cached values would
         // otherwise survive and the Ranked tab would show stale data.
-        ref.invalidate(rankedSeasonsProvider);
-        ref.invalidate(rankedSyncProvider);
-        ref.invalidate(rankedSplitsProvider);
-        ref.invalidate(rankedSplitMatchesProvider);
+        invalidatePlayerDerivedProviders(ref);
         context.showMessage('Backup restored ($keyCount items).');
       case ImportError(:final message):
         context.showError(message);

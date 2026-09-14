@@ -6,7 +6,8 @@ import '../models/season_meta.dart';
 import '../providers/predator_provider.dart';
 import '../utils/formatting/format.dart';
 import '../utils/formatting/season_utils.dart' show splitContext;
-import '../utils/formatting/rank_utils.dart' show rankIndex, rankAssetPathByTier;
+import '../utils/formatting/rank_utils.dart'
+    show rankIndex, rankAssetPathByTier;
 import '../utils/theme.dart';
 import 'surface_card.dart';
 
@@ -108,10 +109,7 @@ class RankedInfoCard extends ConsumerWidget {
                   ),
                   Text(
                     '${formatNumber(myRp)} RP',
-                    style: const TextStyle(
-                      color: AppTheme.muted,
-                      fontSize: 13,
-                    ),
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 13),
                   ),
                 ],
               ),
@@ -134,10 +132,7 @@ class RankedInfoCard extends ConsumerWidget {
               children: [
                 Text(
                   '${formatNumber(curRp)} RP',
-                  style: const TextStyle(
-                    color: AppTheme.muted,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
                 ),
                 Text(
                   '${formatNumber(gap)} RP to $nextLabel',
@@ -149,10 +144,7 @@ class RankedInfoCard extends ConsumerWidget {
                 ),
                 Text(
                   '${formatNumber(nextRp)} RP',
-                  style: const TextStyle(
-                    color: AppTheme.muted,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
                 ),
               ],
             ),

@@ -193,9 +193,21 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
       _error = null;
     });
     try {
-      await ref
+      final saved = await ref
           .read(rankedHistoryStoreProvider)
           .editMatch(widget.match.dedupKey, changes);
+      if (!saved) {
+        // No row matched this match's id - report the failure instead of
+        // applying the edit to the in-memory copy the caller would otherwise
+        // treat as persisted.
+        if (mounted) {
+          setState(() {
+            _error = 'That match is no longer in your history.';
+            _saving = false;
+          });
+        }
+        return;
+      }
       _refreshBreakdown();
       if (mounted) Navigator.pop(context, widget.match.withEdits(changes));
     } catch (e, st) {

@@ -39,13 +39,12 @@ Widget _wrap(SharedPreferences prefs, Widget child) {
 
 void main() {
   group('OnboardingScreen', () {
-    testWidgets('walks through pages and calls onDone on Get started',
-        (tester) async {
+    testWidgets('walks through pages and calls onDone on Get started', (
+      tester,
+    ) async {
       var doneCalls = 0;
       await tester.pumpWidget(
-        MaterialApp(
-          home: OnboardingScreen(onDone: () async => doneCalls++),
-        ),
+        MaterialApp(home: OnboardingScreen(onDone: () async => doneCalls++)),
       );
 
       // First page + Skip visible; last-page CTA not yet shown.
@@ -72,9 +71,7 @@ void main() {
     testWidgets('Skip calls onDone', (tester) async {
       var doneCalls = 0;
       await tester.pumpWidget(
-        MaterialApp(
-          home: OnboardingScreen(onDone: () async => doneCalls++),
-        ),
+        MaterialApp(home: OnboardingScreen(onDone: () async => doneCalls++)),
       );
 
       await tester.tap(find.text('Skip'));
@@ -136,8 +133,9 @@ void main() {
       expect(prefs.getInt(PrefsKeys.onboardingVersion), kOnboardingVersion);
     });
 
-    testWidgets('does not show when already seen at the current version',
-        (tester) async {
+    testWidgets('does not show when already seen at the current version', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({
         PrefsKeys.onboardingVersion: kOnboardingVersion,
       });

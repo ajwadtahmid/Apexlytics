@@ -26,9 +26,6 @@ Future<List<String>> pushToLegendStack(
   if (stack.isNotEmpty && stack.first == legendName) return stack;
   stack.removeWhere((e) => e == legendName);
   stack.insert(0, legendName);
-  await prefs.setString(
-    PrefsKeys.legendVisitStack,
-    jsonEncode(stack),
-  );
+  await prefs.setString(PrefsKeys.legendVisitStack, jsonEncode(stack));
   return stack;
 }

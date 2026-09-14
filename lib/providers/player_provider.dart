@@ -13,11 +13,8 @@ typedef PlayerSearchQuery = ({String query, String platform, bool searchByUid});
 /// immediately if available so there is no loading spinner for returning
 /// visitors. The user can force a live fetch via the refresh button, which
 /// calls the service directly and then invalidates this provider.
-final searchPlayerProvider =
-    FutureProvider.autoDispose.family<ApiResult<PlayerStats>, PlayerSearchQuery>((
-      ref,
-      params,
-    ) async {
+final searchPlayerProvider = FutureProvider.autoDispose
+    .family<ApiResult<PlayerStats>, PlayerSearchQuery>((ref, params) async {
       final (:query, :platform, :searchByUid) = params;
       final service = ref.watch(playerServiceProvider);
 
@@ -38,7 +35,9 @@ final searchPlayerProvider =
 /// this session. Used by the search screen to show grey dots until the user
 /// has explicitly refreshed a favorite.
 final sessionRefreshedProvider =
-    NotifierProvider<_SessionRefreshedNotifier, Set<String>>(_SessionRefreshedNotifier.new);
+    NotifierProvider<_SessionRefreshedNotifier, Set<String>>(
+      _SessionRefreshedNotifier.new,
+    );
 
 class _SessionRefreshedNotifier extends Notifier<Set<String>> {
   static const _maxSize = 100;
@@ -79,11 +78,15 @@ class MyPlayerStatsNotifier extends AsyncNotifier<ApiResult<PlayerStats?>> {
   Future<ApiResult<PlayerStats?>> build() async {
     final generation = ++_buildGeneration;
 
-    final isSet = ref.watch(playerSettingsProvider.select((s) => s.isPlayerSet));
+    final isSet = ref.watch(
+      playerSettingsProvider.select((s) => s.isPlayerSet),
+    );
     if (!isSet) return const ApiResult(null);
 
     final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
-    final platform = ref.watch(playerSettingsProvider.select((s) => s.platform));
+    final platform = ref.watch(
+      playerSettingsProvider.select((s) => s.platform),
+    );
     final service = ref.watch(playerServiceProvider);
     final cached = service.getCachedStats(uid, platform, searchByUid: true);
 
@@ -104,7 +107,12 @@ class MyPlayerStatsNotifier extends AsyncNotifier<ApiResult<PlayerStats?>> {
     final settings = ref.read(playerSettingsProvider);
     if (!settings.isPlayerSet) return;
     final service = ref.read(playerServiceProvider);
-    await _refreshSilent(service, settings.uid, settings.platform, _buildGeneration);
+    await _refreshSilent(
+      service,
+      settings.uid,
+      settings.platform,
+      _buildGeneration,
+    );
   }
 
   Future<void> _refreshSilent(
@@ -122,7 +130,9 @@ class MyPlayerStatsNotifier extends AsyncNotifier<ApiResult<PlayerStats?>> {
       // Only update if we are still in the same build cycle and the notifier
       // has not been disposed (ref.mounted guards against disposed-notifier throws).
       if (_buildGeneration == generation && ref.mounted) {
-        state = AsyncData(ApiResult<PlayerStats?>(fresh.data, staleAt: fresh.staleAt));
+        state = AsyncData(
+          ApiResult<PlayerStats?>(fresh.data, staleAt: fresh.staleAt),
+        );
       }
     } catch (e) {
       // Only log if the request is still relevant (generation hasn't advanced).

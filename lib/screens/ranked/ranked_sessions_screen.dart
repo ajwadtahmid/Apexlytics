@@ -18,17 +18,22 @@ void openSessionHistory(
   Future<void> Function() onRefresh,
 ) {
   final net = session.netRp;
-  Navigator.of(context).push(MaterialPageRoute(
-    builder: (_) => RankedEntityHistoryScreen(
-      title: _sessionDayFmt.format(session.start.toLocal()),
-      subtitle:
-          '${session.games} games · ${net >= 0 ? '+' : ''}${formatNumber(net)} RP',
-      matches: session.matches,
-      onRefresh: onRefresh,
-      groupLabel: 'legend',
-      grouping: MatchGrouping(keyOf: (m) => m.legend, nameOf: (m) => m.legend),
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => RankedEntityHistoryScreen(
+        title: _sessionDayFmt.format(session.start.toLocal()),
+        subtitle:
+            '${session.games} games · ${net >= 0 ? '+' : ''}${formatNumber(net)} RP',
+        matches: session.matches,
+        onRefresh: onRefresh,
+        groupLabel: 'legend',
+        grouping: MatchGrouping(
+          keyOf: (m) => m.legend,
+          nameOf: (m) => m.legend,
+        ),
+      ),
     ),
-  ));
+  );
 }
 
 /// A tappable session summary as its own card. Used by the Squad & Sessions
@@ -105,25 +110,25 @@ class SessionRecapBody extends StatelessWidget {
   }
 
   Widget _stat(String value, String label, {int flex = 1}) => Expanded(
-        flex: flex,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 11),
-            ),
-          ],
+    flex: flex,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-      );
+        Text(
+          label,
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+        ),
+      ],
+    ),
+  );
 }
