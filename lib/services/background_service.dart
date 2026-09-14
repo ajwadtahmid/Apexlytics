@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'package:background_fetch/background_fetch.dart';
 import 'package:dio/dio.dart';
@@ -167,7 +168,16 @@ class BackgroundService {
 
   static Future<void> init() async {
     if (!_supported) return;
-    await _configure(_backgroundFetchIntervalMinutes);
+    try {
+      await _configure(_backgroundFetchIntervalMinutes);
+    } on PlatformException catch (e) {
+      // iOS UIBackgroundRefreshStatus: "0" restricted, "1" denied.
+      if (Platform.isIOS && (e.code == '0' || e.code == '1')) {
+        log.w('Background fetch unavailable on this device (status ${e.code})');
+        return;
+      }
+      rethrow;
+    }
     if (Platform.isAndroid) {
       BackgroundFetch.registerHeadlessTask(backgroundFetchHeadlessTask);
     }

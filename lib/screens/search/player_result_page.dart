@@ -316,6 +316,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
   // next app launch — invalidate it so the ranked split picker picks it up
   // this session too.
   Future<void> _appendSnapshot(SharedPreferences prefs) async {
+    if (!mounted) return;
     final week = currentWeekRange(widget.stats.rankedSeason);
     final historyNetRp = week == null
         ? null
@@ -375,6 +376,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
       color: AppTheme.accent,
       onRefresh: () async {
         await widget.onRefresh();
+        if (!mounted) return;
         await _appendSnapshot(prefs);
       },
       child: ListView(
