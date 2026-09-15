@@ -224,8 +224,8 @@ class BackupPreview {
     required this.profileCount,
     required this.matchCount,
     required this.newMatchCount,
-    required Map<String, dynamic> envelope,
-  }) : _envelope = envelope;
+    required this._envelope,
+  });
 }
 
 sealed class PreviewResult {}
