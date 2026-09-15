@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/prefs_keys.dart';
+import '../../constants/legend_constants.dart' show canonicalLegendName;
 import '../../constants/map_constants.dart' show canonicalMapKey;
 import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
@@ -344,8 +345,16 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     // filters them (wrapped in a Future to share the widgets' lazy signature).
     // Defined once here and passed down; _OverviewTab used to declare a
     // byte-identical pair of its own.
-    Future<List<RankedMatch>> legendMatches(String legend) async =>
-        filtered.where((m) => m.legend == legend).toList();
+    //
+    // Compares canonically, not by exact string: legendBreakdowns already
+    // merges legend-name case variants (e.g. a match with a raw
+    // "bloodhound") into one canonically-named row, so its drill-down must
+    // return every match behind that row, not just the ones under whichever
+    // raw casing happened to be more common. Same reasoning as mapMatches
+    // below, for map-key variants.
+    Future<List<RankedMatch>> legendMatches(String legend) async => filtered
+        .where((m) => canonicalLegendName(m.legend) == legend)
+        .toList();
     // Compares canonically, not by exact key: mapBreakdowns already merges
     // map-key variants (e.g. `edistrict`/`edistrict_rotation`) into one row,
     // so its drill-down must return every match behind that row, not just
@@ -534,6 +543,7 @@ class _OverviewTab extends StatelessWidget {
           const SizedBox(height: AppTheme.md),
           RankedRpChart(
             matches: matches,
+            sessions: data.sessions,
             onShowBackup: () => showSnapshotBackupSheet(
               context,
               snapshots: snapshots,
@@ -608,7 +618,7 @@ class _OverviewTab extends StatelessWidget {
                   child: RankedSquadSessionsEntry(
                     fullSquad: data.fullSquad,
                     partialSquad: data.partialSquad,
-                    matches: matches,
+                    sessions: data.sessions,
                     onRefresh: onRefresh,
                   ),
                 ),

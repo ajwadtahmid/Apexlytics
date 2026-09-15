@@ -241,13 +241,9 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
     }
   }
 
-  /// Rebuilds the views fed by the local store. The sync provider is left
+  /// Rebuilds every view fed by stored match rows. The sync provider is left
   /// alone, so saving an edit never spends a `/games` request.
-  void _refreshBreakdown() {
-    ref.invalidate(rankedSplitMatchesProvider);
-    ref.invalidate(rankedSplitViewProvider);
-    ref.invalidate(rankedLifetimeAggregatesProvider);
-  }
+  void _refreshBreakdown() => invalidateMatchDerivedProviders(ref);
 
   @override
   Widget build(BuildContext context) {

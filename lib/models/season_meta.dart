@@ -39,13 +39,21 @@ class SeasonMeta {
     'end': end.millisecondsSinceEpoch,
   };
 
-  factory SeasonMeta.fromJson(Map<String, dynamic> json) {
-    final id = json['id'] as String;
+  /// Returns null rather than throwing when [json] is missing a required
+  /// field or has the wrong type for one — a season entry corrupted by a
+  /// hand-edited or foreign backup file should be skipped by the caller
+  /// (dropping one split), not take down every season the app knows about.
+  static SeasonMeta? fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    final start = json['start'];
+    final end = json['end'];
+    if (id is! String || id.isEmpty) return null;
+    if (start is! num || end is! num) return null;
     return SeasonMeta(
       id: id,
       displayName: _parseDisplayName(id),
-      start: DateTime.fromMillisecondsSinceEpoch(json['start'] as int),
-      end: DateTime.fromMillisecondsSinceEpoch(json['end'] as int),
+      start: DateTime.fromMillisecondsSinceEpoch(start.toInt()),
+      end: DateTime.fromMillisecondsSinceEpoch(end.toInt()),
     );
   }
 

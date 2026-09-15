@@ -8,14 +8,30 @@ import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 
+/// Above this many plotted points, individual dots stop being useful (they
+/// overlap into a solid band) and cost more to paint than they convey.
+const int _kMaxDotPoints = 150;
+
+/// Hard cap on plotted points. Beyond this the chart downsamples rather than
+/// paying an unbounded per-frame rendering cost for a very long history.
+const int _kMaxChartPoints = 400;
+
 /// Per-match RP progression for the selected split/week (passed in already
-/// filtered). A Session filter narrows the line to a single play session.
+/// filtered). [sessions] is memoized by `rankedSplitViewProvider` rather than
+/// recomputed here on every rebuild. A Session filter narrows
+/// the line to a single play session.
 /// [onShowBackup], when set, adds a small icon opening the snapshot-based RP
 /// graph as a backup view.
 class RankedRpChart extends StatefulWidget {
   final List<RankedMatch> matches;
+  final List<RankedSession> sessions;
   final VoidCallback? onShowBackup;
-  const RankedRpChart({super.key, required this.matches, this.onShowBackup});
+  const RankedRpChart({
+    super.key,
+    required this.matches,
+    required this.sessions,
+    this.onShowBackup,
+  });
 
   @override
   State<RankedRpChart> createState() => _RankedRpChartState();
@@ -29,13 +45,16 @@ class _RankedRpChartState extends State<RankedRpChart> {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = sessionize(widget.matches);
+    final sessions = widget.sessions;
     // A stale selection (data changed under us) falls back to "All".
     final selected = _sessionIndex >= 0 && _sessionIndex < sessions.length
         ? _sessionIndex
         : -1;
 
     final chrono = _matchesForSelection(sessions, selected);
+    // Downsampled for rendering only - "not enough matches" and the session
+    // picker still reason about the real (non-downsampled) chrono list.
+    final displayMatches = _downsample(chrono, _kMaxChartPoints);
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
@@ -90,7 +109,7 @@ class _RankedRpChartState extends State<RankedRpChart> {
                       style: TextStyle(color: AppTheme.muted, fontSize: 12),
                     ),
                   )
-                : _buildChart(chrono),
+                : _buildChart(displayMatches),
           ),
         ],
       ),
@@ -110,6 +129,19 @@ class _RankedRpChartState extends State<RankedRpChart> {
           (m) => !m.startTime.isBefore(s.start) && !m.endTime.isAfter(s.end),
         )
         .toList();
+  }
+
+  /// Strided downsample to at most [cap] points, always keeping the last
+  /// point so the plotted range still ends at the true latest match. No-op
+  /// when already at or under the cap.
+  List<RankedMatch> _downsample(List<RankedMatch> matches, int cap) {
+    if (matches.length <= cap) return matches;
+    final step = matches.length / cap;
+    final sampled = <RankedMatch>[
+      for (var i = 0; i < cap; i++) matches[(i * step).floor()],
+    ];
+    if (sampled.last != matches.last) sampled.add(matches.last);
+    return sampled;
   }
 
   Widget _buildChart(List<RankedMatch> matches) {
@@ -147,7 +179,9 @@ class _RankedRpChartState extends State<RankedRpChart> {
             spots: spots,
             color: AppTheme.accent,
             dotData: FlDotData(
-              show: true,
+              // Above _kMaxDotPoints, individual dots overlap into a solid
+              // band — the line alone still carries the trend.
+              show: matches.length <= _kMaxDotPoints,
               getDotPainter: (spot, percent, bar, index) {
                 final up = matches[index].rpChange >= 0;
                 return FlDotCirclePainter(

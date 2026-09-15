@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../models/ranked_match.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
@@ -10,27 +9,29 @@ import 'widgets/ranked_squad_breakdown_card.dart';
 /// tap adds.
 const _kSessionPageSize = 6;
 
-/// Entry point for the combined Squad & Sessions screen. [matches] is used
-/// only to derive sessions and is expected empty at Lifetime scope (sessions
-/// are a split-relative concept — see [RankedSquadSessionsScreen]); the squad
-/// summaries work at either scope. Hides itself when there's nothing to show.
+/// Entry point for the combined Squad & Sessions screen. [sessions] is the
+/// same list already memoized by `rankedSplitViewProvider`, rather than this
+/// widget sessionizing its own `matches` on every rebuild of the
+/// always-visible Overview tab. Expected empty at Lifetime
+/// scope (sessions are a split-relative concept — see
+/// [RankedSquadSessionsScreen]); the squad summaries work at either scope.
+/// Hides itself when there's nothing to show.
 class RankedSquadSessionsEntry extends StatelessWidget {
   final RankedSummary fullSquad;
   final RankedSummary partialSquad;
-  final List<RankedMatch> matches;
+  final List<RankedSession> sessions;
   final Future<void> Function() onRefresh;
 
   const RankedSquadSessionsEntry({
     super.key,
     required this.fullSquad,
     required this.partialSquad,
-    required this.matches,
+    required this.sessions,
     required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
-    final sessions = sessionize(matches);
     if (fullSquad.games == 0 && partialSquad.games == 0 && sessions.isEmpty) {
       return const SizedBox.shrink();
     }

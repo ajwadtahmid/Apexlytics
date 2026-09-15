@@ -1,12 +1,20 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/prefs_keys.dart';
+import '../app_logger.dart';
 
 List<String> _parseLegendStack(String? raw) {
   try {
-    final list = jsonDecode(raw ?? '[]') as List;
-    return list.whereType<String>().toList();
-  } on FormatException {
+    final decoded = jsonDecode(raw ?? '[]');
+    if (decoded is! List) {
+      log.w('Stored legend stack blob is not a list — treating as empty');
+      return [];
+    }
+    return decoded.whereType<String>().toList();
+  } catch (e) {
+    // Well-formed-but-wrong-shape JSON throws TypeError, not
+    // FormatException — see rp_snapshot_storage._parseSnapshots.
+    log.w('Legend stack JSON parse failed — returning empty list', error: e);
     return [];
   }
 }

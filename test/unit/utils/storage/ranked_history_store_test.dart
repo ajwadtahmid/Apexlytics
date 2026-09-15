@@ -116,6 +116,18 @@ void main() {
     expect(await store.count('1'), 3); // 100, 200, 300 — no duplicate
   });
 
+  test('allIds returns every stored id, across all UIDs', () async {
+    // Backs the backup-import preview, which needs to tell a restored row
+    // from an already-known one by id.
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    await store.upsertAll('1', [match('1', 100), match('1', 200)]);
+    await store.upsertAll('2', [match('2', 100)]);
+
+    expect(await store.allIds(), {'1_100', '1_200', '2_100'});
+  });
+
   test('keeps each UID history separate', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);
@@ -508,6 +520,33 @@ void main() {
       expect(m.kills, 7);
       expect(m.editedFields, {'kills'});
     });
+
+    test(
+      'importing over an existing edited, classified row keeps the '
+      'correction and does not demote its season_id',
+      () async {
+        // Used to be a plain INSERT OR REPLACE (delete-then-insert), so any
+        // column absent from the incoming row — season_id on an export from
+        // before that column existed, or a hand correction the backup
+        // predates — silently reverted to NULL/unedited.
+        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+        addTearDown(store.close);
+        final seasons = {'s1': season('br_ranked_s1_s1', 0, 1000)};
+        await store.upsertAll('1', [match('1', 100)], seasons: seasons);
+        await store.editMatch('1_100', {'kills': 99});
+
+        // A stale backup row: same id, but the pre-edit kills value and no
+        // season_id at all (the shape `toStoredMap()` produces — season_id
+        // is derived separately by upsertAll, never stored on the model).
+        final staleRow = match('1', 100).toStoredMap();
+        await store.importRows([staleRow]);
+
+        final m = (await store.getAll('1')).single;
+        expect(m.kills, 99); // the correction survived the import
+        expect(m.editedFields, {'kills'});
+        expect(m.seasonId, 'br_ranked_s1_s1'); // not demoted back to null
+      },
+    );
   });
 
   test('deleteAll drops snapshots as well as matches', () async {
@@ -1018,6 +1057,34 @@ void main() {
       final drillDown = await store.matchesForMap('1', maps.single.mapKey);
       expect(drillDown.length, 2);
     });
+
+    test(
+      'legendBreakdownsFor merges legend-name case variants, and '
+      'matchesForLegend resolves every variant behind the merged row',
+      () async {
+        // A raw "axle" vs "Axle" for the same player must not split one
+        // legend into two identically-labelled rows — same reasoning as the
+        // map-key merge above.
+        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+        addTearDown(store.close);
+        await store.upsertAll('1', [
+          match('1', 0, legend: 'axle', rp: 20),
+          match('1', 700, legend: 'Axle', rp: 30),
+        ]);
+
+        final legends = await store.legendBreakdownsFor('1');
+        expect(legends.length, 1);
+        expect(legends.single.legend, 'Axle');
+        expect(legends.single.games, 2);
+        expect(legends.single.totalRp, 50);
+
+        final drillDown = await store.matchesForLegend(
+          '1',
+          legends.single.legend,
+        );
+        expect(drillDown.length, 2);
+      },
+    );
 
     test(
       'timeOfDayBucketsFor (lifetime and per-split) matches the Dart path',

@@ -220,4 +220,40 @@ void main() {
     // never a second round back at the primary.
     expect(calledBaseUrls, [primary, backup]);
   });
+
+  test(
+    'falls back to the primary when the backup fails during the sticky '
+    'window',
+    () async {
+      // The sticky window is a preference, not a commitment - a request
+      // routed to the backup purely because the window is active must still
+      // be able to reach a now-healthy primary if the backup itself fails.
+      final calledBaseUrls = <String>[];
+      var primaryDown = true; // only true for the very first attempt below
+      var backupDown = false;
+      final dio = buildDio(
+        maxRetries: 0,
+        backupBaseUrl: backup,
+        onFetch: (o) async {
+          calledBaseUrls.add(o.baseUrl);
+          if (o.baseUrl == backup) return backupDown ? _status(503) : _status(200);
+          return primaryDown ? _status(503) : _status(200);
+        },
+      );
+
+      // Arms the sticky window: primary fails once, backup serves it.
+      await dio.get('/first');
+      primaryDown = false; // the primary has since recovered...
+      backupDown = true; // ...but the backup is what's flaky right now.
+      calledBaseUrls.clear();
+
+      // Routed straight to the backup by the sticky preference. The backup
+      // fails, so this must fall back to the primary instead of hard-failing
+      // for the rest of the window.
+      final response = await dio.get('/second');
+
+      expect(response.statusCode, 200);
+      expect(calledBaseUrls, [backup, primary]);
+    },
+  );
 }

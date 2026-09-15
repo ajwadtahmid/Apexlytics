@@ -311,12 +311,26 @@ class PlayerResultBody extends ConsumerStatefulWidget {
 
 class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     with SnapshotStateMixin {
+  /// Whether [uid] is a player the user has actually chosen to track — their
+  /// own active profile, or a saved favourite. Search is unscoped (any UID a
+  /// player can type), and without this check every result view — including
+  /// a one-off lookup that's never favourited — permanently appended to that
+  /// UID's `stat_snapshots` series, with no retention cap and no lifecycle.
+  /// Reads, not just this write, stay unscoped: an un-favourited player's
+  /// existing graph still renders from whatever already accrued.
+  bool _isKnownUid(String uid) {
+    if (uid.isEmpty) return false;
+    if (uid == ref.read(playerSettingsProvider).uid) return true;
+    return ref.read(searchStateProvider).favorites.any((f) => f.uid == uid);
+  }
+
   // A season learned here (a different provider subtree than the ranked tab)
   // won't otherwise reach rankedSeasonsProvider's frozen snapshot until the
   // next app launch — invalidate it so the ranked split picker picks it up
   // this session too.
   Future<void> _appendSnapshot(SharedPreferences prefs) async {
     if (!mounted) return;
+    if (!_isKnownUid(widget.stats.uid)) return;
     final week = currentWeekRange(widget.stats.rankedSeason);
     final historyNetRp = week == null
         ? null

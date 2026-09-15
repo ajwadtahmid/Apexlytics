@@ -174,10 +174,21 @@ class LegendBreakdown {
 
 /// Per-legend breakdown, sorted by total RP contribution (descending).
 /// Assumes [matches] is already ranked-only filtered.
+///
+/// Grouped by [canonicalLegendName], not the raw [RankedMatch.legend]: a case
+/// variant upstream sends for one player (e.g. `"bloodhound"` vs
+/// `"Bloodhound"`) would otherwise split one legend into two
+/// identically-labelled rows — the same problem [mapBreakdowns] already
+/// solves for map keys via [canonicalMapKey]. [canonicalLegendName] returns
+/// the display name directly (unlike a map's raw representative key), so
+/// each group's [LegendBreakdown.legend] is always the canonical name — a
+/// drill-down still has to match case-insensitively against the raw value on
+/// each [RankedMatch] (see [RankedHistoryStore.matchesForLegend]), since a
+/// match's own `legend` field is left as upstream sent it.
 List<LegendBreakdown> legendBreakdowns(List<RankedMatch> matches) {
   final byLegend = <String, List<RankedMatch>>{};
   for (final m in matches) {
-    byLegend.putIfAbsent(m.legend, () => []).add(m);
+    byLegend.putIfAbsent(canonicalLegendName(m.legend), () => []).add(m);
   }
   final out = byLegend.entries.map((e) {
     var rp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;

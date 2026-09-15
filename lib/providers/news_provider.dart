@@ -8,7 +8,9 @@ import 'api_provider.dart';
 const _pinnedNews = [
   NewsArticle(
     title: 'Official Apex Legends News',
-    description: 'Patch notes, season updates, and announcements from EA.',
+    description:
+        "Official news for Apex, including Patch Notes, Designer's Notes, "
+        'Events and announcements.',
     link: ApiConstants.eaNewsUrl,
     imageUrl: '',
   ),

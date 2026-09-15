@@ -2,18 +2,27 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/prefs_keys.dart';
 import '../../models/season_meta.dart';
+import '../app_logger.dart';
 
 Map<String, SeasonMeta> _parseSeasons(String? raw) {
   if (raw == null) return {};
   try {
-    final list = jsonDecode(raw) as List;
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      log.w('Stored season history is not a list — treating as empty');
+      return {};
+    }
     final result = <String, SeasonMeta>{};
-    for (final item in list.whereType<Map<String, dynamic>>()) {
+    for (final item in decoded.whereType<Map<String, dynamic>>()) {
       final meta = SeasonMeta.fromJson(item);
+      if (meta == null) continue;
       result[meta.id] = meta;
     }
     return result;
-  } on FormatException {
+  } catch (e) {
+    // Well-formed-but-wrong-shape JSON throws TypeError, not
+    // FormatException — see rp_snapshot_storage._parseSnapshots.
+    log.w('Season history JSON parse failed — returning empty', error: e);
     return {};
   }
 }

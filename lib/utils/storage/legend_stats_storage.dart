@@ -10,12 +10,18 @@ const String legendStatsKeyPrefix = '${PrefsKeys.legendStats}_';
 
 List<LegendStat> _parseLegendStats(String? raw) {
   try {
-    final list = jsonDecode(raw ?? '[]') as List;
-    return list
+    final decoded = jsonDecode(raw ?? '[]');
+    if (decoded is! List) {
+      log.w('Stored legend stats blob is not a list — treating as empty');
+      return [];
+    }
+    return decoded
         .whereType<Map<String, dynamic>>()
         .map(LegendStat.fromJson)
         .toList();
-  } on FormatException catch (e) {
+  } catch (e) {
+    // Well-formed-but-wrong-shape JSON throws TypeError, not
+    // FormatException — see rp_snapshot_storage._parseSnapshots.
     log.w('Legend stats JSON parse failed — returning empty list', error: e);
     return [];
   }

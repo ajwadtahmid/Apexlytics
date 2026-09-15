@@ -242,7 +242,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       color: AppTheme.accent,
                       size: 22,
                     ),
-                    title: 'Latest News',
+                    title: 'News & ALGS',
                     subtitle: newsSubtitle,
                     onTap: () =>
                         context.pushPage(NewsPage(articles: result.data)),
@@ -250,7 +250,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 },
                 loading: () => const SummaryTileSkeleton(),
                 error: (e, _) => ErrorCard(
-                  message: 'Latest News',
+                  message: 'News & ALGS',
                   compact: true,
                   onRetry: () => ref.invalidate(newsProvider),
                 ),

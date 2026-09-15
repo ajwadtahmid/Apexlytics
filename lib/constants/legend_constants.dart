@@ -72,6 +72,17 @@ final Map<String, Legend> kLegendsByName = {
   for (final l in kLegends) l.name.toLowerCase(): l,
 };
 
+/// A stable, case-insensitive grouping key for [name]: the canonical roster
+/// name when known (case folded to match [kLegendsByName]), otherwise [name]
+/// unchanged. Mirrors [canonicalMapKey] in `map_constants.dart` — what a
+/// per-legend aggregate should group by, so a case variant upstream sends
+/// for one player (e.g. `"bloodhound"` instead of `"Bloodhound"`) can't split
+/// one legend into two identically-labelled rows. Never shown to the user —
+/// display the [Legend.name] from [kLegendsByName], or the raw value, as
+/// appropriate for the call site.
+String canonicalLegendName(String name) =>
+    kLegendsByName[name.toLowerCase()]?.name ?? name;
+
 /// API name for the career-wide stats entry returned alongside per-legend stats.
 const kCareerLegendName = 'Global';
 

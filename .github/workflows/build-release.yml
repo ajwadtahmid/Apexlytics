@@ -1,5 +1,9 @@
 name: Build Release
 
+# Deliberately tag-triggered only, not on every push/PR to main — `flutter
+# analyze` and `flutter test` are run locally before tagging a release, and
+# running them on every push would spend Actions minutes for no additional
+# signal.
 on:
   push:
     tags:

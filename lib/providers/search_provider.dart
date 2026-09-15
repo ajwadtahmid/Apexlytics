@@ -94,12 +94,15 @@ class SearchNotifier extends Notifier<SearchState> {
   static List<PlayerRef> _load(SharedPreferences prefs, String key) {
     try {
       final raw = prefs.getString(key) ?? '[]';
-      final list = jsonDecode(raw) as List;
-      return list
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      return decoded
           .whereType<Map<String, dynamic>>()
           .map(PlayerRef.fromJson)
           .toList();
-    } on FormatException {
+    } catch (e) {
+      // Well-formed-but-wrong-shape JSON throws TypeError, not
+      // FormatException — see rp_snapshot_storage._parseSnapshots.
       return [];
     }
   }

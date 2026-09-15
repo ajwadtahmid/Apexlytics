@@ -197,6 +197,42 @@ void main() {
     expect(l.first.winRate, 1.0);
   });
 
+  test(
+    'legendBreakdowns merges legend-name case variants into one row',
+    () {
+      // Same reasoning as mapBreakdowns' canonicalization: a raw "axle" vs
+      // "Axle" for the same player must not split one legend into two
+      // identically-labelled rows.
+      final variants = rankedOnly([
+        match(
+          legend: 'axle',
+          mapKey: 'olympus_rotation',
+          rpChange: 15,
+          cumulativeRp: 1015,
+          kills: 1,
+          damage: 100,
+          startOffset: 0,
+        ),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus_rotation',
+          rpChange: 25,
+          cumulativeRp: 1040,
+          kills: 2,
+          damage: 200,
+          startOffset: 700,
+        ),
+      ]);
+
+      final l = legendBreakdowns(variants);
+
+      expect(l.length, 1);
+      expect(l.single.legend, 'Axle');
+      expect(l.single.games, 2);
+      expect(l.single.totalRp, 40);
+    },
+  );
+
   test('mapBreakdowns sorted by games desc with display names', () {
     final m = mapBreakdowns(ranked);
     expect(m.length, 2);

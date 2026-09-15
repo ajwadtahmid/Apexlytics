@@ -6,6 +6,12 @@ class ApiConstants {
   static const String eaNewsUrl =
       'https://www.ea.com/games/apex-legends/apex-legends/news';
 
+  // ── News & ALGS page — competitive links ──────────────────────────────
+  static const String algsWebsiteUrl = 'https://algs.ea.com/en';
+  static const String algsStatsUrl = 'https://apexlegendsstatus.com/algs/';
+  static const String competitiveSubredditUrl =
+      'https://www.reddit.com/r/CompetitiveApex';
+
   static const String privacyPolicyUrl =
       'https://ajwadtahmid.github.io/privacy-policies/Apexlytics.html';
   static const String releaseNotesUrl =

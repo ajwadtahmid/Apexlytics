@@ -197,7 +197,7 @@ class NotificationService {
   /// `currentRemainingSecs` already being a stale countdown by the time it
   /// reaches the client (proxy caching + round trip) - always early, never
   /// late, hence a fixed lead. Doesn't fix inexact alarms or the background-
-  /// fetch floor, which is why the copy says "about" (see AUDIT.md F15).
+  /// fetch floor, which is why the copy says "about".
   @visibleForTesting
   static const scheduleSlack = Duration(seconds: 45);
 

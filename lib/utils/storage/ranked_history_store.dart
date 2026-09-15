@@ -301,6 +301,32 @@ class RankedHistoryStore {
           'THEN $f ELSE excluded.$f END',
   ].join(',\n          ');
 
+  /// Shared `ON CONFLICT(id) DO UPDATE SET` body for [upsertAll] (a sync) and
+  /// [importRows] (a backup restore) — both must resolve a conflicting id the
+  /// same way, or a hand correction could survive one path and be silently
+  /// reverted by the other. Derived once so they can't drift, the same
+  /// reasoning [_editAwareAssignments]/[_needsSeasonId] already follow here.
+  static String get _conflictUpdateSet =>
+      '''
+          uid = excluded.uid,
+          player_name = excluded.player_name,
+          game_mode = excluded.game_mode,
+          cumulative_rp = excluded.cumulative_rp,
+          rank_img = excluded.rank_img,
+          start_ms = excluded.start_ms,
+          end_ms = excluded.end_ms,
+          is_party_full = excluded.is_party_full,
+          trackers = excluded.trackers,
+          $_editAwareAssignments,
+          season_id = CASE
+            WHEN excluded.season_id IS NOT NULL
+                 AND excluded.season_id != '$kUnknownSeasonId'
+                 AND (season_id IS NULL OR season_id = '$kUnknownSeasonId')
+            THEN excluded.season_id
+            ELSE season_id
+          END
+      ''';
+
   /// Inserts/updates [matches] for [uid]. Idempotent via the primary key.
   ///
   /// Three groups of columns behave differently on conflict:
@@ -336,23 +362,7 @@ class RankedHistoryStore {
           is_party_full, trackers, season_id, kills, damage, edited_fields
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-          uid = excluded.uid,
-          player_name = excluded.player_name,
-          game_mode = excluded.game_mode,
-          cumulative_rp = excluded.cumulative_rp,
-          rank_img = excluded.rank_img,
-          start_ms = excluded.start_ms,
-          end_ms = excluded.end_ms,
-          is_party_full = excluded.is_party_full,
-          trackers = excluded.trackers,
-          $_editAwareAssignments,
-          season_id = CASE
-            WHEN excluded.season_id IS NOT NULL
-                 AND excluded.season_id != '$kUnknownSeasonId'
-                 AND (season_id IS NULL OR season_id = '$kUnknownSeasonId')
-            THEN excluded.season_id
-            ELSE season_id
-          END
+        $_conflictUpdateSet
         ''',
         [
           row['id'],
@@ -704,6 +714,13 @@ class RankedHistoryStore {
 
   /// Per-legend breakdown for [uid] across [seasonId] (null = lifetime), sorted
   /// by total RP descending — matching [legendBreakdowns].
+  ///
+  /// Grouped by the raw `legend` column first since SQL can't canonicalize a
+  /// case variant on read; rows are merged in Dart after, the same shape
+  /// [mapBreakdownsFor] uses for map-key variants. Without this, `bloodhound`
+  /// and `Bloodhound` for the same player would render as two
+  /// identically-labelled rows. Sorting moves to Dart too, since a raw row's
+  /// own `net_rp` no longer reflects its merged group's total.
   Future<List<LegendBreakdown>> legendBreakdownsFor(
     String uid, {
     String? seasonId,
@@ -711,25 +728,52 @@ class RankedHistoryStore {
     final db = await _open();
     final (where, args) = _rankedScope(uid, seasonId);
     final rows = await db.rawQuery(
-      'SELECT legend, $_aggCols FROM $table WHERE $where '
-      'GROUP BY legend ORDER BY net_rp DESC',
+      'SELECT legend, $_aggCols FROM $table WHERE $where GROUP BY legend',
       args,
     );
+
+    final byLegend = <String, List<Map<String, Object?>>>{};
+    for (final r in rows) {
+      final rawLegend = r['legend'] as String? ?? 'Unknown';
+      byLegend.putIfAbsent(canonicalLegendName(rawLegend), () => []).add(r);
+    }
+
     return [
-      for (final r in rows)
+      for (final entry in byLegend.entries)
         LegendBreakdown(
-          legend: r['legend'] as String? ?? 'Unknown',
-          games: (r['games'] as num).toInt(),
-          totalRp: (r['net_rp'] as num).toInt(),
-          totalKills: (r['kills'] as num).toInt(),
-          totalDamage: (r['damage'] as num).toInt(),
-          killsGames: (r['kills_games'] as num).toInt(),
-          damageGames: (r['damage_games'] as num).toInt(),
-          totalLengthSecs: (r['length_secs'] as num).toInt(),
-          wins: (r['wins'] as num).toInt(),
-          losses: (r['losses'] as num).toInt(),
+          legend: entry.key,
+          games: entry.value.fold(0, (s, r) => s + (r['games'] as num).toInt()),
+          totalRp: entry.value.fold(
+            0,
+            (s, r) => s + (r['net_rp'] as num).toInt(),
+          ),
+          totalKills: entry.value.fold(
+            0,
+            (s, r) => s + (r['kills'] as num).toInt(),
+          ),
+          totalDamage: entry.value.fold(
+            0,
+            (s, r) => s + (r['damage'] as num).toInt(),
+          ),
+          killsGames: entry.value.fold(
+            0,
+            (s, r) => s + (r['kills_games'] as num).toInt(),
+          ),
+          damageGames: entry.value.fold(
+            0,
+            (s, r) => s + (r['damage_games'] as num).toInt(),
+          ),
+          totalLengthSecs: entry.value.fold(
+            0,
+            (s, r) => s + (r['length_secs'] as num).toInt(),
+          ),
+          wins: entry.value.fold(0, (s, r) => s + (r['wins'] as num).toInt()),
+          losses: entry.value.fold(
+            0,
+            (s, r) => s + (r['losses'] as num).toInt(),
+          ),
         ),
-    ];
+    ]..sort((a, b) => b.totalRp.compareTo(a.totalRp));
   }
 
   /// Per-map breakdown for [uid] across [seasonId] (null = lifetime), sorted by
@@ -902,6 +946,12 @@ class RankedHistoryStore {
   /// Ranked matches for one legend across [seasonId] (null = lifetime), newest
   /// first — the lazy drill-down query the Lifetime Legends tab uses on tap
   /// instead of filtering a whole in-memory history.
+  ///
+  /// Matches case-insensitively: [legendBreakdownsFor] already merges every
+  /// raw casing of [legend] (e.g. `edistrict`-style variants, but for
+  /// legends — `bloodhound`/`Bloodhound`) into one canonically-named row, so
+  /// the drill-down from that row must return every match behind it, not
+  /// just the ones under whichever raw casing happened to be more common.
   Future<List<RankedMatch>> matchesForLegend(
     String uid,
     String legend, {
@@ -910,7 +960,8 @@ class RankedHistoryStore {
     final db = await _open();
     final (where, args) = _rankedScope(uid, seasonId);
     final rows = await db.rawQuery(
-      'SELECT * FROM $table WHERE $where AND legend = ? ORDER BY start_ms DESC',
+      'SELECT * FROM $table WHERE $where AND LOWER(legend) = LOWER(?) '
+      'ORDER BY start_ms DESC',
       [...args, legend],
     );
     return rows.map(RankedMatch.fromStoredMap).toList();
@@ -1061,6 +1112,16 @@ class RankedHistoryStore {
     return (rows.first['c'] as num?)?.toInt() ?? 0;
   }
 
+  /// Every stored match id, across all UIDs. Backs the backup-import preview,
+  /// which needs to say how many of a backup file's rows are actually new
+  /// before the user commits to restoring it — a plain `id`-only projection
+  /// avoids hydrating any [RankedMatch].
+  Future<Set<String>> allIds() async {
+    final db = await _open();
+    final rows = await db.query(table, columns: ['id']);
+    return {for (final r in rows) r['id'] as String};
+  }
+
   // ── RP snapshots ───────────────────────────────────────────────────────────
 
   /// [uid]'s RP snapshots, oldest first - the order every consumer assumes
@@ -1193,6 +1254,15 @@ class RankedHistoryStore {
   /// an unknown key would reach SQLite as a column name and fail the entire
   /// batch, and SQLite permits NULL in a non-`INTEGER PRIMARY KEY`, so
   /// id-less rows would insert as duplicates instead of deduping.
+  ///
+  /// A conflicting id is resolved through [_conflictUpdateSet] — the same
+  /// edit-aware, season-upgrade-only rule [upsertAll] applies. This used to
+  /// be a plain `INSERT OR REPLACE`, which is a delete-then-insert: any
+  /// column absent from the incoming row (or predating it, e.g. a v2 export
+  /// with no `season_id` column) went back to NULL, silently demoting a
+  /// locally-learned season classification and reverting a hand correction
+  /// (`edited_fields` included) the moment an older backup was restored over
+  /// a newer one.
   Future<void> importRows(List<dynamic> rows) async {
     final db = await _open();
     final batch = db.batch();
@@ -1200,11 +1270,40 @@ class RankedHistoryStore {
       if (r is! Map) continue;
       final id = r['id'];
       if (id is! String || id.isEmpty) continue;
-      batch.insert(table, {
-        for (final e in r.entries)
-          if (_importableColumns.contains(e.key.toString()))
-            e.key.toString(): e.value,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      final row = <String, Object?>{
+        for (final col in _importableColumns) col: r[col],
+      };
+      batch.rawInsert(
+        '''
+        INSERT INTO $table (
+          id, uid, player_name, legend, game_mode, map_key, rp_change,
+          cumulative_rp, rank_img, length_secs, start_ms, end_ms,
+          is_party_full, trackers, season_id, kills, damage, edited_fields
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+        $_conflictUpdateSet
+        ''',
+        [
+          row['id'],
+          row['uid'],
+          row['player_name'],
+          row['legend'],
+          row['game_mode'],
+          row['map_key'],
+          row['rp_change'],
+          row['cumulative_rp'],
+          row['rank_img'],
+          row['length_secs'],
+          row['start_ms'],
+          row['end_ms'],
+          row['is_party_full'],
+          row['trackers'],
+          row['season_id'],
+          row['kills'],
+          row['damage'],
+          row['edited_fields'],
+        ],
+      );
     }
     await batch.commit(noResult: true);
   }

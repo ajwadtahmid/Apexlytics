@@ -4,10 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:apexlytics/constants/prefs_keys.dart';
+import 'package:apexlytics/models/player_stats.dart' show LegendStat;
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/ranked_breakdown_body.dart';
 import 'package:apexlytics/services/games_service.dart' show GamesEligibility;
+import 'package:apexlytics/utils/formatting/snapshot_types.dart';
 
 import '../helpers.dart';
 
@@ -27,12 +29,20 @@ void main() {
     required SharedPreferences prefs,
     required RankedSyncOutcome outcome,
     GamesEligibility? eligibility,
+    List<StatSnapshot> snapshots = const [],
+    List<LegendStat> legendStats = const [],
+    Object? splitsError,
   }) {
     const uid = 'uid123';
     return ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
-        rankedSplitsProvider(uid).overrideWith((ref) async => []),
+        if (splitsError != null)
+          rankedSplitsProvider(
+            uid,
+          ).overrideWith((ref) async => throw splitsError)
+        else
+          rankedSplitsProvider(uid).overrideWith((ref) async => []),
         rankedSyncProvider(uid).overrideWith((ref) async => outcome),
         gamesEligibilityProvider(uid).overrideWith((ref) async => eligibility),
       ],
@@ -43,9 +53,9 @@ void main() {
             uid: uid,
             stats: buildStats(uid: uid),
             rpDelta: null,
-            snapshots: const [],
+            snapshots: snapshots,
             allSeasons: const {},
-            legendStats: const [],
+            legendStats: legendStats,
             compactLegendCards: false,
             legendStack: const [],
             onRefresh: () async {},
@@ -127,4 +137,103 @@ void main() {
 
     expect(find.text('Warming up'), findsOneWidget);
   });
+
+  testWidgets(
+    'recording, eligible but paused (pollCount > 0) shows the paused message',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.cooldown,
+          eligibility: (eligible: false, lastPolledAt: 123, pollCount: 5),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // Distinct from the pollCount == 0 "hasn't seen this profile yet"
+      // message - this player *was* being tracked and stopped.
+      expect(find.text('Not being tracked yet'), findsOneWidget);
+      expect(
+        find.textContaining('Tracking has paused'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    '"View available stats" is offered when snapshots exist, even with no '
+    'match history',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.synced,
+          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          snapshots: [StatSnapshot(timestamp: DateTime(2026, 1, 1), rp: 1200)],
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('View available stats'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    '"View available stats" is offered when legend stats exist, even with '
+    'no snapshots or match history',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.synced,
+          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          legendStats: [buildLegend()],
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('View available stats'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    '"View available stats" is absent with neither snapshots nor legend '
+    'stats',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.synced,
+          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('View available stats'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'a failed rankedSplitsProvider (cold start, no persisted history) shows '
+    'the error state, not a blank empty state',
+    (tester) async {
+      final prefs = await prefsWith({});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.offline, // irrelevant - splits errors first
+          splitsError: Exception('cold start, no connection'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text("Can't load history"), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+    },
+  );
 }

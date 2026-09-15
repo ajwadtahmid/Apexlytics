@@ -33,6 +33,15 @@ class SeasonalMapsNotifier extends AsyncNotifier<SeasonalMaps> {
 
     try {
       final result = await apiService.get('/maps', noCache: true);
+      // The server intentionally returns an empty {ranked: [], pubs: []} once
+      // its hardcoded map pool goes stale (past MAPS_MAX_AGE_MS in
+      // extra/server/*.ts) — the rotation changes every split and nobody
+      // reliably updates the pool by hand. Overwriting the cache with that
+      // empty pool is deliberate, not a bug: serving a stale cached rotation
+      // order would tell the favourites picker and notification naming about
+      // maps that may no longer exist, whereas an empty pool falls back to
+      // "no favourites filter, alert on every rotation" — wrong info is worse
+      // than no info here. Do not "fix" this by preserving the stale cache.
       final fresh = SeasonalMaps.fromJson(result.data);
 
       if (_hasChanged(cached, fresh)) {

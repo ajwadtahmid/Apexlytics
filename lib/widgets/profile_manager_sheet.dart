@@ -280,6 +280,10 @@ class _ProfileTile extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 16),
               color: AppTheme.red,
+              // Stats/history for this UID are kept, not deleted — re-adding
+              // the same player later picks them back up. See
+              // PlayerSettingsNotifier.removeProfile.
+              tooltip: 'Remove profile (their stats are kept)',
               onPressed: onRemove,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,

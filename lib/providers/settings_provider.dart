@@ -236,13 +236,23 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
 
   static List<PlayerProfile> _parseProfiles(String? raw) {
     try {
-      final list = jsonDecode(raw ?? '[]') as List;
-      return list
+      final decoded = jsonDecode(raw ?? '[]');
+      if (decoded is! List) {
+        log.w('Stored profiles blob is not a list — treating as empty');
+        return [];
+      }
+      return decoded
           .whereType<Map<String, dynamic>>()
           .map(PlayerProfile.fromJson)
           .take(maxProfileCount)
           .toList();
-    } on FormatException {
+    } catch (e) {
+      // Well-formed-but-wrong-shape JSON (e.g. `{"a":1}`) throws TypeError on
+      // the `as List` cast, not FormatException — narrower error handling
+      // here left this reachable from a hand-edited or foreign backup file
+      // and bricked build() (and therefore the whole app) on every launch.
+      // See rp_snapshot_storage._parseSnapshots for the same reasoning.
+      log.w('Profile JSON parse failed — returning empty list', error: e);
       return [];
     }
   }
@@ -435,6 +445,26 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     state = state.copyWith(profiles: profiles);
   }
 
+  /// Removes the profile slot at [index] — the saved name/UID/platform triple
+  /// only. Everything keyed by that UID (ranked match history, RP snapshots,
+  /// legend stats, the rank goal, the `/games` sync cooldown) is left
+  /// untouched: `RankedHistoryStore` and every UID-scoped prefs key
+  /// (`PrefsKeys.legendStatsKeyFor`, `.rankGoalKeyFor`, `.gamesNextSync`, …)
+  /// are addressed by UID, not by profile-slot index, so none of it becomes
+  /// unreachable just because the profile pointing at it was removed.
+  ///
+  /// This is deliberate, not an oversight: ranked history is forward-only
+  /// and can't be re-downloaded, so a profile
+  /// removal — which has no confirmation step — must never be the thing that
+  /// destroys it. Re-adding the same UID later (`setPlayer`/`addProfile`)
+  /// picks the accumulated data back up automatically and unmodified: every
+  /// provider that reads it is `.family`-keyed by UID, so nothing needs to be
+  /// explicitly "reloaded" — the same UID simply resolves to the same
+  /// already-populated providers again.
+  ///
+  /// Only [PlayerSettingsNotifier.clearAll] actually deletes UID-scoped data,
+  /// and it says so explicitly (two confirmations, one naming the fact that
+  /// match history is unrecoverable) — removing a profile here does not.
   Future<void> removeProfile(int index) async {
     if (index < 0 || index >= state.profiles.length) return;
     final profiles = List<PlayerProfile>.from(state.profiles)..removeAt(index);

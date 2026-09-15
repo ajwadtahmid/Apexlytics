@@ -180,6 +180,34 @@ void main() {
       await appendSnapshot(buildStats(rankScore: 2400), store, uid: 'u');
       expect(await store.snapshotCount('u'), 1);
     });
+
+    test(
+      'two concurrent appends for the same UID both land (neither is '
+      'dropped by the other)',
+      () async {
+        // Fired without awaiting the first before starting the second, so
+        // both interleave through the same read-modify-write instead of
+        // running sequentially. Before the per-UID chain, both would read
+        // the same pre-append list and the second write would silently
+        // discard the first's.
+        final f1 = appendSnapshot(
+          buildStats(rankScore: 100),
+          store,
+          uid: 'u',
+          deduplicateRp: false,
+        );
+        final f2 = appendSnapshot(
+          buildStats(rankScore: 200),
+          store,
+          uid: 'u',
+          deduplicateRp: false,
+        );
+        await Future.wait([f1, f2]);
+
+        expect(await store.snapshotCount('u'), 2);
+        expect(loadSnapshotsSync(uid: 'u').map((s) => s.rp), [100, 200]);
+      },
+    );
   });
 
   group('migrateSnapshotsFromPrefs', () {

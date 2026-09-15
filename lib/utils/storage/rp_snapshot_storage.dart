@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -126,11 +127,54 @@ Future<List<StatSnapshot>> primeSnapshots(
 List<StatSnapshot> loadSnapshotsSync({String? uid}) =>
     _cache[PrefsKeys.snapshotKeyFor(uid)] ?? const [];
 
+/// Per-UID chain of in-flight [appendSnapshot] calls, so two interleaved
+/// appends for the same UID can't both read the same pre-append list and
+/// race to write `_cache[key]`, dropping one reading. Each call chains onto
+/// the previous one before doing its own read-modify-write. Assigned
+/// synchronously, before any await — the same idiom
+/// `RankedHistoryStore._open()` uses for its memoized open.
+final Map<String, Future<List<StatSnapshot>>> _appending = {};
+
 /// Appends a reading for [uid], if it is one worth keeping.
 ///
 /// Returns the updated list. Skips (returning the current list unchanged) when
 /// the reading is an untrustworthy zero or a duplicate of the last one.
 Future<List<StatSnapshot>> appendSnapshot(
+  PlayerStats stats,
+  RankedHistoryStore store, {
+  String? uid,
+  bool deduplicateRp = true,
+}) {
+  final key = PrefsKeys.snapshotKeyFor(uid);
+  final previous = _appending[key];
+  // Swallow a prior failure rather than propagate it - it was already
+  // surfaced to its own caller, and chaining its rejection here would skip
+  // our own write for an unrelated failure.
+  final ready = previous == null
+      ? Future<void>.value()
+      : previous.then((_) {}, onError: (_) {});
+  final chained = ready.then(
+    (_) => _appendSnapshotLocked(
+      stats,
+      store,
+      uid: uid,
+      deduplicateRp: deduplicateRp,
+    ),
+  );
+  _appending[key] = chained;
+  // Only the entry still pointing at *this* link is cleared — a newer call
+  // may already have chained onto it and replaced the map entry.
+  unawaited(
+    chained
+        .catchError((_, _) => const <StatSnapshot>[])
+        .whenComplete(() {
+          if (identical(_appending[key], chained)) _appending.remove(key);
+        }),
+  );
+  return chained;
+}
+
+Future<List<StatSnapshot>> _appendSnapshotLocked(
   PlayerStats stats,
   RankedHistoryStore store, {
   String? uid,

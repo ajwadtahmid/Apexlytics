@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../providers/api_provider.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../providers/search_provider.dart';
@@ -9,6 +10,7 @@ import '../../../services/notification_service.dart';
 import '../../../utils/error_messages.dart';
 import '../../../utils/notifications.dart';
 import '../../../utils/storage/backup_service.dart';
+import '../../../utils/storage/ranked_history_store.dart';
 import '../../../utils/storage/rp_snapshot_storage.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/widgets.dart';
@@ -147,18 +149,39 @@ class CacheSettingsSection extends ConsumerWidget {
     }
   }
 
+  // Picks and parses the file first, then confirms with the specific
+  // contents (profile/match counts, how many matches are actually new). An
+  // operation that merges two histories together irreversibly deserves more
+  // than a generic "this will restore settings and profiles" dialog.
   Future<void> _importData(BuildContext context, WidgetRef ref) async {
+    final rankedStore = ref.read(rankedHistoryStoreProvider);
+    final previewResult = await previewBackup(rankedStore: rankedStore);
+    if (!context.mounted) return;
+
+    switch (previewResult) {
+      case PreviewCancelled():
+        return;
+      case PreviewError(:final message):
+        context.showError(message);
+      case PreviewReady(:final preview):
+        await _confirmAndCommit(context, ref, preview, rankedStore);
+    }
+  }
+
+  Future<void> _confirmAndCommit(
+    BuildContext context,
+    WidgetRef ref,
+    BackupPreview preview,
+    RankedHistoryStore rankedStore,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: const Text('Import backup?'),
-        // "Merge" matches importRows' actual behavior: it replaces rows the
-        // backup carries, leaving local-only rows untouched.
-        content: const Text(
-          'This will restore the backup\'s settings and profiles, and merge '
-          'its match history into your current data.',
-          style: TextStyle(color: AppTheme.muted),
+        content: Text(
+          _summarize(preview),
+          style: const TextStyle(color: AppTheme.muted),
         ),
         actions: [
           TextButton(
@@ -170,23 +193,19 @@ class CacheSettingsSection extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Select file',
-              style: TextStyle(color: AppTheme.accent),
-            ),
+            child: const Text('Import', style: TextStyle(color: AppTheme.accent)),
           ),
         ],
       ),
     );
-
     if (confirmed != true || !context.mounted) return;
 
     final prefs = ref.read(sharedPreferencesProvider);
-    final importResult = await importBackup(
+    final importResult = await commitBackupImport(
+      preview,
       prefs,
-      rankedStore: ref.read(rankedHistoryStoreProvider),
+      rankedStore: rankedStore,
     );
-
     if (!context.mounted) return;
 
     switch (importResult) {
@@ -199,9 +218,22 @@ class CacheSettingsSection extends ConsumerWidget {
         context.showMessage('Backup restored ($keyCount items).');
       case ImportError(:final message):
         context.showError(message);
-      case ImportCancelled():
-        break;
     }
+  }
+
+  String _summarize(BackupPreview preview) {
+    final exportedAt = preview.exportedAt;
+    final profiles = preview.profileCount == 1
+        ? '1 profile'
+        : '${preview.profileCount} profiles';
+    return [
+      if (exportedAt != null)
+        'Exported ${DateFormat('MMM d, yyyy').format(exportedAt.toLocal())}.',
+      '$profiles, ${preview.matchCount} matches '
+          '(${preview.newMatchCount} new to this device).',
+      "This will restore the backup's settings and profiles, and merge its "
+          'match history into your current data.',
+    ].join('\n\n');
   }
 
   /// Destructive-action dialog. [onConfirm] runs after the sheet is dismissed,

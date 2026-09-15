@@ -88,7 +88,7 @@ String _redactUid(String key) => key.replaceAll(RegExp(r'\d{10,20}'), '<uid>');
 
 /// Restores [prefsData] into [prefs], skipping disallowed keys and dispatching
 /// each value to the matching typed `SharedPreferences` setter. Extracted from
-/// [importBackup] so the type-dispatch is testable without a file picker.
+/// [commitBackupImport] so the type-dispatch is testable without a file picker.
 @visibleForTesting
 Future<void> restorePrefsData(
   SharedPreferences prefs,
@@ -186,9 +186,10 @@ Future<String?> exportBackup(
   return filePath;
 }
 
+// Cancellation is a PreviewResult concern now (see previewBackup) -
+// commitBackupImport is only ever called after a file was already picked,
+// so ImportResult itself no longer needs an ImportCancelled variant.
 sealed class ImportResult {}
-
-class ImportCancelled extends ImportResult {}
 
 class ImportSuccess extends ImportResult {
   final int keyCount;
@@ -200,13 +201,51 @@ class ImportError extends ImportResult {
   ImportError(this.message);
 }
 
-/// Shows a file picker dialog, reads backup JSON, and restores all keys to [prefs].
-/// Returns an [ImportResult] describing the outcome. [rankedStore], when
-/// provided, restores any embedded ranked match history.
-Future<ImportResult> importBackup(
-  SharedPreferences prefs, {
-  RankedHistoryStore? rankedStore,
-}) async {
+/// A parsed, not-yet-committed backup file, shown to the user before
+/// [commitBackupImport] writes anything. [newMatchCount] is the point of it:
+/// distinguishing "this backup mostly
+/// duplicates what you already have" from "this restores 1,200 matches
+/// you're about to see for the first time" for an operation that still
+/// merges two histories together irreversibly.
+class BackupPreview {
+  final int version;
+  final DateTime? exportedAt;
+  final int profileCount;
+  final int matchCount;
+  final int newMatchCount;
+
+  // Kept so commitBackupImport can write without re-picking or re-parsing
+  // the file.
+  final Map<String, dynamic> _envelope;
+
+  const BackupPreview._({
+    required this.version,
+    required this.exportedAt,
+    required this.profileCount,
+    required this.matchCount,
+    required this.newMatchCount,
+    required Map<String, dynamic> envelope,
+  }) : _envelope = envelope;
+}
+
+sealed class PreviewResult {}
+
+class PreviewCancelled extends PreviewResult {}
+
+class PreviewReady extends PreviewResult {
+  final BackupPreview preview;
+  PreviewReady(this.preview);
+}
+
+class PreviewError extends PreviewResult {
+  final String message;
+  PreviewError(this.message);
+}
+
+/// Shows a file picker dialog and parses+summarizes the selected backup,
+/// without writing anything. Pass the [BackupPreview] from a [PreviewReady]
+/// result to [commitBackupImport] to actually restore it.
+Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
   final pickedFile = await file_selector.openFile(
     acceptedTypeGroups: [
       const file_selector.XTypeGroup(
@@ -217,21 +256,84 @@ Future<ImportResult> importBackup(
     ],
   );
 
-  if (pickedFile == null) return ImportCancelled();
+  if (pickedFile == null) return PreviewCancelled();
 
   try {
     final raw = await pickedFile.readAsString();
     final envelope = jsonDecode(raw) as Map<String, dynamic>;
 
     final version = envelope['version'];
-    if (version is! int || version > _kBackupVersion) {
-      return ImportError('Unsupported backup version ($version).');
+    // Lower-bounded too, not just upper-bounded: a malformed or hand-edited
+    // file with e.g. `"version": 0` used to pass this guard and be treated
+    // as a v1 file by the parsing below, rather than being rejected here.
+    if (version is! int || version < 1 || version > _kBackupVersion) {
+      return PreviewError('Unsupported backup version ($version).');
     }
 
     final prefsData = envelope['prefs'];
     if (prefsData is! Map<String, dynamic>) {
-      return ImportError('Invalid prefs structure in backup file.');
+      return PreviewError('Invalid prefs structure in backup file.');
     }
+
+    return PreviewReady(
+      BackupPreview._(
+        version: version,
+        exportedAt: DateTime.tryParse(envelope['exported_at'] as String? ?? ''),
+        profileCount: _countProfiles(prefsData),
+        matchCount: _rowCount(envelope['ranked_history']),
+        newMatchCount: await _countNewMatches(
+          envelope['ranked_history'],
+          rankedStore,
+        ),
+        envelope: envelope,
+      ),
+    );
+  } on FormatException catch (e) {
+    log.w('Backup preview failed — invalid JSON', error: e);
+    return PreviewError('The selected file is not a valid backup.');
+  } catch (e) {
+    log.w('Backup preview failed', error: e);
+    return PreviewError('Failed to read the backup file.');
+  }
+}
+
+// player_profiles is itself a JSON-encoded string within prefs (see
+// PlayerSettingsNotifier._saveProfiles), not a nested object — parsed here
+// only to count entries for the preview, independent of restorePrefsData's
+// own (separate) handling of the same key.
+int _countProfiles(Map<String, dynamic> prefsData) {
+  final raw = prefsData[PrefsKeys.profiles];
+  if (raw is! String) return 0;
+  try {
+    final decoded = jsonDecode(raw);
+    return decoded is List ? decoded.length : 0;
+  } on FormatException {
+    return 0;
+  }
+}
+
+int _rowCount(Object? rows) => rows is List ? rows.length : 0;
+
+/// How many of [rows] (raw `ranked_history` entries) aren't already in
+/// [rankedStore] by id. Matches [rankedStore]'s own dedup key, so this is
+/// exact, not an estimate. 0 when there's no store to compare against.
+Future<int> _countNewMatches(Object? rows, RankedHistoryStore? rankedStore) async {
+  if (rows is! List || rows.isEmpty || rankedStore == null) return 0;
+  final existing = await rankedStore.allIds();
+  return rows.where((r) => r is Map && !existing.contains(r['id'])).length;
+}
+
+/// Restores a previously-[previewBackup]'d file. [rankedStore], when
+/// provided, restores any embedded ranked match history.
+Future<ImportResult> commitBackupImport(
+  BackupPreview preview,
+  SharedPreferences prefs, {
+  RankedHistoryStore? rankedStore,
+}) async {
+  final envelope = preview._envelope;
+  final prefsData = envelope['prefs'] as Map<String, dynamic>;
+
+  try {
     // Database sections first, prefs last - no transaction spans both stores,
     // so a malformed file should fail before any pref commits, not after.
     final rankedHistory = envelope['ranked_history']; // absent in v1
@@ -257,13 +359,12 @@ Future<ImportResult> importBackup(
     }
     resetSnapshotCache();
 
-    log.i('Backup restored: ${prefsData.length} keys from v$version backup');
+    log.i(
+      'Backup restored: ${prefsData.length} keys from v${preview.version} backup',
+    );
     return ImportSuccess(prefsData.length);
-  } on FormatException catch (e) {
-    log.w('Backup import failed — invalid JSON', error: e);
-    return ImportError('The selected file is not a valid backup.');
   } catch (e) {
     log.w('Backup import failed', error: e);
-    return ImportError('Failed to read the backup file.');
+    return ImportError('Failed to restore the backup file.');
   }
 }

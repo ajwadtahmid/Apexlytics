@@ -6,6 +6,11 @@ import 'app_logger.dart';
 
 const _kRetryKey = '_retry_count';
 const _kUsedBackupKey = '_used_backup';
+// Set when a request starts on the backup because of the sticky window, not
+// a real mid-request failover ([_kUsedBackupKey]). Lets a backup failure
+// during the window fall back to the primary instead of hard-failing for
+// the rest of [primaryDownFor].
+const _kPreferredBackupKey = '_preferred_backup';
 
 /// Retries requests on transient server errors (5xx) and network failures.
 ///
@@ -56,9 +61,9 @@ class RetryInterceptor extends Interceptor {
     if (backup != null && backup.isNotEmpty && _primaryIsDown) {
       options
         ..baseUrl = backup
-        // Marked as already-failed-over so onError doesn't try the backup a
-        // second time and instead surfaces the error.
-        ..extra[_kUsedBackupKey] = true;
+        // A preference, not [_kUsedBackupKey]'s commitment: lets a backup
+        // failure for this request still fall back to the primary in onError.
+        ..extra[_kPreferredBackupKey] = true;
     }
     handler.next(options);
   }
@@ -66,9 +71,12 @@ class RetryInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     // A primary that answers is a primary that is back; clear the shortcut
-    // immediately rather than waiting out the window.
-    if (_primaryDownUntil != null &&
-        response.requestOptions.extra[_kUsedBackupKey] != true) {
+    // immediately. A response served by the backup, failover or preference,
+    // must not clear it.
+    final extra = response.requestOptions.extra;
+    final servedByBackup =
+        extra[_kUsedBackupKey] == true || extra[_kPreferredBackupKey] == true;
+    if (_primaryDownUntil != null && !servedByBackup) {
       _primaryDownUntil = null;
     }
     handler.next(response);
@@ -101,12 +109,32 @@ class RetryInterceptor extends Interceptor {
       return _refetch(err, handler);
     }
 
-    // Retries against the current host are exhausted. Fail over to the
-    // backup host exactly once — its own retries are tracked separately so
-    // it gets the same retry budget the primary just used, and the
-    // [_kUsedBackupKey] flag stops this from ever bouncing back and forth.
+    // Retries against the current host are exhausted.
     final usedBackup = err.requestOptions.extra[_kUsedBackupKey] == true;
+    final preferredBackup =
+        err.requestOptions.extra[_kPreferredBackupKey] == true;
     final backup = backupBaseUrl;
+
+    // Started on the backup by preference, not a real failover, and the
+    // backup failed too — fall back to the primary rather than staying stuck
+    // for the rest of the window. A still-down primary re-fails over below.
+    if (preferredBackup && !usedBackup) {
+      log.w(
+        'Backup proxy failed while preferred; falling back to primary '
+        'for ${err.requestOptions.path}',
+      );
+      _primaryDownUntil = null;
+      err.requestOptions
+        ..baseUrl = dio.options.baseUrl
+        ..extra[_kPreferredBackupKey] = false
+        ..extra[_kRetryKey] = 0;
+      return _refetch(err, handler);
+    }
+
+    // Fail over to the backup host exactly once — its own retries are
+    // tracked separately so it gets the same retry budget the primary just
+    // used, and the [_kUsedBackupKey] flag stops this from ever bouncing
+    // back and forth.
     if (!usedBackup && backup != null && backup.isNotEmpty) {
       log.w(
         'Primary proxy failed after $maxRetries retries, trying backup '

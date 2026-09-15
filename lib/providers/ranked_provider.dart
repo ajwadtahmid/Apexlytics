@@ -115,29 +115,37 @@ final rankedSyncProvider = FutureProvider.autoDispose
         );
       }
 
+      // Scoped to just the network call. A local write failure
+      // (store.upsertAll, backfillSeasonIds, a prefs write) used to be
+      // caught by the same handler and misreported as `offline`, which is
+      // specifically the wrong diagnosis for the class of failure
+      // that most needs an accurate one. Only a fetch failure gets the
+      // graceful "serve persisted history" treatment; a write failure now
+      // propagates as a real error.
+      final GamesResult result;
       try {
-        final result = await ref.watch(gamesServiceProvider).getMatches(uid);
-        switch (result) {
-          case GamesPending(:final retryAfter, :final isNotTracked):
-            return await remember(
-              isNotTracked
-                  ? RankedSyncOutcome.notTracked
-                  : RankedSyncOutcome.queued,
-              retryAfter,
-            );
-          case GamesMatches(:final matches):
-            // An empty list is a valid answer — tracking is live, nothing recorded
-            // yet — so it still counts as a successful sync.
-            await store.upsertAll(uid, matches, seasons: seasons);
-            await remember(
-              RankedSyncOutcome.synced,
-              ApiConstants.gamesSyncCooldown,
-            );
-        }
+        result = await ref.watch(gamesServiceProvider).getMatches(uid);
       } catch (e) {
         if (await store.count(uid) == 0) rethrow;
         log.w('games fetch failed; serving persisted history', error: e);
         return remember(RankedSyncOutcome.offline, _kOfflineRetry);
+      }
+      switch (result) {
+        case GamesPending(:final retryAfter, :final isNotTracked):
+          return await remember(
+            isNotTracked
+                ? RankedSyncOutcome.notTracked
+                : RankedSyncOutcome.queued,
+            retryAfter,
+          );
+        case GamesMatches(:final matches):
+          // An empty list is a valid answer — tracking is live, nothing recorded
+          // yet — so it still counts as a successful sync.
+          await store.upsertAll(uid, matches, seasons: seasons);
+          await remember(
+            RankedSyncOutcome.synced,
+            ApiConstants.gamesSyncCooldown,
+          );
       }
       // Re-read from prefs rather than reusing the watched `seasons` above: other
       // screens (e.g. the stats tab) call upsertSeason() directly against prefs
@@ -240,6 +248,10 @@ typedef RankedSplitView = ({
   List<WeekdayBucket> dayOfWeek,
   RankedSummary fullSquad,
   RankedSummary partialSquad,
+  // Also belongs here, not in build - RankedRpChart and
+  // RankedSquadSessionsEntry used to each call sessionize() on every
+  // rebuild of the always-visible Overview tab.
+  List<RankedSession> sessions,
 });
 
 final rankedSplitViewProvider = FutureProvider.autoDispose
@@ -265,6 +277,7 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
         dayOfWeek: dayOfWeekBuckets(filtered),
         fullSquad: summarize(filtered.where((m) => m.isPartyFull).toList()),
         partialSquad: summarize(filtered.where((m) => !m.isPartyFull).toList()),
+        sessions: sessionize(filtered),
       );
     });
 
@@ -376,4 +389,28 @@ void invalidatePlayerDerivedProviders(WidgetRef ref) {
   ref.invalidate(gamesEligibilityProvider);
   ref.invalidate(rankedSeasonsProvider);
   ref.invalidate(myPlayerStatsProvider);
+  // Resets the split/week selection back to its build() default (newest
+  // split, All weeks). Without this the previously-selected splitId can name
+  // a bucket that no longer exists post-clear/import; effectiveSplitId
+  // already falls back gracefully when that happens, but the picker
+  // otherwise shows a stale selection until the user changes it themselves.
+  ref.invalidate(rankedPeriodProvider);
+}
+
+/// Every provider whose value is derived from stored *match rows* — the set
+/// a hand correction (see `match_edit_sheet.dart`) can change. Deliberately
+/// excludes [rankedSyncProvider] and [rankedSplitsProvider], so saving an
+/// edit never spends a `/games` request or touches the split picker (edited
+/// fields don't change which split a match belongs to).
+///
+/// Defined here, next to the providers it names, for the same reason
+/// [invalidatePlayerDerivedProviders] is — a list maintained at the call
+/// site rots the moment a new store-derived provider is added.
+void invalidateMatchDerivedProviders(WidgetRef ref) {
+  ref.invalidate(rankedSplitMatchesProvider);
+  ref.invalidate(rankedSplitViewProvider);
+  ref.invalidate(rankedLifetimeAggregatesProvider);
+  ref.invalidate(rankedSplitDetailProvider);
+  ref.invalidate(rankedPersonalBestProvider);
+  ref.invalidate(weeklyNetRpProvider);
 }

@@ -74,8 +74,14 @@ void main() async {
       // no player names or UIDs can leak through HTTP breadcrumbs.
     },
     appRunner: () {
-      // Chain our logger after Sentry sets its own FlutterError handler.
-      _hookFlutterErrors(sentryFlutterHandler: FlutterError.onError);
+      // Chain our logger after Sentry sets its own FlutterError and
+      // PlatformDispatcher handlers, so an uncaught error still reaches
+      // Sentry with its unhandled-error classification intact rather than
+      // only via a log.e() breadcrumb.
+      _hookFlutterErrors(
+        sentryFlutterHandler: FlutterError.onError,
+        sentryPlatformHandler: PlatformDispatcher.instance.onError,
+      );
       runApp(app);
     },
   );
@@ -95,10 +101,16 @@ Future<void> _initServices() async {
 }
 
 /// Wires [FlutterError.onError] and [PlatformDispatcher.instance.onError]
-/// through the app logger. When [sentryFlutterHandler] is set, it is called
-/// after logging so crashes are also reported to Sentry.
+/// through the app logger. When [sentryFlutterHandler] / [sentryPlatformHandler]
+/// are set (Sentry's own handlers, captured by the caller before this
+/// function replaces them), they are chained after logging so crashes keep
+/// reaching Sentry with their original classification — without this, the
+/// unconditional reassignment below silently replaced whatever
+/// SentryFlutter.init had already installed, and async platform errors
+/// would only reach Sentry indirectly, as a plain log.e() breadcrumb.
 void _hookFlutterErrors({
   void Function(FlutterErrorDetails)? sentryFlutterHandler,
+  bool Function(Object, StackTrace)? sentryPlatformHandler,
 }) {
   FlutterError.onError = (details) {
     log.e(
@@ -115,6 +127,6 @@ void _hookFlutterErrors({
 
   PlatformDispatcher.instance.onError = (error, stack) {
     log.e('PlatformDispatcher error', error: error, stackTrace: stack);
-    return false;
+    return sentryPlatformHandler?.call(error, stack) ?? false;
   };
 }
