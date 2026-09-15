@@ -60,7 +60,10 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "17"
+          # AGP 9.3.0's bundled lint crashes under JDK 17 (NoSuchMethodError on
+          # java.util.List.removeLast(), a JDK 21+ default method) during
+          # lintVitalAnalyzeRelease. JDK 21 avoids it.
+          java-version: "21"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
