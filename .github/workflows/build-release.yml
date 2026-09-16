@@ -9,9 +9,6 @@ on:
     tags:
       - "v*"
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   extract-version:
     runs-on: ubuntu-latest
@@ -25,7 +22,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -55,9 +52,9 @@ jobs:
     needs: [test, extract-version]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: "temurin"
           # AGP 9.3.0's bundled lint crashes under JDK 17 (NoSuchMethodError on
@@ -105,7 +102,7 @@ jobs:
         run: mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/apexlytics-release-v${{ needs.extract-version.outputs.version }}.aab
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: apexlytics-android
           path: build/app/outputs/bundle/release/apexlytics-release-v${{ needs.extract-version.outputs.version }}.aab
@@ -114,7 +111,7 @@ jobs:
     needs: [test, extract-version]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -156,7 +153,7 @@ jobs:
         run: mv apexlytics-installer.exe "apexlytics-installer-v${{ needs.extract-version.outputs.version }}.exe"
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: apexlytics-windows
           path: apexlytics-installer-v${{ needs.extract-version.outputs.version }}.exe
@@ -165,7 +162,7 @@ jobs:
     needs: [test, extract-version]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -257,7 +254,7 @@ jobs:
         run: mv Apexlytics-${{ needs.extract-version.outputs.version }}-x86_64.AppImage apexlytics-v${{ needs.extract-version.outputs.version }}.AppImage
 
       - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: apexlytics-linux
           path: apexlytics-v${{ needs.extract-version.outputs.version }}.AppImage
@@ -268,28 +265,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: apexlytics-windows
           path: windows-build/
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: apexlytics-linux
           path: linux-build/
 
       - name: Download Android artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: apexlytics-android
           path: android-build/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             windows-build/apexlytics-installer-v${{ needs.extract-version.outputs.version }}.exe
