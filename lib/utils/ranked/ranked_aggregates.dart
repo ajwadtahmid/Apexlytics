@@ -832,3 +832,67 @@ SessionTrend? sessionTrend(
     previous: avgPerGame(sessions.skip(window).take(window)),
   );
 }
+
+/// Recent-games window [entityTrends] compares against the rest of an
+/// entity's history.
+const int kTrendRecentGames = 10;
+
+/// [current] is the entity's overall average (matches e.g.
+/// [LegendBreakdown.avgRpPerGame]); [older] is what it was before that, so a
+/// trend line reads as "your average used to be X, it's now the Y you see
+/// above" rather than citing a third, unrelated figure.
+class TrendChange {
+  final double older;
+  final double current;
+  const TrendChange({required this.older, required this.current});
+
+  double get delta => current - older;
+}
+
+/// [older] vs. [current] average for whichever value [valueOf] extracts from
+/// each match. [current] is the average across all of [matches]; [older] is
+/// the average across everything before the most recent [window] games.
+/// Null below `window * 2` games - not enough history for "older" to mean
+/// anything. A null [valueOf] (e.g. untracked kills/damage) excludes that
+/// match from both the total and the game count, rather than as a zero.
+/// Windowed by game count, not sessions, so a legend/map played in just a
+/// couple of long sessions still gets a meaningful "recent" slice.
+TrendChange? _trendChange(
+  List<RankedMatch> matches, {
+  required int? Function(RankedMatch) valueOf,
+  int window = kTrendRecentGames,
+}) {
+  if (matches.length < window * 2) return null;
+
+  final chrono = matches.toList()
+    ..sort((a, b) => b.startTime.compareTo(a.startTime)); // newest first
+
+  double avgOf(Iterable<RankedMatch> range) {
+    var total = 0, games = 0;
+    for (final m in range) {
+      final v = valueOf(m);
+      if (v != null) {
+        total += v;
+        games++;
+      }
+    }
+    return games == 0 ? 0 : total / games;
+  }
+
+  return TrendChange(older: avgOf(chrono.skip(window)), current: avgOf(chrono));
+}
+
+/// RP/kills/damage [TrendChange]s for one legend's or map's [matches]
+/// (already filtered to that entity - see [canonicalLegendName]/
+/// [canonicalMapKey]).
+typedef EntityTrends = ({
+  TrendChange? rp,
+  TrendChange? kills,
+  TrendChange? damage,
+});
+
+EntityTrends entityTrends(List<RankedMatch> matches) => (
+  rp: _trendChange(matches, valueOf: (m) => m.effectiveRpChange),
+  kills: _trendChange(matches, valueOf: (m) => m.kills),
+  damage: _trendChange(matches, valueOf: (m) => m.damage),
+);

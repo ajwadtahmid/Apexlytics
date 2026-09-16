@@ -11,6 +11,7 @@ import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/formatting/snapshot_types.dart';
+import '../../utils/ranked/ranked_aggregates.dart' show entityTrends;
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
 import '../../widgets/graph_card.dart' show showSnapshotBackupSheet;
@@ -352,16 +353,29 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     // return every match behind that row, not just the ones under whichever
     // raw casing happened to be more common. Same reasoning as mapMatches
     // below, for map-key variants.
-    Future<List<RankedMatch>> legendMatches(String legend) async => filtered
-        .where((m) => canonicalLegendName(m.legend) == legend)
-        .toList();
+    List<RankedMatch> legendFiltered(String legend) =>
+        filtered.where((m) => canonicalLegendName(m.legend) == legend).toList();
+    Future<List<RankedMatch>> legendMatches(String legend) async =>
+        legendFiltered(legend);
     // Compares canonically, not by exact key: mapBreakdowns already merges
     // map-key variants (e.g. `edistrict`/`edistrict_rotation`) into one row,
     // so its drill-down must return every match behind that row, not just
     // the ones under whichever raw key happened to be its representative.
-    Future<List<RankedMatch>> mapMatches(String mapKey) async => filtered
+    List<RankedMatch> mapFiltered(String mapKey) => filtered
         .where((m) => canonicalMapKey(m.mapKey) == canonicalMapKey(mapKey))
         .toList();
+    Future<List<RankedMatch>> mapMatches(String mapKey) async =>
+        mapFiltered(mapKey);
+
+    // Trend lines need real matches, so they only exist for a split, not
+    // Lifetime, where legend/map rows come from a lightweight SQL aggregate
+    // with no matches hydrated.
+    final legendTrends = {
+      for (final l in legends) l.legend: entityTrends(legendFiltered(l.legend)),
+    };
+    final mapTrends = {
+      for (final mb in maps) mb.mapKey: entityTrends(mapFiltered(mb.mapKey)),
+    };
 
     return _tabShell(
       'split',
@@ -385,11 +399,13 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           rows: legends,
           matchesFor: legendMatches,
           onRefresh: _refresh,
+          trends: legendTrends,
         ),
         RankedMapBreakdown(
           rows: maps,
           matchesFor: mapMatches,
           onRefresh: _refresh,
+          trends: mapTrends,
         ),
         // History keeps everything (pubs included), not just the ranked matches.
         RankedMatchList(matches: view.history, onRefresh: _refresh),

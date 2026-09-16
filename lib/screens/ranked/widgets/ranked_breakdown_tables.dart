@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatDuration;
+    show formatNumber, formatDuration, formatSigned;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -71,12 +71,16 @@ class RankedLegendBreakdown extends StatefulWidget {
   // Lifetime tab can query one legend on tap instead of holding all history.
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
+  // Keyed by legend name. Empty at Lifetime scope, where rows come from a
+  // SQL aggregate with no matches hydrated to build trends from.
+  final Map<String, EntityTrends> trends;
 
   const RankedLegendBreakdown({
     super.key,
     required this.rows,
     required this.matchesFor,
     required this.onRefresh,
+    this.trends = const {},
   });
 
   @override
@@ -114,6 +118,7 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
               child: _LegendCard(
                 rank: i + 1,
                 row: rows[i],
+                trends: widget.trends[rows[i].legend],
                 onTap: () => showLegendDetailSheet(
                   context,
                   rows[i],
@@ -122,6 +127,7 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
                 ),
               ),
             ),
+          if (widget.trends.isNotEmpty) const _TrendFootnote(),
         ],
       ),
     );
@@ -131,11 +137,13 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
 class _LegendCard extends StatelessWidget {
   final int rank;
   final LegendBreakdown row;
+  final EntityTrends? trends;
   final VoidCallback onTap;
   const _LegendCard({
     required this.rank,
     required this.row,
     required this.onTap,
+    this.trends,
   });
 
   @override
@@ -222,6 +230,7 @@ class _LegendCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (trends != null) _TrendLines(trends: trends!),
                   ],
                 ),
               ),
@@ -306,6 +315,113 @@ class _RpPill extends StatelessWidget {
   }
 }
 
+/// Up to 3 short lines (RP/Kills/Damage) under a legend/map card's chip row,
+/// leading with the size of the move rather than restating the current
+/// average already shown above it - "down 5, was 50". A metric whose
+/// displayed magnitude rounds to zero shows as a muted "▶ unchanged" instead
+/// of a misleading colored "down 0.0". Dropped individually when
+/// [entityTrends] returned null (not enough games played yet); the whole
+/// widget collapses to nothing if all three are.
+class _TrendLines extends StatelessWidget {
+  final EntityTrends trends;
+  const _TrendLines({required this.trends});
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = [
+      _line(
+        'Avg RP',
+        trends.rp,
+        magnitudeFmt: (v) => v.toStringAsFixed(1),
+        olderFmt: formatSigned,
+        roundsToZero: (d) => d.abs() < 0.05,
+      ),
+      _line(
+        'Avg Kills',
+        trends.kills,
+        magnitudeFmt: (v) => v.toStringAsFixed(1),
+        olderFmt: (v) => v.toStringAsFixed(1),
+        roundsToZero: (d) => d.abs() < 0.05,
+      ),
+      _line(
+        'Avg Damage',
+        trends.damage,
+        magnitudeFmt: (v) => formatNumber(v.round()),
+        olderFmt: (v) => formatNumber(v.round()),
+        roundsToZero: (d) => d.abs() < 0.5,
+      ),
+    ].whereType<Widget>().toList();
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppTheme.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final line in lines)
+            Padding(padding: const EdgeInsets.only(top: 2), child: line),
+        ],
+      ),
+    );
+  }
+
+  Widget? _line(
+    String label,
+    TrendChange? trend, {
+    required String Function(double) magnitudeFmt,
+    required String Function(double) olderFmt,
+    required bool Function(double) roundsToZero,
+  }) {
+    if (trend == null) return null;
+    if (roundsToZero(trend.delta)) {
+      return Text.rich(
+        TextSpan(
+          style: const TextStyle(fontSize: 11, color: AppTheme.muted),
+          children: [
+            const TextSpan(text: '▶ '),
+            TextSpan(text: '$label unchanged'),
+          ],
+        ),
+      );
+    }
+    final up = trend.delta > 0;
+    final color = up ? AppTheme.green : AppTheme.red;
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(fontSize: 11, color: color),
+        children: [
+          TextSpan(text: up ? '▲ ' : '▼ '),
+          TextSpan(
+            text:
+                '$label ${up ? 'up' : 'down'} ${magnitudeFmt(trend.delta.abs())}, '
+                'was ${olderFmt(trend.older)}',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One-line explainer for the [_TrendLines] shown on each card above -
+/// avoids repeating the methodology per-card, and keeps it out of the info
+/// sheet so it doesn't cost a tap to see.
+class _TrendFootnote extends StatelessWidget {
+  const _TrendFootnote();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.only(top: AppTheme.sm),
+      child: Text(
+        'Trends show your average now vs. before your last '
+        '$kTrendRecentGames games.',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 11, color: AppTheme.muted),
+      ),
+    );
+  }
+}
+
 // ── Maps tab ────────────────────────────────────────────────────────────────
 
 class RankedMapBreakdown extends StatefulWidget {
@@ -314,12 +430,16 @@ class RankedMapBreakdown extends StatefulWidget {
   // Lifetime tab can query one map on tap instead of holding all history.
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
+  // Keyed by MapBreakdown.mapKey. Empty at Lifetime scope, where rows come
+  // from a SQL aggregate with no matches hydrated to build trends from.
+  final Map<String, EntityTrends> trends;
 
   const RankedMapBreakdown({
     super.key,
     required this.rows,
     required this.matchesFor,
     required this.onRefresh,
+    this.trends = const {},
   });
 
   @override
@@ -361,6 +481,7 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
               child: _MapCard(
                 rank: i + 1,
                 row: rows[i],
+                trends: widget.trends[rows[i].mapKey],
                 onTap: () => showMapDetailSheet(
                   context,
                   rows[i],
@@ -369,6 +490,7 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
                 ),
               ),
             ),
+          if (widget.trends.isNotEmpty) const _TrendFootnote(),
         ],
       ),
     );
@@ -378,8 +500,14 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
 class _MapCard extends StatelessWidget {
   final int rank;
   final MapBreakdown row;
+  final EntityTrends? trends;
   final VoidCallback onTap;
-  const _MapCard({required this.rank, required this.row, required this.onTap});
+  const _MapCard({
+    required this.rank,
+    required this.row,
+    required this.onTap,
+    this.trends,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -391,109 +519,125 @@ class _MapCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       clip: Clip.antiAlias,
       onTap: onTap,
-      child: SizedBox(
-        height: 132,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (asset != null)
-              Image.asset(
-                asset,
-                fit: BoxFit.cover,
-                cacheWidth: 800,
-                errorBuilder: (_, _, _) => Container(color: AppTheme.surface2),
-              )
-            else
-              Container(color: AppTheme.surface2),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [AppTheme.cardScrimTop, AppTheme.cardScrimBottom],
-                ),
-              ),
-            ),
-            Positioned(
-              top: AppTheme.sm,
-              right: AppTheme.sm,
-              child: MapRpBadge(totalRp: row.totalRp, color: rpColor),
-            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(height: 132, child: _mapArt(context, asset, rpColor)),
+          if (trends != null)
             Padding(
-              padding: const EdgeInsets.all(AppTheme.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
+              padding: const EdgeInsets.fromLTRB(
+                AppTheme.md,
+                AppTheme.sm,
+                AppTheme.md,
+                AppTheme.sm,
+              ),
+              child: _TrendLines(trends: trends!),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mapArt(BuildContext context, String? asset, Color rpColor) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (asset != null)
+          Image.asset(
+            asset,
+            fit: BoxFit.cover,
+            cacheWidth: 800,
+            errorBuilder: (_, _, _) => Container(color: AppTheme.surface2),
+          )
+        else
+          Container(color: AppTheme.surface2),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [AppTheme.cardScrimTop, AppTheme.cardScrimBottom],
+            ),
+          ),
+        ),
+        Positioned(
+          top: AppTheme.sm,
+          right: AppTheme.sm,
+          child: MapRpBadge(totalRp: row.totalRp, color: rpColor),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(AppTheme.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      _RankBadge(rank: rank, onImage: true),
-                      const SizedBox(width: AppTheme.sm),
-                      Flexible(
-                        child: Text(
-                          row.displayName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  _RankBadge(rank: rank, onImage: true),
+                  const SizedBox(width: AppTheme.sm),
+                  Flexible(
+                    child: Text(
+                      row.displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _MapStat(
-                          label: 'Avg RP',
-                          value: _signedAvg(row.avgRpPerGame),
-                          color: rpColor,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(right: AppTheme.md),
-                          child: WinLossStat(
-                            wins: row.wins,
-                            losses: row.losses,
-                            onImage: true,
-                          ),
-                        ),
-                        _MapStat(
-                          label: 'Total Kills',
-                          value: formatNumber(row.totalKills),
-                        ),
-                        _MapStat(
-                          label: 'Avg Kills',
-                          value: row.avgKills.toStringAsFixed(1),
-                        ),
-                        _MapStat(
-                          label: 'Total Dmg',
-                          value: formatNumber(row.totalDamage),
-                        ),
-                        _MapStat(
-                          label: 'Avg Dmg',
-                          value: formatNumber(row.avgDamage.round()),
-                        ),
-                        _MapStat(
-                          label: 'Total Time',
-                          value: formatDuration(row.totalLengthSecs),
-                        ),
-                        _MapStat(
-                          label: 'Avg Time',
-                          value: formatDuration(row.avgLengthSecs.round()),
-                        ),
-                        _MapStat(label: 'Games', value: '${row.games}'),
-                      ],
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _MapStat(
+                      label: 'Avg RP',
+                      value: _signedAvg(row.avgRpPerGame),
+                      color: rpColor,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppTheme.md),
+                      child: WinLossStat(
+                        wins: row.wins,
+                        losses: row.losses,
+                        onImage: true,
+                      ),
+                    ),
+                    _MapStat(
+                      label: 'Total Kills',
+                      value: formatNumber(row.totalKills),
+                    ),
+                    _MapStat(
+                      label: 'Avg Kills',
+                      value: row.avgKills.toStringAsFixed(1),
+                    ),
+                    _MapStat(
+                      label: 'Total Dmg',
+                      value: formatNumber(row.totalDamage),
+                    ),
+                    _MapStat(
+                      label: 'Avg Dmg',
+                      value: formatNumber(row.avgDamage.round()),
+                    ),
+                    _MapStat(
+                      label: 'Total Time',
+                      value: formatDuration(row.totalLengthSecs),
+                    ),
+                    _MapStat(
+                      label: 'Avg Time',
+                      value: formatDuration(row.avgLengthSecs.round()),
+                    ),
+                    _MapStat(label: 'Games', value: '${row.games}'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }

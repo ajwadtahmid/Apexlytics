@@ -197,41 +197,38 @@ void main() {
     expect(l.first.winRate, 1.0);
   });
 
-  test(
-    'legendBreakdowns merges legend-name case variants into one row',
-    () {
-      // Same reasoning as mapBreakdowns' canonicalization: a raw "axle" vs
-      // "Axle" for the same player must not split one legend into two
-      // identically-labelled rows.
-      final variants = rankedOnly([
-        match(
-          legend: 'axle',
-          mapKey: 'olympus_rotation',
-          rpChange: 15,
-          cumulativeRp: 1015,
-          kills: 1,
-          damage: 100,
-          startOffset: 0,
-        ),
-        match(
-          legend: 'Axle',
-          mapKey: 'olympus_rotation',
-          rpChange: 25,
-          cumulativeRp: 1040,
-          kills: 2,
-          damage: 200,
-          startOffset: 700,
-        ),
-      ]);
+  test('legendBreakdowns merges legend-name case variants into one row', () {
+    // Same reasoning as mapBreakdowns' canonicalization: a raw "axle" vs
+    // "Axle" for the same player must not split one legend into two
+    // identically-labelled rows.
+    final variants = rankedOnly([
+      match(
+        legend: 'axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 15,
+        cumulativeRp: 1015,
+        kills: 1,
+        damage: 100,
+        startOffset: 0,
+      ),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 25,
+        cumulativeRp: 1040,
+        kills: 2,
+        damage: 200,
+        startOffset: 700,
+      ),
+    ]);
 
-      final l = legendBreakdowns(variants);
+    final l = legendBreakdowns(variants);
 
-      expect(l.length, 1);
-      expect(l.single.legend, 'Axle');
-      expect(l.single.games, 2);
-      expect(l.single.totalRp, 40);
-    },
-  );
+    expect(l.length, 1);
+    expect(l.single.legend, 'Axle');
+    expect(l.single.games, 2);
+    expect(l.single.totalRp, 40);
+  });
 
   test('mapBreakdowns sorted by games desc with display names', () {
     final m = mapBreakdowns(ranked);
@@ -608,6 +605,77 @@ void main() {
       expect(t!.recent, closeTo(50, 0.01));
       expect(t.previous, closeTo(6.6667, 0.01));
       expect(t.delta, closeTo(43.33, 0.01));
+    });
+  });
+
+  group('entityTrends', () {
+    // kTrendRecentGames is 10, so trends need 20+ games. RP = the match's
+    // index (0, 1, 2, ...), oldest to newest, one game apart - so the most
+    // recent 10 are indices 14-23 and everything "older" is indices 0-13.
+    List<RankedMatch> manyMatches(int count, {String legend = 'Axle'}) => [
+      for (var i = 0; i < count; i++)
+        match(
+          legend: legend,
+          mapKey: 'olympus_rotation',
+          rpChange: i,
+          cumulativeRp: 1000 + i,
+          kills: 1,
+          damage: 100,
+          startOffset: i * 10800,
+        ),
+    ];
+
+    test('current is the overall average across every game, matching what the '
+        'entity row already displays - not just the recent window', () {
+      final trends = entityTrends(manyMatches(24));
+      expect(trends.rp, isNotNull);
+      // current = avg RP over all 24 games: sum(0..23)/24.
+      expect(trends.rp!.current, closeTo(276 / 24, 0.01));
+      // older = avg over everything but the most recent 10: sum(0..13)/14.
+      expect(trends.rp!.older, closeTo(91 / 14, 0.01));
+      expect(trends.rp!.delta, closeTo(276 / 24 - 91 / 14, 0.01));
+    });
+
+    test('null below kTrendRecentGames * 2 games - no older baseline yet', () {
+      final trends = entityTrends(manyMatches(kTrendRecentGames * 2 - 1));
+      expect(trends.rp, isNull);
+      expect(trends.kills, isNull);
+      expect(trends.damage, isNull);
+    });
+
+    test('kills/damage average over games that actually reported them, not '
+        'every game played - an untracked game must not drag the average '
+        'toward zero', () {
+      final matches = [
+        for (var i = 0; i < kTrendRecentGames * 2; i++)
+          RankedMatch.fromJson({
+            'uid': '1',
+            'name': 'Tester',
+            'legendPlayed': 'Axle',
+            'gameMode': 'BATTLE_ROYALE',
+            'gameLengthSecs': 600,
+            'gameStartTimestamp': t0 + i * 10800,
+            'gameEndTimestamp': t0 + i * 10800 + 600,
+            // Only the even-indexed games report kills/damage.
+            'gameData': i.isEven
+                ? [
+                    {'key': 'kills', 'value': 5, 'name': 'BR Kills'},
+                    {'key': 'damage', 'value': 500, 'name': 'BR Damage'},
+                  ]
+                : <Map<String, Object?>>[],
+            'BRScoreChange': 10,
+            'BRScore': 1000 + i * 10,
+            'BRRankImg': 'https://x/diamond4.png',
+            'isPartyFull': false,
+            'map': 'olympus_rotation',
+          }),
+      ];
+
+      final trends = entityTrends(matches);
+      // Dividing by every game (the bug this guards against) would show
+      // half the real average, since only half the games report at all.
+      expect(trends.kills!.current, 5.0);
+      expect(trends.damage!.current, 500.0);
     });
   });
 }
