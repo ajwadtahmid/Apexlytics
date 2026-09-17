@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'
+    show SystemChrome, SystemUiMode, SystemUiOverlayStyle;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -17,10 +19,25 @@ import 'services/api_service.dart';
 import 'services/background_service.dart';
 import 'services/notification_service.dart';
 import 'utils/app_logger.dart';
+import 'utils/storage/api_cache_store.dart';
 
 void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Android 15+ applies edge-to-edge regardless of an opt-out past SDK 36, so
+  // draw behind the system bars deliberately rather than let the OS force it
+  // with unstyled bars. AppTheme (utils/theme.dart) is dark end-to-end, hence
+  // light system-bar icons on transparent bars.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
 
   // Desktop (Linux/Windows/macOS) has no native sqflite binding — use the FFI
   // factory. iOS/Android keep sqflite's native factory.
@@ -35,7 +52,11 @@ void main() async {
   // Binder IPC in these plugins blocks the main thread; deferring prevents ANR.
   unawaited(_initServices());
 
-  final apiService = ApiService(prefs);
+  // Its own small database (api_cache.db), independent of ranked_history.db —
+  // see ApiCacheStore's doc comment. Moving cache entries out of prefs is
+  // what keeps SharedPreferences.getInstance() above from having to parse up
+  // to 150 arbitrary-sized cached responses synchronously on every launch.
+  final apiService = ApiService(ApiCacheStore());
   unawaited(apiService.warmup());
 
   final app = ProviderScope(

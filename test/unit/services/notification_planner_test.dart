@@ -64,6 +64,18 @@ void main() {
       final alerts = project(mode('WE'), remainingSecs: 20 * 60, budget: 56);
       expect(alerts.length, 12);
     });
+
+    test(
+      'the real total (modeCount × _maxPerMode) stays under iOS\'s 64-pending limit',
+      () {
+        // Not _maxTotalScheduled (56) — every mode caps itself at _maxPerMode
+        // before that budget is ever checked, so this is the invariant that
+        // actually protects against dropped notifications on iOS. It must
+        // fail here, not silently in production, if a mode is ever added
+        // without raising _maxPerMode's headroom.
+        expect(NotificationService.totalScheduledUpperBound, lessThan(64));
+      },
+    );
   });
 
   group('timing & ids', () {

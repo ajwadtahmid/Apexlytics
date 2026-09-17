@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'storage/api_cache_store.dart';
 
 class ApiResult<T> {
   final T data;
@@ -22,123 +23,121 @@ const Map<String, int> kEndpointCacheTtlMinutes = {
   '/maprotation': 15,
 };
 
+/// Response cache for [ApiService].
+///
+/// Durable copy lives in [ApiCacheStore] (SQLite), but [load]/[loadStale] stay
+/// synchronous — some callers render on frame 1 and can't wait on disk I/O.
+/// Reads are served from an in-memory copy, filled once at startup by
+/// [primeFromDisk] (same pattern as `rp_snapshot_storage.dart`'s RP-snapshot
+/// cache). A read before priming completes just returns null — deliberate,
+/// not a bug.
+///
+/// Backed by SQLite instead of SharedPreferences so a large cache doesn't get
+/// parsed on the main thread at every app launch.
 class ApiCache {
-  final SharedPreferences _prefs;
-  static const _cacheKeyPrefix = 'api_cache:';
-  static const _cacheTimestampKeyPrefix = 'api_cache_ts:';
+  final ApiCacheStore _store;
+
   // Default TTL: 24 h — useful offline but overridden per endpoint above.
   static const defaultMaxAgeMinutes = 24 * 60;
+
   // Caps disk growth from arbitrary-player lookups (search/compare) that each
   // write a permanent entry with no TTL-driven cleanup. Oldest entries evict
   // first once the cap is exceeded.
   static const _maxEntries = 150;
 
-  ApiCache(this._prefs);
+  /// In-memory copy of every persisted entry — what [load]/[loadStale]
+  /// actually read. Its length *is* the entry count, so there's no separate
+  /// counter that can drift out of sync with it.
+  final Map<String, CachedEntry> _cache = {};
 
-  // Approximate entry count, tracked in memory so [save] doesn't need to scan
-  // every SharedPreferences key on every write. Lazily initialized from a real
-  // scan on first use, then kept roughly in sync; [_evictOldestIfOverCap]
-  // resyncs it exactly whenever it actually runs.
-  int? _entryCount;
+  ApiCache(this._store);
+
+  /// Loads every persisted entry into memory. Call once at startup, before
+  /// any synchronous [load] is relied on to return non-null.
+  Future<void> primeFromDisk() async {
+    final rows = await _store.loadAll();
+    final corrupt = <String>[];
+    for (final entry in rows.entries) {
+      final decoded = _tryDecode(entry.value.$1);
+      if (decoded == null) {
+        // A corrupt row would otherwise keep occupying a slot in
+        // [_maxEntries] and re-fail on every subsequent prime.
+        corrupt.add(entry.key);
+        continue;
+      }
+      _cache[entry.key] = CachedEntry(
+        data: decoded,
+        savedAt: DateTime.fromMillisecondsSinceEpoch(entry.value.$2),
+      );
+    }
+    if (corrupt.isNotEmpty) {
+      unawaited(_store.removeMany(corrupt));
+    }
+  }
+
+  Object? _tryDecode(String raw) {
+    try {
+      return jsonDecode(raw);
+    } on FormatException {
+      return null;
+    }
+  }
 
   /// Saves [data] with a timestamp, then evicts the oldest entries if the
-  /// cache has grown past [_maxEntries].
+  /// cache has grown past [_maxEntries]. Updates the in-memory copy first, so
+  /// a [load] immediately after this returns sees it even before the disk
+  /// write settles.
   Future<void> save(String key, dynamic data) async {
-    final tsKey = '$_cacheTimestampKeyPrefix$key';
-    final isNewEntry = !_prefs.containsKey(tsKey);
-    await _prefs.setString('$_cacheKeyPrefix$key', jsonEncode(data));
-    await _prefs.setInt(tsKey, DateTime.now().millisecondsSinceEpoch);
-    if (isNewEntry) {
-      _entryCount = (_entryCount ?? _scanEntryCount()) + 1;
-    }
-    if ((_entryCount ?? 0) > _maxEntries) {
+    final now = DateTime.now();
+    _cache[key] = CachedEntry(data: data, savedAt: now);
+    await _store.upsert(key, jsonEncode(data), now.millisecondsSinceEpoch);
+    if (_cache.length > _maxEntries) {
       await _evictOldestIfOverCap();
     }
   }
 
-  int _scanEntryCount() => _prefs
-      .getKeys()
-      .where((k) => k.startsWith(_cacheTimestampKeyPrefix))
-      .length;
-
-  /// Loads cached data by [key]. Returns null if not found or expired past the endpoint's TTL.
+  /// Loads cached data by [key]. Returns null if not found or expired past
+  /// the endpoint's TTL.
   CachedEntry? load(String key) {
-    final raw = _prefs.getString('$_cacheKeyPrefix$key');
-    final ts = _prefs.getInt('$_cacheTimestampKeyPrefix$key');
-    if (raw == null || ts == null) return null;
-    final savedAt = DateTime.fromMillisecondsSinceEpoch(ts);
+    final entry = _cache[key];
+    if (entry == null) return null;
     final ttl = _ttlForKey(key);
     // Millisecond epoch comparison: timezone-safe because both sides use the same
     // internal clock reference regardless of local time zone.
-    if (DateTime.now().difference(savedAt).inMinutes > ttl) {
-      unawaited(_removeEntry(key));
+    if (DateTime.now().difference(entry.savedAt).inMinutes > ttl) {
+      _cache.remove(key);
+      unawaited(_store.remove(key));
       return null;
     }
-    return _decode(key, raw, savedAt);
+    return entry;
   }
 
   /// Loads cached data by [key] regardless of TTL — for the offline-fallback
   /// path, where stale-with-a-banner beats nothing. Returns null only if
   /// there's no entry at all.
-  CachedEntry? loadStale(String key) {
-    final raw = _prefs.getString('$_cacheKeyPrefix$key');
-    final ts = _prefs.getInt('$_cacheTimestampKeyPrefix$key');
-    if (raw == null || ts == null) return null;
-    return _decode(key, raw, DateTime.fromMillisecondsSinceEpoch(ts));
-  }
-
-  /// Decodes a cache entry's JSON, evicting it on failure — a corrupt entry
-  /// that stayed on disk would keep occupying a slot in [_maxEntries] and
-  /// re-fail on every subsequent read.
-  CachedEntry? _decode(String key, String raw, DateTime savedAt) {
-    try {
-      return CachedEntry(data: jsonDecode(raw), savedAt: savedAt);
-    } on FormatException {
-      unawaited(_removeEntry(key));
-      return null;
-    }
-  }
-
-  Future<void> _removeEntry(String key) => Future.wait([
-    _prefs.remove('$_cacheKeyPrefix$key'),
-    _prefs.remove('$_cacheTimestampKeyPrefix$key'),
-  ]);
+  CachedEntry? loadStale(String key) => _cache[key];
 
   /// Evicts the oldest entries (by saved-at timestamp) once the cache holds
   /// more than [_maxEntries], so unbounded player lookups can't grow the
-  /// `SharedPreferences` backing store forever.
+  /// backing store forever.
   Future<void> _evictOldestIfOverCap() async {
-    final tsKeys = _prefs
-        .getKeys()
-        .where((k) => k.startsWith(_cacheTimestampKeyPrefix))
-        .toList();
-    final overflow = tsKeys.length - _maxEntries;
-    if (overflow <= 0) {
-      _entryCount = tsKeys.length;
-      return;
-    }
+    final overflow = _cache.length - _maxEntries;
+    if (overflow <= 0) return;
 
-    final byAge = tsKeys.map((k) => MapEntry(k, _prefs.getInt(k) ?? 0)).toList()
-      ..sort((a, b) => a.value.compareTo(b.value));
+    final byAge = _cache.entries.toList()
+      ..sort((a, b) => a.value.savedAt.compareTo(b.value.savedAt));
+    final doomed = [for (final e in byAge.take(overflow)) e.key];
 
-    for (final entry in byAge.take(overflow)) {
-      final key = entry.key.substring(_cacheTimestampKeyPrefix.length);
-      await _removeEntry(key);
+    for (final key in doomed) {
+      _cache.remove(key);
     }
-    _entryCount = tsKeys.length - overflow;
+    await _store.removeMany(doomed);
   }
 
-  /// Removes every cached response and its timestamp — used by "Clear all data".
+  /// Removes every cached response — used by "Clear all data".
   Future<void> clear() async {
-    final keys = _prefs.getKeys().where(
-      (k) =>
-          k.startsWith(_cacheKeyPrefix) ||
-          k.startsWith(_cacheTimestampKeyPrefix),
-    );
-    for (final key in keys.toList()) {
-      await _prefs.remove(key);
-    }
-    _entryCount = 0;
+    _cache.clear();
+    await _store.clear();
   }
 
   /// Resolves TTL by matching the key against [kEndpointCacheTtlMinutes].

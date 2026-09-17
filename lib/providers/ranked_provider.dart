@@ -142,10 +142,6 @@ final rankedSyncProvider = FutureProvider.autoDispose
           // An empty list is a valid answer — tracking is live, nothing recorded
           // yet — so it still counts as a successful sync.
           await store.upsertAll(uid, matches, seasons: seasons);
-          await remember(
-            RankedSyncOutcome.synced,
-            ApiConstants.gamesSyncCooldown,
-          );
       }
       // Re-read from prefs rather than reusing the watched `seasons` above: other
       // screens (e.g. the stats tab) call upsertSeason() directly against prefs
@@ -155,7 +151,10 @@ final rankedSyncProvider = FutureProvider.autoDispose
         ref.read(sharedPreferencesProvider),
       );
       await store.backfillSeasonIds(latestSeasons);
-      return RankedSyncOutcome.synced;
+      // Committed only after backfillSeasonIds succeeds, so a write failure
+      // there can't get recorded as a successful sync and lock the user out
+      // of retrying for 6 h.
+      return remember(RankedSyncOutcome.synced, ApiConstants.gamesSyncCooldown);
     });
 
 /// Whether the backend is currently seeing polls for [uid] — that is, whether
@@ -252,6 +251,10 @@ typedef RankedSplitView = ({
   // RankedSquadSessionsEntry used to each call sessionize() on every
   // rebuild of the always-visible Overview tab.
   List<RankedSession> sessions,
+  // Per-legend/per-map trend lines, keyed by canonical legend name / map key.
+  // Computed once here rather than per rebuild in the widget layer.
+  Map<String, EntityTrends> legendTrends,
+  Map<String, EntityTrends> mapTrends,
 });
 
 final rankedSplitViewProvider = FutureProvider.autoDispose
@@ -278,6 +281,8 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
         fullSquad: summarize(filtered.where((m) => m.isPartyFull).toList()),
         partialSquad: summarize(filtered.where((m) => !m.isPartyFull).toList()),
         sessions: sessionize(filtered),
+        legendTrends: legendTrendsByEntity(filtered),
+        mapTrends: mapTrendsByEntity(filtered),
       );
     });
 

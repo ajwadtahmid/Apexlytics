@@ -402,6 +402,12 @@ class RankedMatch {
       // verbatim) must not take down every read that hydrates this row — a bad
       // trackers value degrades to no trackers, mirroring how listFromJson
       // skips malformed rows rather than throwing.
+      //
+      // Catches broadly, not just FormatException: a structurally valid but
+      // wrongly-typed tracker (e.g. `"value": "5"` instead of a number) makes
+      // MatchTracker.fromJson's `as num?` cast throw a TypeError, not a
+      // FormatException — the same reasoning rp_snapshot_storage's
+      // _parseSnapshots documents for its own broad catch.
       try {
         final decoded = jsonDecode(raw);
         if (decoded is List) {
@@ -411,7 +417,7 @@ class RankedMatch {
             }
           }
         }
-      } on FormatException {
+      } catch (_) {
         // Leave trackers empty.
       }
     }

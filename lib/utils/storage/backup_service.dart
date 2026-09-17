@@ -26,6 +26,9 @@ const _excludedKeys = {
   PrefsKeys.onboardingVersion,
 };
 
+// Historical: the API response cache used to live under these prefixes in
+// prefs before moving to its own SQLite database. Nothing writes these keys
+// anymore — kept as a harmless exclusion in case anything ever does again.
 const _excludedPrefixes = ['api_cache:', 'api_cache_ts:'];
 
 const _staticBackupKeys = {
@@ -89,35 +92,77 @@ String _redactUid(String key) => key.replaceAll(RegExp(r'\d{10,20}'), '<uid>');
 /// Restores [prefsData] into [prefs], skipping disallowed keys and dispatching
 /// each value to the matching typed `SharedPreferences` setter. Extracted from
 /// [commitBackupImport] so the type-dispatch is testable without a file picker.
+///
+/// Snapshots every key it's about to touch before writing anything, and rolls
+/// them back to their pre-restore values (or removes them, if they didn't
+/// exist before) if a write partway through throws — so a failed restore
+/// doesn't leave some keys from the new backup and some from before it. This
+/// makes the *prefs* half of a restore atomic; [commitBackupImport] pairs it
+/// with a real database transaction for the other half.
 @visibleForTesting
 Future<void> restorePrefsData(
   SharedPreferences prefs,
   Map<String, dynamic> prefsData,
 ) async {
-  for (final entry in prefsData.entries) {
-    if (!_include(entry.key)) {
-      log.w(
-        'Backup import: skipping disallowed key "${_redactUid(entry.key)}"',
-      );
-      continue;
-    }
-    final v = entry.value;
+  final snapshot = <String, Object?>{
+    for (final key in prefsData.keys)
+      if (_include(key)) key: prefs.get(key),
+  };
+
+  Future<void> setTyped(String key, Object? v) async {
     if (v is String) {
-      await prefs.setString(entry.key, v);
+      await prefs.setString(key, v);
     } else if (v is int) {
-      await prefs.setInt(entry.key, v);
+      await prefs.setInt(key, v);
     } else if (v is bool) {
-      await prefs.setBool(entry.key, v);
+      await prefs.setBool(key, v);
     } else if (v is double) {
-      await prefs.setDouble(entry.key, v);
+      await prefs.setDouble(key, v);
     } else if (v is List) {
-      await prefs.setStringList(entry.key, v.map((e) => e.toString()).toList());
-    } else {
-      log.w(
-        'Backup import: skipping unsupported type for '
-        '"${_redactUid(entry.key)}": ${v.runtimeType}',
-      );
+      await prefs.setStringList(key, v.map((e) => e.toString()).toList());
     }
+  }
+
+  Future<void> rollback() async {
+    for (final entry in snapshot.entries) {
+      try {
+        if (entry.value == null) {
+          await prefs.remove(entry.key);
+        } else {
+          await setTyped(entry.key, entry.value);
+        }
+      } catch (e) {
+        // Best-effort: one key failing to roll back must not stop the rest
+        // of the rollback from running.
+        log.w(
+          'Backup import rollback failed for "${_redactUid(entry.key)}"',
+          error: e,
+        );
+      }
+    }
+  }
+
+  try {
+    for (final entry in prefsData.entries) {
+      if (!_include(entry.key)) {
+        log.w(
+          'Backup import: skipping disallowed key "${_redactUid(entry.key)}"',
+        );
+        continue;
+      }
+      final v = entry.value;
+      if (v is String || v is int || v is bool || v is double || v is List) {
+        await setTyped(entry.key, v);
+      } else {
+        log.w(
+          'Backup import: skipping unsupported type for '
+          '"${_redactUid(entry.key)}": ${v.runtimeType}',
+        );
+      }
+    }
+  } catch (e) {
+    await rollback();
+    rethrow;
   }
 }
 
@@ -155,20 +200,33 @@ Future<String?> exportBackup(
     'stat_snapshots': statSnapshots,
   };
 
-  final json = const JsonEncoder.withIndent('  ').convert(envelope);
+  // No indentation — this file is never hand-read, and pretty-printing
+  // roughly doubles its size for no benefit.
+  final json = jsonEncode(envelope);
+  // Gzipped on top of that: the JSON is highly repetitive (same column names
+  // on every row), so this compresses very well. previewBackup's file picker
+  // accepts `.gz` directly (see decompressIfGzipped) via the app's own
+  // document picker, so restoring stays one step as long as the user goes
+  // through "Restore backup" rather than opening the file from a system file
+  // manager (which may try to extract `.gz` first).
+  final compressed = gzip.encode(utf8.encode(json));
   final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-  final defaultFilename = 'apexlytics_$stamp.json';
+  final defaultFilename = 'apexlytics_$stamp.json.gz';
 
   if (Platform.isIOS) {
     final dir = await getTemporaryDirectory();
     final filePath = '${dir.path}/$defaultFilename';
-    await File(filePath).writeAsString(json);
+    await File(filePath).writeAsBytes(compressed);
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(filePath, mimeType: 'application/json')]),
+      ShareParams(files: [XFile(filePath, mimeType: 'application/gzip')]),
     );
+    // Path deliberately omitted: on desktop it can embed the OS username,
+    // and log.i reaches Sentry as a breadcrumb in release builds — see the
+    // privacy rule in app_logger.dart.
     log.i(
       'Backup shared: ${payload.length} keys, '
-      '${rankedHistory.length} ranked matches → $filePath',
+      '${rankedHistory.length} ranked matches, '
+      '${compressed.length} bytes compressed',
     );
     return filePath;
   }
@@ -177,11 +235,13 @@ Future<String?> exportBackup(
   if (dirPath == null) return null;
 
   final filePath = [dirPath, defaultFilename].join(Platform.pathSeparator);
-  await File(filePath).writeAsString(json);
+  await File(filePath).writeAsBytes(compressed);
 
+  // Path omitted for the same reason as the iOS branch above.
   log.i(
     'Backup exported: ${payload.length} keys, '
-    '${rankedHistory.length} ranked matches → $filePath',
+    '${rankedHistory.length} ranked matches, '
+    '${compressed.length} bytes compressed',
   );
   return filePath;
 }
@@ -214,6 +274,12 @@ class BackupPreview {
   final int matchCount;
   final int newMatchCount;
 
+  /// Size of the *decompressed* JSON, in bytes — what actually ends up in
+  /// memory as a string and a parsed structure, regardless of how small
+  /// gzip made the file on disk. Drives the large-backup notice in the
+  /// import summary.
+  final int sizeBytes;
+
   // Kept so commitBackupImport can write without re-picking or re-parsing
   // the file.
   final Map<String, dynamic> _envelope;
@@ -224,8 +290,32 @@ class BackupPreview {
     required this.profileCount,
     required this.matchCount,
     required this.newMatchCount,
+    required this.sizeBytes,
     required this._envelope,
   });
+
+  /// Builds a preview directly from an already-parsed envelope, skipping the
+  /// file picker [previewBackup] normally goes through. Lets a test exercise
+  /// [commitBackupImport] end to end (real JSON encode/decode, real
+  /// [RankedHistoryStore], real prefs) without mocking `file_selector`.
+  @visibleForTesting
+  factory BackupPreview.forTesting({
+    required int version,
+    DateTime? exportedAt,
+    int profileCount = 0,
+    int matchCount = 0,
+    int newMatchCount = 0,
+    int sizeBytes = 0,
+    required Map<String, dynamic> envelope,
+  }) => BackupPreview._(
+    version: version,
+    exportedAt: exportedAt,
+    profileCount: profileCount,
+    matchCount: matchCount,
+    newMatchCount: newMatchCount,
+    sizeBytes: sizeBytes,
+    envelope: envelope,
+  );
 }
 
 sealed class PreviewResult {}
@@ -249,9 +339,15 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
   final pickedFile = await file_selector.openFile(
     acceptedTypeGroups: [
       const file_selector.XTypeGroup(
-        label: 'JSON files',
-        extensions: ['json'],
-        uniformTypeIdentifiers: ['public.json'],
+        label: 'Backup files',
+        // 'gz' covers the current gzipped export; 'json' keeps older,
+        // uncompressed backups (from before this file started gzipping
+        // exports) importable.
+        extensions: ['gz', 'json'],
+        uniformTypeIdentifiers: [
+          'public.json',
+          'org.gnu.gnu-zip-archive',
+        ],
       ),
     ],
   );
@@ -259,8 +355,10 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
   if (pickedFile == null) return PreviewCancelled();
 
   try {
-    final raw = await pickedFile.readAsString();
-    final envelope = jsonDecode(raw) as Map<String, dynamic>;
+    final rawBytes = await pickedFile.readAsBytes();
+    final jsonBytes = decompressIfGzipped(rawBytes);
+    final rawJson = utf8.decode(jsonBytes);
+    final envelope = jsonDecode(rawJson) as Map<String, dynamic>;
 
     final version = envelope['version'];
     // Lower-bounded too, not just upper-bounded: a malformed or hand-edited
@@ -285,6 +383,7 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
           envelope['ranked_history'],
           rankedStore,
         ),
+        sizeBytes: jsonBytes.length,
         envelope: envelope,
       ),
     );
@@ -295,6 +394,18 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
     log.w('Backup preview failed', error: e);
     return PreviewError('Failed to read the backup file.');
   }
+}
+
+/// Decompresses [bytes] if they're gzip (magic number `1F 8B`), otherwise
+/// returns them unchanged. A plain-JSON legacy backup always starts with
+/// `{` (`0x7B`) or whitespace — never these two bytes — so this check is
+/// unambiguous and doesn't depend on the picked file's extension.
+@visibleForTesting
+List<int> decompressIfGzipped(List<int> bytes) {
+  if (bytes.length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
+    return gzip.decode(bytes);
+  }
+  return bytes;
 }
 
 // player_profiles is itself a JSON-encoded string within prefs (see
@@ -334,20 +445,29 @@ Future<ImportResult> commitBackupImport(
   final prefsData = envelope['prefs'] as Map<String, dynamic>;
 
   try {
-    // Database sections first, prefs last - no transaction spans both stores,
-    // so a malformed file should fail before any pref commits, not after.
+    // Database sections first, prefs last - a malformed file should fail
+    // before any pref commits, not after. The two database sections commit in
+    // one sqflite transaction: match rows and snapshot rows either both land
+    // or neither does. Prefs can't share that transaction (SharedPreferences
+    // has no such primitive), but restorePrefsData rolls itself back on
+    // failure instead — see its doc.
     final rankedHistory = envelope['ranked_history']; // absent in v1
-    if (rankedHistory is List && rankedStore != null) {
-      await rankedStore.importRows(rankedHistory);
-      log.i('Backup restored ${rankedHistory.length} ranked matches');
-    }
-
-    // Absent in v1/v2, where snapshots rode along in `prefs` instead and are
-    // picked up by migrateSnapshotsFromPrefs below.
-    final statSnapshots = envelope['stat_snapshots'];
-    if (statSnapshots is List && rankedStore != null) {
-      await rankedStore.importSnapshotRows(statSnapshots);
-      log.i('Backup restored ${statSnapshots.length} RP snapshots');
+    final statSnapshots =
+        envelope['stat_snapshots']; // absent in v1/v2 (rode along in prefs)
+    if (rankedStore != null &&
+        (rankedHistory is List || statSnapshots is List)) {
+      final matchRows = rankedHistory is List ? rankedHistory : const [];
+      final snapshotRows = statSnapshots is List ? statSnapshots : const [];
+      await rankedStore.importBackupData(
+        matchRows: matchRows,
+        snapshotRows: snapshotRows,
+      );
+      if (matchRows.isNotEmpty) {
+        log.i('Backup restored ${matchRows.length} ranked matches');
+      }
+      if (snapshotRows.isNotEmpty) {
+        log.i('Backup restored ${snapshotRows.length} RP snapshots');
+      }
     }
 
     await restorePrefsData(prefs, prefsData);
@@ -365,6 +485,13 @@ Future<ImportResult> commitBackupImport(
     return ImportSuccess(prefsData.length);
   } catch (e) {
     log.w('Backup import failed', error: e);
-    return ImportError('Failed to restore the backup file.');
+    // The database half is transactional and the prefs half rolls itself
+    // back (see restorePrefsData), so a failure here should leave the device
+    // as it was before the attempt — but say so rather than assert it, since
+    // a rollback step failing is itself only best-effort.
+    return ImportError(
+      'Failed to restore the backup file. Your existing data should be '
+      'unaffected; if something looks wrong, try restoring the backup again.',
+    );
   }
 }

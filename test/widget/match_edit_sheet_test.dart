@@ -153,6 +153,76 @@ void main() {
     expect(stored.editedFields, contains('rp_change'));
   });
 
+  testWidgets(
+    'setting RP change to 0 warns before saving, and Cancel keeps the sheet open',
+    (tester) async {
+      final m = match();
+      final store = _FakeStore([m]);
+      RankedMatch? result;
+
+      await tester.pumpWidget(
+        app(
+          match: m,
+          store: store,
+          prefs: await emptyPrefs(),
+          onResult: (r) => result = r,
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '0');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      // The warning dialog is up, sheet still open, nothing saved yet.
+      expect(find.text('RP change is 0'), findsOneWidget);
+      expect(find.text('Correct this match'), findsOneWidget);
+      expect(result, isNull);
+
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+
+      // Dialog dismissed, sheet still open, store untouched.
+      expect(find.text('RP change is 0'), findsNothing);
+      expect(find.text('Correct this match'), findsOneWidget);
+      expect(result, isNull);
+      expect(store.rows[m.dedupKey]!.rpChange, m.rpChange);
+    },
+  );
+
+  testWidgets(
+    '"Save anyway" on the 0-RP warning persists the correction',
+    (tester) async {
+      final m = match();
+      final store = _FakeStore([m]);
+      RankedMatch? result;
+
+      await tester.pumpWidget(
+        app(
+          match: m,
+          store: store,
+          prefs: await emptyPrefs(),
+          onResult: (r) => result = r,
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '0');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save anyway'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Correct this match'), findsNothing);
+      expect(result, isNotNull);
+      expect(result!.rpChange, 0);
+      expect(store.rows[m.dedupKey]!.rpChange, 0);
+    },
+  );
+
   testWidgets('an out-of-range RP change shows an error and does not save', (
     tester,
   ) async {

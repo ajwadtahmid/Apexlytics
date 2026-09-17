@@ -549,6 +549,146 @@ void main() {
     );
   });
 
+  group('importBackupData', () {
+    test('matches and snapshots both commit together', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+
+      await store.importBackupData(
+        matchRows: [match('1', 100).toStoredMap()],
+        snapshotRows: [
+          {'uid': '1', 'ts_ms': 500, 'rp': 1200, 'season_id': null},
+        ],
+      );
+
+      expect(await store.count('1'), 1);
+      expect(await store.snapshotCount('1'), 1);
+    });
+
+    test(
+      'a failure in one half rolls back both — neither table keeps a '
+      'partial import',
+      () async {
+        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+        addTearDown(store.close);
+        // Pre-existing data, untouched by the failed import below — proves
+        // the rollback doesn't wipe anything beyond what the import itself
+        // would have written.
+        await store.upsertAll('1', [match('1', 0)]);
+
+        // A raw Map isn't a type sqflite can bind as a SQL argument — this
+        // throws when the batch commits, which is what should trigger the
+        // whole transaction to roll back.
+        final badMatchRow = {
+          ...match('1', 100).toStoredMap(),
+          'rp_change': {'not': 'bindable'},
+        };
+
+        await expectLater(
+          () => store.importBackupData(
+            matchRows: [badMatchRow],
+            snapshotRows: [
+              {'uid': '1', 'ts_ms': 500, 'rp': 1200, 'season_id': null},
+            ],
+          ),
+          throwsA(anything),
+        );
+
+        // The failed match row never landed...
+        expect(await store.count('1'), 1); // only the pre-existing row
+        // ...and neither did the snapshot row that came after it in the
+        // same transaction, even though importSnapshotRows itself would
+        // have succeeded in isolation.
+        expect(await store.snapshotCount('1'), 0);
+      },
+    );
+  });
+
+  group('forEachRowInBatches', () {
+    test(
+      'visits every row across multiple pages, surviving rows dropping '
+      'out of `where` as they are fixed mid-pass',
+      () async {
+        final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+        addTearDown(db.close);
+        await db.execute(
+          'CREATE TABLE t (id TEXT PRIMARY KEY, fixed INTEGER NOT NULL)',
+        );
+        // 12 rows needing "fixing", paged 5 at a time — exercises more than
+        // one full page and a partial last page (12 % 5 != 0).
+        final seed = db.batch();
+        for (var i = 0; i < 12; i++) {
+          seed.insert('t', {'id': 'id$i', 'fixed': 0});
+        }
+        await seed.commit(noResult: true);
+
+        final visited = <String>[];
+        await RankedHistoryStore.forEachRowInBatches(
+          db,
+          't',
+          columns: ['fixed'],
+          where: 'fixed = 0', // shrinks as rows get "fixed" below
+          batchSize: 5,
+          apply: (batch, row) {
+            visited.add(row['id'] as String);
+            // Mutating the row so it stops matching `where` mid-pass is
+            // exactly the hazard OFFSET pagination gets wrong: if this
+            // method paged by OFFSET instead of by id, the next page's
+            // OFFSET would skip rows shifted earlier by this update.
+            batch.update(
+              't',
+              {'fixed': 1},
+              where: 'id = ?',
+              whereArgs: [row['id']],
+            );
+          },
+        );
+
+        expect(visited.length, 12);
+        expect(visited.toSet(), {for (var i = 0; i < 12; i++) 'id$i'});
+        expect(await db.query('t', where: 'fixed = 0'), isEmpty);
+      },
+    );
+
+    test('an empty table is a no-op', () async {
+      final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      addTearDown(db.close);
+      await db.execute('CREATE TABLE t (id TEXT PRIMARY KEY)');
+
+      var calls = 0;
+      await RankedHistoryStore.forEachRowInBatches(
+        db,
+        't',
+        columns: const [],
+        apply: (batch, row) => calls++,
+      );
+
+      expect(calls, 0);
+    });
+
+    test('a page exactly the size of batchSize does not loop forever', () async {
+      final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      addTearDown(db.close);
+      await db.execute('CREATE TABLE t (id TEXT PRIMARY KEY)');
+      final seed = db.batch();
+      for (var i = 0; i < 5; i++) {
+        seed.insert('t', {'id': 'id$i'});
+      }
+      await seed.commit(noResult: true);
+
+      var calls = 0;
+      await RankedHistoryStore.forEachRowInBatches(
+        db,
+        't',
+        columns: const [],
+        batchSize: 5,
+        apply: (batch, row) => calls++,
+      );
+
+      expect(calls, 5);
+    });
+  });
+
   test('deleteAll drops snapshots as well as matches', () async {
     // "Clear all data" promises everything; RP snapshots are the app's other
     // record of the player's history and used to survive it entirely.

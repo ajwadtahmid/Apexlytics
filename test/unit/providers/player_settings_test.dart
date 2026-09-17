@@ -565,4 +565,55 @@ void main() {
       );
     });
   });
+
+  // A field omitted from equality is silent — a stale value just never
+  // triggers a rebuild. One mutator per field, each proving that changing
+  // only that field makes two instances compare unequal; the trailing count
+  // test makes forgetting to update this list when a field is added visible
+  // on review.
+  group('PlayerSettings equality exhaustiveness', () {
+    const base = PlayerSettings();
+    final mutators = <String, PlayerSettings Function(PlayerSettings)>{
+      'profiles': (s) =>
+          s.copyWith(profiles: const [PlayerProfile(name: 'X', uid: '1')]),
+      'activeProfileIndex': (s) => s.copyWith(activeProfileIndex: 1),
+      'statsRefreshMinutes': (s) => s.copyWith(statsRefreshMinutes: 15),
+      'compactLegendCards': (s) => s.copyWith(compactLegendCards: true),
+      'keepScreenOn': (s) => s.copyWith(keepScreenOn: true),
+      'notifyPubsMapRotation': (s) =>
+          s.copyWith(notifyPubsMapRotation: true),
+      'notifyRankedMapRotation': (s) =>
+          s.copyWith(notifyRankedMapRotation: true),
+      'notifyMixtapeMapRotation': (s) =>
+          s.copyWith(notifyMixtapeMapRotation: true),
+      'notifyWildcardMapRotation': (s) =>
+          s.copyWith(notifyWildcardMapRotation: true),
+      'rankedNotifyMinutesBefore': (s) =>
+          s.copyWith(rankedNotifyMinutesBefore: 5),
+      'pubsNotifyMinutesBefore': (s) =>
+          s.copyWith(pubsNotifyMinutesBefore: 5),
+      'mixtapeNotifyMinutesBefore': (s) =>
+          s.copyWith(mixtapeNotifyMinutesBefore: 5),
+      'wildcardNotifyMinutesBefore': (s) =>
+          s.copyWith(wildcardNotifyMinutesBefore: 5),
+      'defaultTab': (s) => s.copyWith(defaultTab: 1),
+      'favoriteRankedMapNames': (s) =>
+          s.copyWith(favoriteRankedMapNames: const ['Olympus']),
+      'favoritePubsMapNames': (s) =>
+          s.copyWith(favoritePubsMapNames: const ['Olympus']),
+    };
+
+    for (final entry in mutators.entries) {
+      test('${entry.key} alone makes two instances compare unequal', () {
+        final mutated = entry.value(base);
+        expect(mutated, isNot(equals(base)));
+        expect(mutated.hashCode, isNot(equals(base.hashCode)));
+      });
+    }
+
+    test('every field on PlayerSettings has a mutator above', () {
+      // Bump this alongside the map when a field is added to the class.
+      expect(mutators.length, 16);
+    });
+  });
 }

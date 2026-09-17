@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:apexlytics/app.dart';
 import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/search/search_screen.dart';
 import 'package:apexlytics/services/api_service.dart';
+import 'package:apexlytics/utils/storage/api_cache_store.dart';
 import 'package:apexlytics/widgets/player_lookup_form.dart';
 
 /// Prefs with the one-time UID-search warning dialog already dismissed, so
@@ -18,6 +20,20 @@ Future<SharedPreferences> _prefsUidWarningSeen() async {
   });
   return SharedPreferences.getInstance();
 }
+
+// Bare `inMemoryDatabasePath` (':memory:') opens in shared-cache mode under
+// sqflite_common_ffi, so every store using that literal path in this process
+// would alias to the *same* database — a uniquely-named in-memory URI per
+// call keeps each test's ApiService genuinely isolated (see api_cache_test.dart).
+var _apiCacheDbCounter = 0;
+
+/// A fresh, isolated ApiService for one test — its cache store is an
+/// in-memory sqlite db (see setUpAll below), not the real api_cache.db.
+ApiService _buildApiService() => ApiService(
+  ApiCacheStore(
+    overridePath: 'file:widget_test_api_cache_${_apiCacheDbCounter++}?mode=memory&cache=shared',
+  ),
+);
 
 /// Wraps [widget] in the minimal scaffolding needed for Riverpod + Material.
 Widget _wrap(Widget widget, SharedPreferences prefs) {
@@ -33,6 +49,14 @@ Widget _wrap(Widget widget, SharedPreferences prefs) {
 void main() {
   late SharedPreferences prefs;
 
+  // sqflite has no native binding under `flutter test` (host VM) — use FFI.
+  // ApiService now opens an ApiCacheStore (sqlite) on construction, which
+  // needs this even though these tests never inspect its contents.
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
@@ -40,7 +64,7 @@ void main() {
 
   group('App smoke test', () {
     testWidgets('renders MaterialApp without exception', (tester) async {
-      final apiService = ApiService(prefs);
+      final apiService = _buildApiService();
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
@@ -187,7 +211,7 @@ void main() {
 
   group('SearchScreen', () {
     testWidgets('renders search form on load', (tester) async {
-      final apiService = ApiService(prefs);
+      final apiService = _buildApiService();
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
@@ -212,7 +236,7 @@ void main() {
     });
 
     testWidgets('ignores empty search submission', (tester) async {
-      final apiService = ApiService(prefs);
+      final apiService = _buildApiService();
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
@@ -247,7 +271,7 @@ void main() {
       tester,
     ) async {
       final uidPrefs = await _prefsUidWarningSeen();
-      final apiService = ApiService(uidPrefs);
+      final apiService = _buildApiService();
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(uidPrefs),
@@ -280,7 +304,7 @@ void main() {
     testWidgets('switching to UID mode with existing text keeps it and shows a '
         'digits-only message', (tester) async {
       final uidPrefs = await _prefsUidWarningSeen();
-      final apiService = ApiService(uidPrefs);
+      final apiService = _buildApiService();
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(uidPrefs),

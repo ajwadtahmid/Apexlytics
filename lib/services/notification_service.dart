@@ -28,6 +28,13 @@ class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
 
+  /// Whether [init] has completed successfully in *this* isolate. `scheduleAll`
+  /// is a silent no-op while this is false — a caller that needs to tell a
+  /// skipped schedule apart from a genuinely empty one (e.g. the background
+  /// fetch result surfaced in Settings) should check this rather than assume
+  /// a non-throwing call means alerts were actually armed.
+  static bool get isInitialized => _initialized;
+
   // Desktop has no OS-level scheduler or background wakeup, so pending alerts
   // are held as in-app timers and fire only while the app is running. They are
   // re-armed on every fetch and cancelled wholesale, mirroring [cancelAll].
@@ -188,9 +195,19 @@ class NotificationService {
   static const _ltmIdBase = 140; // 140–151
   static const _wildcardIdBase = 160; // 160–171
 
+  /// The real ceiling this service must never exceed — iOS's 64-pending
+  /// limit — expressed as `modeCount × _maxPerMode`. Not read at runtime;
+  /// exposed only so notification_planner_test.dart can assert it stays
+  /// under 64, catching a fifth mode being added without raising the cap.
+  @visibleForTesting
+  static const totalScheduledUpperBound = 4 * _maxPerMode;
+
   // iOS keeps only the 64 soonest-firing pending notifications and silently
-  // drops the rest, so cap the total well under that. 4 modes × 12 = 48 worst
-  // case, but enforce defensively in case modes/horizon grow.
+  // drops the rest. What actually keeps the real total under that is
+  // _maxPerMode × the number of modes (4 × 12 = 48 today) — every mode caps
+  // itself before `budget` below is ever checked, so this constant can never
+  // be the binding one at 56. Kept as a second, independent ceiling in case a
+  // future refactor lets one mode schedule past its own cap.
   static const _maxTotalScheduled = 56;
 
   /// Fired this much earlier than the arithmetic lead time, to absorb

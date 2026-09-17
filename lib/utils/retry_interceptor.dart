@@ -15,7 +15,7 @@ const _kPreferredBackupKey = '_preferred_backup';
 /// Retries requests on transient server errors (5xx) and network failures.
 ///
 /// Uses exponential backoff — delays are [initialDelay] * 2^attempt:
-///   attempt 0 → wait 1s, attempt 1 → wait 2s  (for default maxRetries=2)
+///   attempt 0 → wait 1s  (for default maxRetries=1)
 ///
 /// The retry count is stored in [RequestOptions.extra] so it survives the
 /// interceptor chain without any external state.
@@ -24,6 +24,13 @@ const _kPreferredBackupKey = '_preferred_backup';
 /// fails, the same request is reissued once against it (with its own fresh
 /// retry budget) before giving up — this is what covers a primary host that's
 /// asleep or down, e.g. a free-tier server that spins down.
+///
+/// [maxRetries] defaults to 1 (2 attempts per host) rather than 2, keeping the
+/// worst case for one logical request — every attempt against both the
+/// primary and the backup timing out — at roughly two minutes instead of
+/// three. The sticky [primaryDownFor] window already prevents re-paying this
+/// full budget on every request during a sustained outage, so the ladder
+/// itself only needs to be just long enough to ride out one transient blip.
 class RetryInterceptor extends Interceptor {
   final Dio dio;
   final int maxRetries;
@@ -35,7 +42,7 @@ class RetryInterceptor extends Interceptor {
 
   RetryInterceptor({
     required this.dio,
-    this.maxRetries = 2,
+    this.maxRetries = 1,
     this.initialDelay = const Duration(seconds: 1),
     this.backupBaseUrl,
     this.primaryDownFor = const Duration(minutes: 5),

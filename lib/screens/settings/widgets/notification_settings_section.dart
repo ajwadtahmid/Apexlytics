@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../providers/notification_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../services/background_service.dart' show kLastFetchResultKey;
+import '../../../services/notification_service.dart';
 import '../../../utils/formatting/format.dart' show timeAgo;
 import '../../../utils/theme.dart';
 import '../../../widgets/widgets.dart';
@@ -65,6 +66,14 @@ class NotificationSettingsSection extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // The plugin failed to initialise (e.g. both the primary and
+              // fallback Android icon lookups threw) — scheduleAll is then a
+              // silent no-op, so surface it here rather than let the toggle
+              // above claim alerts are armed when nothing will fire.
+              if (activeCount > 0 && !NotificationService.isInitialized) ...[
+                const _InitFailedBanner(),
+                const Divider(color: AppTheme.surface2, height: 24),
+              ],
               if (showPermissionBanner) ...[
                 const _PermissionBanner(),
                 const Divider(color: AppTheme.surface2, height: 24),
@@ -172,6 +181,30 @@ class _LastBackgroundRefreshRow extends ConsumerWidget {
     final at = DateTime.tryParse(raw.substring(sep + 1));
     if (at == null) return null;
     return (raw.substring(0, sep) == 'ok', at);
+  }
+}
+
+/// Shown when the user has at least one alert mode on but the notification
+/// plugin never finished initialising, so scheduling is silently skipped —
+/// see [NotificationService.isInitialized]. Restarting the app is the only
+/// current recovery path (init runs once, at startup, in `main.dart`).
+class _InitFailedBanner extends StatelessWidget {
+  const _InitFailedBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Icon(Icons.error_outline, color: AppTheme.red, size: 20),
+        SizedBox(width: AppTheme.sm),
+        Expanded(
+          child: Text(
+            "Alerts couldn't start — try restarting the app",
+            style: TextStyle(fontSize: 14),
+          ),
+        ),
+      ],
+    );
   }
 }
 

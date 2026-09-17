@@ -11,7 +11,6 @@ import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/formatting/snapshot_types.dart';
-import '../../utils/ranked/ranked_aggregates.dart' show entityTrends;
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
 import '../../widgets/graph_card.dart' show showSnapshotBackupSheet;
@@ -369,12 +368,17 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
 
     // Trend lines need real matches, so they only exist for a split, not
     // Lifetime, where legend/map rows come from a lightweight SQL aggregate
-    // with no matches hydrated.
-    final legendTrends = {
-      for (final l in legends) l.legend: entityTrends(legendFiltered(l.legend)),
-    };
+    // with no matches hydrated. Computed once in rankedSplitViewProvider
+    // (keyed by canonical legend/map key) rather than per legend/map here on
+    // every rebuild — legendTrends already matches LegendBreakdown.legend's
+    // key space, but MapBreakdown.mapKey is the raw representative key, so
+    // mapTrends needs a small (O(maps), not O(matches)) remap to it.
+    final legendTrends = data.legendTrends;
+    // `maps` and `data.mapTrends` are both grouped from the same `filtered`
+    // list by canonicalMapKey (see rankedSplitViewProvider), so every mapKey
+    // here is guaranteed an entry there.
     final mapTrends = {
-      for (final mb in maps) mb.mapKey: entityTrends(mapFiltered(mb.mapKey)),
+      for (final mb in maps) mb.mapKey: data.mapTrends[canonicalMapKey(mb.mapKey)]!,
     };
 
     return _tabShell(

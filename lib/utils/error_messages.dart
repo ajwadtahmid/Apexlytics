@@ -17,6 +17,12 @@ String friendlyError(Object? error) {
         'Request timed out. The server may be waking up — try again in a moment.',
       DioExceptionType.connectionError =>
         'No connection. Check your internet and try again.',
+      // Only ApiService's own overall-deadline timer cancels a request today
+      // (see utils/api_deadline.dart) — a real network timeout surfaces as
+      // connectionTimeout/receiveTimeout above instead, so this is always the
+      // "every retry and failover combined still took too long" case.
+      DioExceptionType.cancel =>
+        'Request took too long. Try again in a moment.',
       _ => switch (error.response?.statusCode) {
         400 => 'Bad request. Try again in a few minutes.',
         401 => 'Unauthorized. Check your proxy configuration.',

@@ -116,6 +116,13 @@ Future<void> _backgroundFetchAndSchedule() async {
       rankedSequence: seasonal?.rankedNames ?? const [],
       pubsSequence: seasonal?.pubsNames ?? const [],
     );
+    // scheduleAll is a silent no-op when the plugin never finished
+    // initialising — without this check, that skip reads as a successful
+    // run here, and Settings' "Last background refresh" row would then
+    // claim alerts are armed when nothing was actually scheduled.
+    if (!NotificationService.isInitialized) {
+      throw StateError('Notification service failed to initialise');
+    }
     _debugLog('Notifications scheduled successfully');
     await prefs.setString(
       kLastFetchResultKey,

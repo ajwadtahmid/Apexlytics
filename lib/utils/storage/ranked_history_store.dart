@@ -277,6 +277,59 @@ class RankedHistoryStore {
     await batch.commit(noResult: true);
   }
 
+  /// Runs [apply] over every row of [table] (projected to [columns] plus
+  /// `id`), [batchSize] at a time, committing one [Batch] per page instead of
+  /// hydrating the whole table into memory at once. Available for a future
+  /// migration or repair pass on this table, which is unbounded and only
+  /// grows; deliberately not applied to the existing one-time migrations
+  /// above, which have already run on most installs.
+  ///
+  /// Pages by `id > lastId ORDER BY id`, not `LIMIT`/`OFFSET`: [apply] is
+  /// expected to change rows, and an optional [where] may stop matching a row
+  /// it just fixed. OFFSET pagination over a shrinking result set skips rows;
+  /// paging by primary key doesn't.
+  ///
+  /// [apply] receives the batch to add operations to and one row; it must add
+  /// to the batch but never commit it itself.
+  ///
+  /// Static, not an instance method: it uses no state of its own and a
+  /// migration calls it from inside `onUpgrade`'s callback, with that
+  /// callback's own `db` — never through [_open], which is what's calling
+  /// `onUpgrade` in the first place.
+  static Future<void> forEachRowInBatches(
+    Database db,
+    String table, {
+    required List<String> columns,
+    String? where,
+    int batchSize = 500,
+    required void Function(Batch batch, Map<String, Object?> row) apply,
+  }) async {
+    final projection = {'id', ...columns}.toList();
+    String? lastId;
+    while (true) {
+      final pageWhere = [
+        if (where != null) '($where)',
+        if (lastId != null) 'id > ?',
+      ].join(' AND ');
+      final page = await db.query(
+        table,
+        columns: projection,
+        where: pageWhere.isEmpty ? null : pageWhere,
+        whereArgs: lastId != null ? [lastId] : null,
+        orderBy: 'id',
+        limit: batchSize,
+      );
+      if (page.isEmpty) break;
+      final batch = db.batch();
+      for (final row in page) {
+        apply(batch, row);
+      }
+      await batch.commit(noResult: true);
+      lastId = page.last['id'] as String;
+      if (page.length < batchSize) break;
+    }
+  }
+
   /// Mobile's native sqflite factory returns a guaranteed-existing app
   /// databases directory. The FFI factory used on desktop instead defaults to
   /// a `.dart_tool`-relative path that only exists in a dev checkout — a
@@ -1196,8 +1249,16 @@ class RankedHistoryStore {
   }
 
   /// Restores snapshot rows from an export. Idempotent.
-  Future<void> importSnapshotRows(List<dynamic> rows) async {
-    final db = await _open();
+  ///
+  /// [executor] lets [importBackupData] run this against a [Transaction]
+  /// instead of opening its own connection, so it can commit atomically
+  /// alongside [importRows]. Defaults to the store's own database for
+  /// standalone callers.
+  Future<void> importSnapshotRows(
+    List<dynamic> rows, {
+    DatabaseExecutor? executor,
+  }) async {
+    final db = executor ?? await _open();
     final batch = db.batch();
     for (final r in rows) {
       if (r is! Map) continue;
@@ -1263,8 +1324,10 @@ class RankedHistoryStore {
   /// locally-learned season classification and reverting a hand correction
   /// (`edited_fields` included) the moment an older backup was restored over
   /// a newer one.
-  Future<void> importRows(List<dynamic> rows) async {
-    final db = await _open();
+  ///
+  /// [executor] — see [importSnapshotRows]'s doc for why this exists.
+  Future<void> importRows(List<dynamic> rows, {DatabaseExecutor? executor}) async {
+    final db = executor ?? await _open();
     final batch = db.batch();
     for (final r in rows) {
       if (r is! Map) continue;
@@ -1306,6 +1369,22 @@ class RankedHistoryStore {
       );
     }
     await batch.commit(noResult: true);
+  }
+
+  /// Restores ranked-match rows and RP-snapshot rows from a backup together,
+  /// inside one sqflite transaction — both commit or neither does, so a
+  /// mid-restore failure can't leave one table updated and the other not.
+  /// Prefer this over calling [importRows] / [importSnapshotRows] separately
+  /// whenever a backup carries both, which is every version since v3.
+  Future<void> importBackupData({
+    required List<dynamic> matchRows,
+    required List<dynamic> snapshotRows,
+  }) async {
+    final db = await _open();
+    await db.transaction((txn) async {
+      await importRows(matchRows, executor: txn);
+      await importSnapshotRows(snapshotRows, executor: txn);
+    });
   }
 
   /// Drops both tables. Backs "Clear all data", which promises *everything* -

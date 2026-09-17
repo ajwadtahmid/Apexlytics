@@ -177,6 +177,42 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
     return out;
   }
 
+  /// A hand-corrected `rp_change` of exactly 0 is indistinguishable from a
+  /// non-ranked game (see [RankedMatch.isRanked]) and silently drops the
+  /// match from every ranked aggregate — summary, legends, maps, sessions,
+  /// trends — even though the game genuinely happened and still shows in
+  /// History. A real ranked game can rarely net exactly 0 RP, so this isn't
+  /// rejected outright; the user is warned and can still choose to save it.
+  Future<bool> _confirmZeroRpChange() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('RP change is 0'),
+        content: const Text(
+          'A match with 0 RP change will be left out of your ranked '
+          'summary, legends, maps, sessions, and trends. '
+          "It'll still show up in History.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.muted),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
+            child: const Text('Save anyway'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     final changes = _changes();
@@ -187,6 +223,10 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
     if (changes.isEmpty) {
       Navigator.pop(context);
       return;
+    }
+    if (changes['rp_change'] == 0) {
+      final proceed = await _confirmZeroRpChange();
+      if (!mounted || !proceed) return;
     }
     setState(() {
       _saving = true;

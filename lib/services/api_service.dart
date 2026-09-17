@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/timeout_constants.dart';
 import '../env/env.dart';
 import '../utils/api_base_options.dart';
 import '../utils/api_cache.dart';
+import '../utils/api_deadline.dart';
 import '../utils/app_logger.dart';
 import '../utils/error_messages.dart' show AppException, friendlyError;
 import '../utils/retry_interceptor.dart';
+import '../utils/storage/api_cache_store.dart';
 
 export '../utils/api_cache.dart' show ApiResult;
 
@@ -17,7 +21,13 @@ class ApiService {
   late final Dio _dio;
   late final ApiCache _cache;
 
-  ApiService(SharedPreferences prefs) {
+  /// Overridable only for tests — production callers get
+  /// [TimeoutConstants.overallRequestDeadline].
+  final Duration _overallDeadline;
+
+  ApiService(ApiCacheStore cacheStore, {Duration? overallDeadline})
+    : _overallDeadline =
+          overallDeadline ?? TimeoutConstants.overallRequestDeadline {
     _dio = Dio(buildApiBaseOptions());
     if (kDebugMode) {
       _dio.interceptors.add(
@@ -34,14 +44,26 @@ class ApiService {
     _dio.interceptors.add(
       RetryInterceptor(dio: _dio, backupBaseUrl: Env.proxyUrlBackup),
     );
-    _cache = ApiCache(prefs);
+    _cache = ApiCache(cacheStore);
+    // Fire-and-forget: a failed prime just means synchronous cache reads
+    // return null until the next successful save, not a startup crash — the
+    // same tolerance app.dart's snapshot priming already accepts for the
+    // exact same "reads on frame 1, storage is async" reason.
+    unawaited(
+      _cache.primeFromDisk().catchError((Object e) {
+        log.w('API cache priming failed', error: e);
+      }),
+    );
   }
 
   /// Opens the underlying TCP connection so the first real request skips the
   /// handshake latency. Failures are silently swallowed — this is best-effort.
   Future<void> warmup() async {
     try {
-      await _dio.get('/healthz');
+      await withOverallDeadline(
+        _overallDeadline,
+        (token) => _dio.get('/healthz', cancelToken: token),
+      );
     } catch (e) {
       log.d('Warmup failed (best-effort)', error: e);
     }
@@ -119,7 +141,11 @@ class ApiService {
     Map<String, dynamic>? params,
   }) async {
     try {
-      final response = await _dio.get(endpoint, queryParameters: params);
+      final response = await withOverallDeadline(
+        _overallDeadline,
+        (token) =>
+            _dio.get(endpoint, queryParameters: params, cancelToken: token),
+      );
       final data = response.data;
       if (data is Map && data.containsKey('error')) {
         throw AppException(data['error'].toString());
@@ -143,7 +169,11 @@ class ApiService {
   }) async {
     final key = _buildCacheKey(endpoint, params);
     try {
-      final response = await _dio.get(endpoint, queryParameters: params);
+      final response = await withOverallDeadline(
+        _overallDeadline,
+        (token) =>
+            _dio.get(endpoint, queryParameters: params, cancelToken: token),
+      );
       final data = normalizer(response.data);
       if (!noCache) await _cache.save(key, data);
       return ApiResult(data);

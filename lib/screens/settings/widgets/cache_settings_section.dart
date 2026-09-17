@@ -209,32 +209,51 @@ class CacheSettingsSection extends ConsumerWidget {
     if (!context.mounted) return;
 
     switch (importResult) {
-      case ImportSuccess(:final keyCount):
+      case ImportSuccess():
         ref.invalidate(playerSettingsProvider);
         ref.invalidate(searchStateProvider);
         // Same UID as before restore, so these families' cached values would
         // otherwise survive and the Ranked tab would show stale data.
         invalidatePlayerDerivedProviders(ref);
-        context.showMessage('Backup restored ($keyCount items).');
+        // Same counts the preview dialog already showed the user, not
+        // ImportSuccess.keyCount — that's the number of raw SharedPreferences
+        // keys restored (settings, favourites, ...), an internal bookkeeping
+        // detail nobody asked about. Showing it as "N items" read as a wildly
+        // wrong match/profile count and was more confusing than useful.
+        context.showMessage(
+          'Backup restored: ${_profilesLabel(preview.profileCount)}, '
+          '${preview.matchCount} matches.',
+        );
       case ImportError(:final message):
         context.showError(message);
     }
   }
 
+  String _profilesLabel(int count) =>
+      count == 1 ? '1 profile' : '$count profiles';
+
+  // A heads-up, not a hard limit — restoring past this is still expected to
+  // work fine, but it's large enough that "may take a moment" is honest.
+  static const _largeBackupWarningBytes = 15 * 1024 * 1024; // 15 MB
+
   String _summarize(BackupPreview preview) {
     final exportedAt = preview.exportedAt;
-    final profiles = preview.profileCount == 1
-        ? '1 profile'
-        : '${preview.profileCount} profiles';
+    final profiles = _profilesLabel(preview.profileCount);
     return [
       if (exportedAt != null)
         'Exported ${DateFormat('MMM d, yyyy').format(exportedAt.toLocal())}.',
       '$profiles, ${preview.matchCount} matches '
           '(${preview.newMatchCount} new to this device).',
+      if (preview.sizeBytes > _largeBackupWarningBytes)
+        'This is a large backup (${_formatSize(preview.sizeBytes)}) — '
+            'restoring may take a moment.',
       "This will restore the backup's settings and profiles, and merge its "
           'match history into your current data.',
     ].join('\n\n');
   }
+
+  String _formatSize(int bytes) =>
+      '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
   /// Destructive-action dialog. [onConfirm] runs after the sheet is dismissed,
   /// and the returned future completes only once it has - so a caller can
