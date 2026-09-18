@@ -46,13 +46,18 @@ class RankedSplitBucket {
 /// `RankedHistoryStore.rankedSeasonCounts` (already folds NULL season ids into
 /// [kUnknownSplitId]); [seasons] supplies display metadata.
 ///
+/// A season with 0 matches normally gets no bucket. If [seasons] has a split
+/// covering [now] that's newer than every split with games, a zero-game
+/// bucket is synthesized for it so the picker reflects the split in progress.
+///
 /// Ordered newest-first by season start (a newer season/split has a later
 /// start), splits with missing metadata after those, and the "Unknown" bucket
 /// always last.
 List<RankedSplitBucket> buildSplitBuckets(
   Map<String, int> rankedCounts,
-  Map<String, SeasonMeta> seasons,
-) {
+  Map<String, SeasonMeta> seasons, {
+  DateTime? now,
+}) {
   final real = <RankedSplitBucket>[];
   var hasUnknown = false;
 
@@ -72,6 +77,26 @@ List<RankedSplitBucket> buildSplitBuckets(
         season: seasons[entry.key],
       ),
     );
+  }
+
+  final current = _currentSeasonByDate(seasons, now ?? DateTime.now());
+  if (current != null && !real.any((b) => b.id == current.id)) {
+    final newestRealStart = real
+        .map((b) => b.season?.start)
+        .whereType<DateTime>()
+        .fold<DateTime?>(
+          null,
+          (max, s) => max == null || s.isAfter(max) ? s : max,
+        );
+    if (newestRealStart == null || current.start.isAfter(newestRealStart)) {
+      real.add(
+        RankedSplitBucket(
+          id: current.id,
+          displayName: current.displayName,
+          season: current,
+        ),
+      );
+    }
   }
 
   real.sort((a, b) {
@@ -97,6 +122,18 @@ List<RankedSplitBucket> buildSplitBuckets(
     );
   }
   return real;
+}
+
+/// The known season covering [now], or null if none does. Picks the
+/// latest-starting one if ranges somehow overlap.
+SeasonMeta? _currentSeasonByDate(Map<String, SeasonMeta> seasons, DateTime now) {
+  SeasonMeta? best;
+  for (final season in seasons.values) {
+    if (!season.start.isAfter(now) && season.end.isAfter(now)) {
+      if (best == null || season.start.isAfter(best.start)) best = season;
+    }
+  }
+  return best;
 }
 
 /// The split id that a [selectedId] resolves to: itself when it's a real bucket

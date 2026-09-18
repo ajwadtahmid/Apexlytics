@@ -90,6 +90,80 @@ void main() {
     });
   });
 
+  group('buildSplitBuckets — current-by-date synthesis', () {
+    final now = DateTime.utc(2026, 9, 17);
+    final seasonsAroundNow = {
+      'br_ranked_s28_s2': SeasonMeta(
+        id: 'br_ranked_s28_s2',
+        displayName: 'S28',
+        start: DateTime.utc(2026, 8, 1),
+        end: DateTime.utc(2026, 9, 1),
+      ),
+      'br_ranked_s29_s1': SeasonMeta(
+        id: 'br_ranked_s29_s1',
+        displayName: 'S29',
+        start: DateTime.utc(2026, 9, 1),
+        end: DateTime.utc(2026, 10, 1),
+      ),
+    };
+
+    test('adds a zero-game bucket for the split covering now', () {
+      final buckets = buildSplitBuckets({
+        'br_ranked_s28_s2': 5,
+      }, seasonsAroundNow, now: now);
+      expect(buckets.map((b) => b.id), [
+        kLifetimeSplitId,
+        'br_ranked_s29_s1', // synthesized, no games, but current by date
+        'br_ranked_s28_s2',
+      ]);
+    });
+
+    test('does nothing when the current split already has a bucket', () {
+      final buckets = buildSplitBuckets({
+        'br_ranked_s28_s2': 5,
+        'br_ranked_s29_s1': 1,
+      }, seasonsAroundNow, now: now);
+      expect(buckets.map((b) => b.id), [
+        kLifetimeSplitId,
+        'br_ranked_s29_s1',
+        'br_ranked_s28_s2',
+      ]);
+    });
+
+    test('does nothing when no known split covers now', () {
+      final buckets = buildSplitBuckets({
+        'br_ranked_s28_s2': 5,
+      }, seasonsAroundNow, now: DateTime.utc(2026, 12, 25));
+      expect(buckets.map((b) => b.id), ['br_ranked_s28_s2']);
+    });
+
+    test(
+      'ignores a covers-now split that starts earlier than an existing bucket',
+      () {
+        // Stale metadata spanning [now] but starting before an existing
+        // bucket shouldn't override it — guards against bad data.
+        final seasons = {
+          'br_ranked_s_stale': SeasonMeta(
+            id: 'br_ranked_s_stale',
+            displayName: 'Stale',
+            start: now.subtract(const Duration(days: 50)),
+            end: now.add(const Duration(days: 50)),
+          ),
+          'br_ranked_s_lapsed': SeasonMeta(
+            id: 'br_ranked_s_lapsed',
+            displayName: 'Lapsed',
+            start: now.subtract(const Duration(days: 10)),
+            end: now.subtract(const Duration(days: 1)),
+          ),
+        };
+        final buckets = buildSplitBuckets({
+          'br_ranked_s_lapsed': 3,
+        }, seasons, now: now);
+        expect(buckets.map((b) => b.id), ['br_ranked_s_lapsed']);
+      },
+    );
+  });
+
   group('effectiveSplitId', () {
     // [Lifetime, s29_s1, s28_s2]
     final splits = buildSplitBuckets({

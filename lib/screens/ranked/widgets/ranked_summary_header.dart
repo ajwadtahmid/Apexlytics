@@ -15,11 +15,11 @@ class RankedSummaryHeader extends ConsumerWidget {
   final RankedSummary summary;
   final String uid;
 
-  /// The live RP from `/player` (always as fresh as the last stats poll).
-  /// [summary.currentRp] instead comes from match history via `/games`,
-  /// which syncs on its own, much slower cooldown — so the two can disagree
-  /// right after a session. When they do, a small badge explains the gap
-  /// instead of silently showing two different numbers on screen.
+  /// Live RP from `/player`. [summary.currentRp] instead comes from match
+  /// history, which syncs on a slower cooldown and can lag right after a
+  /// session — a small badge explains the gap when they disagree. With zero
+  /// games this split, [summary.currentRp] has nothing to derive from, so
+  /// [livePlayerRp] is shown directly instead.
   final int? livePlayerRp;
 
   const RankedSummaryHeader({
@@ -43,6 +43,9 @@ class RankedSummaryHeader extends ConsumerWidget {
             goalIndex: goalIndex,
             predatorRp: predatorRp,
           );
+    final displayRp = summary.games == 0 && livePlayerRp != null
+        ? livePlayerRp!
+        : summary.currentRp;
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
@@ -89,7 +92,7 @@ class RankedSummaryHeader extends ConsumerWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            formatNumber(summary.currentRp),
+                            formatNumber(displayRp),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -100,7 +103,7 @@ class RankedSummaryHeader extends ConsumerWidget {
                           ),
                         ),
                         if (livePlayerRp != null &&
-                            livePlayerRp != summary.currentRp) ...[
+                            livePlayerRp != displayRp) ...[
                           const SizedBox(width: 6),
                           Tooltip(
                             message:
