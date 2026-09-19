@@ -58,23 +58,22 @@ class NotificationService {
   );
 
   // The plugin resolves an Android icon name via getIdentifier(name,
-  // "drawable", package) — a runtime string lookup, done both here and again
-  // every time a notification is actually built (incl. ones rebuilt by
-  // ScheduledNotificationBootReceiver after a reboot). It must live under an
-  // unqualified (or every) drawable/ folder, or a device whose density split
-  // doesn't get delivered that resource sees invalid_icon and this throws.
+  // "drawable", package) — a runtime string lookup, redone every time a
+  // notification is built. Confirmed by inspecting a built release .aab/.apk
+  // that both icons below survive R8 shrinking via keep.xml, so a
+  // getIdentifier miss in production is a runtime/process-state issue (e.g.
+  // Play swapping split APKs under a still-running process), not a missing
+  // resource — hence graceful degradation below instead of more retries.
   //
-  // ic_notification_fallback is pixel-identical to ic_notification (same
-  // silhouette) but also gets a static reference from a no-op AndroidManifest
-  // meta-data entry, so AAPT2 compiles a verified resource ID for it — the
-  // same guarantee Android gives ic_launcher_foreground via the adaptive-icon
-  // XML, rather than depending solely on the runtime lookup succeeding twice.
-  // ic_launcher_foreground itself was tried here previously: it resolves
-  // reliably, but it's the adaptive launcher icon's full-bleed art (fully
-  // opaque, no transparency), so Android's alpha-only status-bar rendering
-  // painted the whole square white instead of a shape.
+  // ic_notification_fallback also gets a static AndroidManifest meta-data
+  // reference so AAPT2 verifies its resource ID at compile time.
+  // _lastResortAndroidIcon (ic_launcher_foreground) is a last resort because
+  // it's fully opaque, so the status bar paints it as a solid square instead
+  // of a shape. @mipmap/ic_launcher was ruled out entirely — getIdentifier is
+  // hardcoded to type "drawable", so a mipmap resource never resolves here.
   static const _primaryAndroidIcon = 'ic_notification';
   static const _fallbackAndroidIcon = 'ic_notification_fallback';
+  static const _lastResortAndroidIcon = 'ic_launcher_foreground';
 
   static Future<void> init() async {
     if (_initialized) return;
@@ -104,10 +103,8 @@ class NotificationService {
       ),
     );
 
-    // Bare resource name (no '@drawable/' prefix) is the plugin's documented
-    // form. Retry once with the fallback icon (see above) instead of leaving
-    // the service permanently uninitialised for the rest of the session if
-    // the primary icon's lookup ever fails again.
+    // Falls through primary -> fallback -> last-resort icon, then gives up
+    // quietly (instead of throwing out of init()) if all three fail.
     try {
       await initializeWith(_primaryAndroidIcon);
     } catch (e) {
@@ -116,7 +113,25 @@ class NotificationService {
         'retrying with $_fallbackAndroidIcon',
         error: e,
       );
-      await initializeWith(_fallbackAndroidIcon);
+      try {
+        await initializeWith(_fallbackAndroidIcon);
+      } catch (e2) {
+        log.w(
+          'NotificationService: $_fallbackAndroidIcon unavailable, '
+          'retrying with $_lastResortAndroidIcon',
+          error: e2,
+        );
+        try {
+          await initializeWith(_lastResortAndroidIcon);
+        } catch (e3) {
+          log.e(
+            'NotificationService: all Android icons unavailable, '
+            'notifications disabled for this session',
+            error: e3,
+          );
+          return;
+        }
+      }
     }
     _initialized = true;
     log.i('NotificationService initialised');
