@@ -7,6 +7,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../constants/tracker_constants.dart';
 
 /// RP swings at or beyond this magnitude are rank-reset artifacts
@@ -189,14 +191,20 @@ class RankedMatch {
   /// same shape the history store's `editMatch` writes to the database, so a
   /// saved correction can be reflected in an in-memory list immediately
   /// instead of waiting on the next fetch.
+  ///
+  /// `legend`/`map_key` check `is String`, falling back to the current
+  /// value — `as String?` alone still throws on a mistyped (non-null) value
+  /// like an `int`, since it only tolerates an already-null one. Unlike
+  /// `kills`/`damage` below, neither field is nullable here, so a bad
+  /// `changes` entry means "leave this field alone," not "clear it."
   RankedMatch withEdits(Map<String, Object?> changes) => RankedMatch(
     uid: uid,
     playerName: playerName,
-    legend: changes.containsKey('legend')
+    legend: changes.containsKey('legend') && changes['legend'] is String
         ? changes['legend'] as String
         : legend,
     gameMode: gameMode,
-    mapKey: changes.containsKey('map_key')
+    mapKey: changes.containsKey('map_key') && changes['map_key'] is String
         ? changes['map_key'] as String
         : mapKey,
     rpChange: changes.containsKey('rp_change')
@@ -284,7 +292,9 @@ class RankedMatch {
   }
 
   /// Looks up a tracker value by its stable human [name] (case-insensitive).
-  /// Returns null when the match didn't carry that tracker.
+  /// Returns null when absent. Test-only — production code goes through
+  /// [killsFrom]/[damageFrom] or the [kills]/[damage] columns instead.
+  @visibleForTesting
   num? trackerValue(String name) {
     final target = name.toLowerCase();
     for (final t in trackers) {

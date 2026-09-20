@@ -60,9 +60,13 @@ class PlayerInfoCard extends StatelessWidget {
               SizedBox(
                 width: 14,
                 height: 14,
+                // Source rank badges run up to 705×739px; without cacheWidth
+                // this decodes at full resolution to render a 14×14 icon.
                 child: Image.asset(
                   rankAssetPath(stats),
                   fit: BoxFit.contain,
+                  cacheWidth: (14 * MediaQuery.devicePixelRatioOf(context))
+                      .ceil(),
                   errorBuilder: (ctx, err, trace) => const SizedBox.shrink(),
                 ),
               ),

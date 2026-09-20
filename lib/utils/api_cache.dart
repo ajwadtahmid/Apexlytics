@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'storage/api_cache_store.dart';
 
@@ -25,6 +26,36 @@ const Map<String, int> kEndpointCacheTtlMinutes = {
   '/predator': 60,
   '/servers': 5,
 };
+
+/// Decodes every row's raw JSON string. Run via [Isolate.run] from
+/// [ApiCache.primeFromDisk] — a top-level function with no captured instance
+/// state, so it's safe to send to the spawned isolate. [rows] and the
+/// returned record are both plain JSON-safe types, which cross the isolate
+/// boundary without issue.
+///
+/// A row that fails to parse, or decodes to a bare `null` (indistinguishable
+/// from "couldn't read this" here, and no cached response is ever usefully
+/// `null` itself), is reported as corrupt rather than decoded.
+({Map<String, (Object? data, int savedAtMs)> decoded, List<String> corrupt})
+_decodeCacheRows(Map<String, (String data, int savedAtMs)> rows) {
+  final decoded = <String, (Object?, int)>{};
+  final corrupt = <String>[];
+  for (final entry in rows.entries) {
+    Object? value;
+    try {
+      value = jsonDecode(entry.value.$1);
+    } on FormatException {
+      corrupt.add(entry.key);
+      continue;
+    }
+    if (value == null) {
+      corrupt.add(entry.key);
+      continue;
+    }
+    decoded[entry.key] = (value, entry.value.$2);
+  }
+  return (decoded: decoded, corrupt: corrupt);
+}
 
 /// Response cache for [ApiService].
 ///
@@ -57,32 +88,27 @@ class ApiCache {
 
   /// Loads every persisted entry into memory. Call once at startup, before
   /// any synchronous [load] is relied on to return non-null.
+  ///
+  /// Decoding runs off the UI isolate (see [_decodeCacheRows]) — up to
+  /// [_maxEntries] arbitrary-sized JSON blobs is real CPU work, called from
+  /// [ApiService]'s constructor at startup, contending with first-frame
+  /// layout if done inline. Being `unawaited` at the call site doesn't
+  /// prevent that on its own: without a real isolate hop, every `jsonDecode`
+  /// still runs back-to-back in the one microtask after `loadAll()` resolves.
   Future<void> primeFromDisk() async {
     final rows = await _store.loadAll();
-    final corrupt = <String>[];
-    for (final entry in rows.entries) {
-      final decoded = _tryDecode(entry.value.$1);
-      if (decoded == null) {
-        // A corrupt row would otherwise keep occupying a slot in
-        // [_maxEntries] and re-fail on every subsequent prime.
-        corrupt.add(entry.key);
-        continue;
-      }
+    final result = await Isolate.run(() => _decodeCacheRows(rows));
+    for (final entry in result.decoded.entries) {
+      final (data, savedAtMs) = entry.value;
       _cache[entry.key] = CachedEntry(
-        data: decoded,
-        savedAt: DateTime.fromMillisecondsSinceEpoch(entry.value.$2),
+        data: data,
+        savedAt: DateTime.fromMillisecondsSinceEpoch(savedAtMs),
       );
     }
-    if (corrupt.isNotEmpty) {
-      unawaited(_store.removeMany(corrupt));
-    }
-  }
-
-  Object? _tryDecode(String raw) {
-    try {
-      return jsonDecode(raw);
-    } on FormatException {
-      return null;
+    if (result.corrupt.isNotEmpty) {
+      // A corrupt row would otherwise keep occupying a slot in [_maxEntries]
+      // and re-fail on every subsequent prime.
+      unawaited(_store.removeMany(result.corrupt));
     }
   }
 

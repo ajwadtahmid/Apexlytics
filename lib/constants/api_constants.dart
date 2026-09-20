@@ -31,15 +31,18 @@ class ApiConstants {
 
   static const String gamesPath = '/games';
   static const String gamesEligibilityPath = '/games/eligibility';
+  static const String gamesCapacityPath = '/games/capacity';
 
   /// Rolling match-history window the `/games` endpoint serves per UID.
   ///
   /// History is lost only if 100+ ranked matches are played between syncs.
   static const int gamesHistoryLimit = 100;
 
-  /// How long to wait before asking `/games` for the same UID again. Matches
-  /// the backend's own per-UID cooldown, inside which it answers from cache.
-  static const Duration gamesSyncCooldown = Duration(hours: 6);
+  /// How long to wait before asking `/games` for the same UID again. Should
+  /// match the backend's own per-UID cooldown — inside that window it
+  /// answers from cache, so asking sooner just re-receives the same
+  /// response, not newer data.
+  static const Duration gamesSyncCooldown = Duration(hours: 3);
 
   static const Map<String, String> platformLabels = {
     'PC': 'PC',

@@ -776,7 +776,13 @@ PersonalRecords personalRecords(List<RankedMatch> matches) {
 
   RankedMatch? bestRp, bestKills, bestDamage;
   for (final m in matches) {
-    if (bestRp == null || m.effectiveRpChange > bestRp.effectiveRpChange) {
+    // A reset artifact or merged-diff entry ([RankedMatch.isRankedOutlier])
+    // is excluded from [bestRp], matching the SQL path's WHERE clause
+    // (`personalBestGamesFor`) — otherwise its effectiveRpChange (0) could
+    // beat an ordinary loss and win "best game". kills/damage aren't gated
+    // the same way: only the outlier's RP value is suspect.
+    if (!m.isRankedOutlier &&
+        (bestRp == null || m.effectiveRpChange > bestRp.effectiveRpChange)) {
       bestRp = m;
     }
     if (m.kills != null && (bestKills == null || m.kills! > bestKills.kills!)) {

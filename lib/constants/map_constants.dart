@@ -109,9 +109,19 @@ String canonicalMapKey(String mapKey) =>
 /// way Dart can, so a query that needs "every match for this map" (e.g.
 /// `RankedHistoryStore.matchesForMap`) needs the concrete list of raw values
 /// to match against instead of a single equality check.
+///
+/// An unrecognised map falls back to [_baseKey]'s normalized form, not the
+/// raw [mapKey] — matching how [canonicalMapKey] groups unknown rows, so a
+/// drill-down opened from a merged row resolves every variant it counted
+/// (`newmap` *and* `newmap_rotation`), not just the representative key.
+/// Case doesn't need to be exhaustive here — `matchesForMap` matches
+/// case-insensitively.
 List<String> battleRoyaleMapKeyVariants(String mapKey) {
   final info = battleRoyaleMapInfo(mapKey);
-  if (info == null) return [mapKey];
+  if (info == null) {
+    final base = _baseKey(mapKey);
+    return [base, '${base}_rotation'];
+  }
   final bases = kBattleRoyaleMaps.entries
       .where((e) => e.value.name == info.name)
       .map((e) => e.key);

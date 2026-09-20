@@ -116,9 +116,9 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     final period = ref.watch(rankedPeriodProvider);
     // The tabs render from the local store, so a failed sync still leaves a
     // populated view — it is just behind whatever upstream has.
-    final isOffline =
-        ref.watch(rankedSyncProvider(widget.uid)).value ==
-        RankedSyncOutcome.offline;
+    final syncOutcome = ref.watch(rankedSyncProvider(widget.uid)).value;
+    final isOffline = syncOutcome == RankedSyncOutcome.offline;
+    final isRequestError = syncOutcome == RankedSyncOutcome.requestError;
 
     return Column(
       children: [
@@ -127,7 +127,16 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
             onLearnMore: _openInfoFromCoachMark,
             onDismiss: _dismissCoachMark,
           ),
-        if (isOffline) const _OfflineBanner(),
+        if (isOffline)
+          const _SyncIssueBanner(
+            icon: Icons.cloud_off,
+            message: 'Offline — showing saved history.',
+          ),
+        if (isRequestError)
+          const _SyncIssueBanner(
+            icon: Icons.error_outline,
+            message: 'Could not sync — showing saved history.',
+          ),
         Expanded(
           child: splitsAsync.when(
             loading: () => const Center(
@@ -218,8 +227,11 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
 
     // Recording is on but nothing has arrived - ask the server whether it's
     // actually seeing polls for this UID (costs no /games budget) instead of
-    // leaving the user guessing.
-    if (recording && outcome != RankedSyncOutcome.offline) {
+    // leaving the user guessing. Skipped for offline/requestError too —
+    // neither means "nothing has arrived yet".
+    if (recording &&
+        outcome != RankedSyncOutcome.offline &&
+        outcome != RankedSyncOutcome.requestError) {
       final eligibility = ref.watch(gamesEligibilityProvider(widget.uid)).value;
       if (eligibility != null && !eligibility.eligible) {
         return ErrorCard(
@@ -244,16 +256,18 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     }
 
     final (title, icon, statusNote) = switch (outcome) {
-      RankedSyncOutcome.queued => (
-        'Server busy',
-        Icons.cloud_queue,
-        'The history server is busy right now, but nothing is lost — this '
-            'resolves on its own.',
-      ),
+      RankedSyncOutcome.queued => _queuedState(),
       RankedSyncOutcome.offline => (
         'Offline',
         Icons.cloud_off,
         'Couldn\'t reach the server just now — showing the latest we have.',
+      ),
+      RankedSyncOutcome.requestError => (
+        'Can\'t sync right now',
+        Icons.error_outline,
+        'The server rejected the last request. This usually needs attention '
+            'rather than just time — try again later, or re-link your '
+            'profile if it keeps happening.',
       ),
       // synced with zero matches so far, cooldown, or still loading
       _ => (
@@ -276,6 +290,40 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           : null,
       secondaryActionIcon: Icons.bar_chart,
       onSecondaryAction: onViewAvailable,
+    );
+  }
+
+  /// The "queued" empty state's copy. Dynamic when [gamesCapacityProvider]
+  /// has an answer — free slot count, or that the budget is locked after a
+  /// hiccup (distinct from ordinary congestion) — falling back to generic
+  /// copy otherwise.
+  (String, IconData, String) _queuedState() {
+    final capacity = ref.watch(gamesCapacityProvider).value;
+    if (capacity == null) {
+      return (
+        'Server busy',
+        Icons.cloud_queue,
+        'The history server is busy right now, but nothing is lost — this '
+            'resolves on its own.',
+      );
+    }
+    if (capacity.locked) {
+      return (
+        'Server busy',
+        Icons.cloud_queue,
+        'The history server paused briefly after a hiccup upstream — this '
+            'clears on its own shortly. Nothing is lost.',
+      );
+    }
+    final resetMinutes = capacity.windowResetsAt
+        .difference(DateTime.now())
+        .inMinutes
+        .clamp(0, 60);
+    return (
+      'Server busy',
+      Icons.cloud_queue,
+      '${capacity.free} of ${capacity.maxPerHour} history slots free right '
+          'now — resets in about $resetMinutes min. Nothing is lost.',
     );
   }
 
@@ -733,11 +781,15 @@ class _StepRow extends StatelessWidget {
   }
 }
 
-/// Strip shown above the tabs when the last sync failed and persisted history
-/// is still on screen. Sits in the layout alongside the tabs rather than
-/// replacing them, unlike the full-screen [ErrorCard] states above.
-class _OfflineBanner extends StatelessWidget {
-  const _OfflineBanner();
+/// Strip shown above the tabs when the last sync failed and persisted
+/// history is still on screen — [RankedSyncOutcome.offline] or `.requestError`,
+/// each with its own copy (see `build()`). Sits alongside the tabs rather
+/// than replacing them, unlike the [ErrorCard] states above.
+class _SyncIssueBanner extends StatelessWidget {
+  final IconData icon;
+  final String message;
+
+  const _SyncIssueBanner({required this.icon, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -756,14 +808,14 @@ class _OfflineBanner extends StatelessWidget {
         color: AppTheme.orange.withAlpha(25),
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.cloud_off, size: 14, color: AppTheme.orange),
-          SizedBox(width: 6),
+          Icon(icon, size: 14, color: AppTheme.orange),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'Offline — showing saved history.',
-              style: TextStyle(color: AppTheme.orange, fontSize: 12),
+              message,
+              style: const TextStyle(color: AppTheme.orange, fontSize: 12),
             ),
           ),
         ],

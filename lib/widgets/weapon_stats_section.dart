@@ -127,10 +127,15 @@ class _WeaponRow extends StatelessWidget {
           SizedBox(
             width: 64,
             height: 36,
+            // Source icons run up to 1024×256px; every one is wide enough
+            // that width binds under BoxFit.contain here, so cacheWidth
+            // alone caps the decode to what's actually rendered.
             child: Image.asset(
               weapon.assetPath,
               fit: BoxFit.contain,
               alignment: Alignment.centerLeft,
+              cacheWidth: (64 * MediaQuery.devicePixelRatioOf(context))
+                  .ceil(),
               errorBuilder: (ctx, err, trace) => const SizedBox.shrink(),
             ),
           ),

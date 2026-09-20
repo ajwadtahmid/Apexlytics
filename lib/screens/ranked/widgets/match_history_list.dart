@@ -603,6 +603,8 @@ class _MatchDetailSheet extends StatelessWidget {
                       width: 34,
                       height: 34,
                       fit: BoxFit.contain,
+                      memCacheWidth: (34 * MediaQuery.devicePixelRatioOf(context))
+                          .ceil(),
                       errorWidget: (_, _, _) => const SizedBox(width: 34),
                     ),
                     const SizedBox(width: AppTheme.sm),

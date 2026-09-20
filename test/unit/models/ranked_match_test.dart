@@ -214,4 +214,49 @@ void main() {
       expect(RankedMatch.fromJson(brMatch()).isEdited, isFalse);
     });
   });
+
+  group('withEdits', () {
+    test('applies a legend/map_key change and marks the field edited', () {
+      final m = RankedMatch.fromJson(brMatch());
+      final edited = m.withEdits({
+        'legend': 'Bangalore',
+        'map_key': 'olympus_rotation',
+      });
+
+      expect(edited.legend, 'Bangalore');
+      expect(edited.mapKey, 'olympus_rotation');
+      expect(edited.editedFields, {'legend', 'map_key'});
+    });
+
+    // legend/map_key check `is String` and fall back to the current value,
+    // rather than casting unconditionally (`as String`), which threw on a
+    // null or wrongly-typed value. Unreachable from today's edit form, but
+    // withEdits' input is typed no narrower than Map<String, Object?>.
+    test(
+      'a null legend/map_key change falls back to the current value instead '
+      'of throwing',
+      () {
+        final m = RankedMatch.fromJson(brMatch());
+        final edited = m.withEdits({'legend': null, 'map_key': null});
+
+        expect(edited.legend, m.legend);
+        expect(edited.mapKey, m.mapKey);
+        // Still counts as an edit — the key was present in changes, even
+        // though the value that landed is the unchanged original.
+        expect(edited.editedFields, {'legend', 'map_key'});
+      },
+    );
+
+    test(
+      'a wrongly-typed legend/map_key change falls back to the current '
+      'value instead of throwing',
+      () {
+        final m = RankedMatch.fromJson(brMatch());
+        final edited = m.withEdits({'legend': 42, 'map_key': 7});
+
+        expect(edited.legend, m.legend);
+        expect(edited.mapKey, m.mapKey);
+      },
+    );
+  });
 }

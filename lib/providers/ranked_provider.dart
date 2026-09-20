@@ -5,6 +5,7 @@ import '../models/ranked_match.dart';
 import '../models/season_meta.dart';
 import '../services/games_service.dart';
 import '../utils/app_logger.dart';
+import '../utils/error_messages.dart' show AppException;
 import '../utils/ranked/ranked_aggregates.dart';
 import '../utils/ranked/ranked_period.dart';
 import '../utils/storage/ranked_history_store.dart';
@@ -69,11 +70,22 @@ enum RankedSyncOutcome {
 
   /// The request failed, but persisted history is available to show.
   offline,
+
+  /// The server rejected the request itself (a genuine 4xx — e.g. an
+  /// invalid UID), not a connectivity problem. Distinct from [offline]:
+  /// retrying on its short interval achieves nothing, since the same
+  /// request just gets rejected again.
+  requestError,
 }
 
 /// Backoff after a failure when there's still history to display. Short, because
 /// this is a transient network problem rather than a budget decision.
 const _kOfflineRetry = Duration(minutes: 5);
+
+/// Backoff for [RankedSyncOutcome.requestError] — much longer than
+/// [_kOfflineRetry], since waiting a few minutes doesn't change whether the
+/// same request gets accepted next time.
+const _kRequestErrorRetry = Duration(hours: 1);
 
 /// Syncs ranked history for [uid]: fetches the latest 100 from `/games`, merges
 /// them into the local store, and classifies any newly/legacy-unstamped rows.
@@ -128,6 +140,21 @@ final rankedSyncProvider = FutureProvider.autoDispose
         result = await ref.watch(gamesServiceProvider).getMatches(uid);
       } catch (e) {
         if (await store.count(uid) == 0) rethrow;
+        // A genuine 4xx (AppException.status) means the server rejected
+        // this request, not a transient connectivity issue — its own
+        // outcome and backoff instead of `offline`'s 5-minute retry loop,
+        // which would just fail the same way every time.
+        final status = e is AppException ? e.status : null;
+        if (status != null && status >= 400 && status < 500) {
+          log.w(
+            'games fetch rejected by server; serving persisted history',
+            error: e,
+          );
+          return remember(
+            RankedSyncOutcome.requestError,
+            _kRequestErrorRetry,
+          );
+        }
         log.w('games fetch failed; serving persisted history', error: e);
         return remember(RankedSyncOutcome.offline, _kOfflineRetry);
       }
@@ -171,6 +198,22 @@ final gamesEligibilityProvider = FutureProvider.autoDispose
         return null;
       }
     });
+
+/// Live `/games` hourly budget snapshot — backs the "queued" empty state so
+/// it can say something concrete ("3 of 15 slots free, resets in 12 min")
+/// instead of just asking the user to wait, and can tell the truth when the
+/// window is locked rather than looking like ordinary congestion. Costs no
+/// `/games` budget slot. Null on failure — a nice-to-have, not essential.
+final gamesCapacityProvider = FutureProvider.autoDispose<GamesCapacity?>((
+  ref,
+) async {
+  try {
+    return await ref.watch(gamesServiceProvider).getCapacity();
+  } catch (e) {
+    log.d('Games capacity check failed', error: e);
+    return null;
+  }
+});
 
 /// Net ranked RP for [uid] over a window, via [RankedHistoryStore.netRpInWindow].
 ///

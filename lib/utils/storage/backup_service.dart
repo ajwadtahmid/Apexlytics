@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:file_selector/file_selector.dart' as file_selector;
@@ -88,51 +90,68 @@ bool backupIncludesKey(String key) => _include(key);
 /// identifier in the key name itself.
 String _redactUid(String key) => key.replaceAll(RegExp(r'\d{10,20}'), '<uid>');
 
-/// Restores [prefsData] into [prefs], skipping disallowed keys and dispatching
-/// each value to the matching typed `SharedPreferences` setter. Extracted from
-/// [commitBackupImport] so the type-dispatch is testable without a file picker.
-///
-/// Snapshots every key it's about to touch before writing anything, and rolls
-/// them back to their pre-restore values (or removes them, if they didn't
-/// exist before) if a write partway through throws — so a failed restore
-/// doesn't leave some keys from the new backup and some from before it. This
-/// makes the *prefs* half of a restore atomic; [commitBackupImport] pairs it
-/// with a real database transaction for the other half.
+/// Every prefs key a restore of [prefsData] touches: written (present in the
+/// backup and allowlisted) or cleared (a [_staticBackupKeys] entry that's
+/// absent from the backup but exists on-device — see [restorePrefsData]'s
+/// full-replace doc). The single source of truth for that key set, so
+/// [restorePrefsData]'s own snapshot and [commitBackupImport]'s outer one
+/// can never disagree about what a restore is about to change.
 @visibleForTesting
-Future<void> restorePrefsData(
+Set<String> prefsKeysTouchedByRestore(
   SharedPreferences prefs,
   Map<String, dynamic> prefsData,
-) async {
-  final snapshot = <String, Object?>{
-    for (final key in prefsData.keys)
-      if (_include(key)) key: prefs.get(key),
-  };
+) {
+  final written = prefsData.keys.where(_include);
+  final cleared = prefs.getKeys().where(
+    (k) => _staticBackupKeys.contains(k) && !prefsData.containsKey(k),
+  );
+  return {...written, ...cleared};
+}
 
-  Future<void> setTyped(String key, Object? v) async {
-    if (v is String) {
-      await prefs.setString(key, v);
-    } else if (v is int) {
-      await prefs.setInt(key, v);
-    } else if (v is bool) {
-      await prefs.setBool(key, v);
-    } else if (v is double) {
-      await prefs.setDouble(key, v);
-    } else if (v is List) {
-      await prefs.setStringList(key, v.map((e) => e.toString()).toList());
-    }
+Future<void> _setTyped(SharedPreferences prefs, String key, Object? v) async {
+  if (v is String) {
+    await prefs.setString(key, v);
+  } else if (v is int) {
+    await prefs.setInt(key, v);
+  } else if (v is bool) {
+    await prefs.setBool(key, v);
+  } else if (v is double) {
+    await prefs.setDouble(key, v);
+  } else if (v is List) {
+    await prefs.setStringList(key, v.map((e) => e.toString()).toList());
   }
+}
 
+/// A captured pre-write value for every key in a set, restorable on demand.
+/// Shared by [restorePrefsData] (rolls back on its own failure) and
+/// [commitBackupImport] (also rolls back if the database transaction fails
+/// *after* [restorePrefsData] already succeeded — a failure its own
+/// snapshot can no longer see once its call has resolved). Applying both
+/// for the same failure is harmless — the second just re-writes what the
+/// first already restored.
+class _PrefsSnapshot {
+  final SharedPreferences _prefs;
+  final Map<String, Object?> _values;
+
+  _PrefsSnapshot._(this._prefs, this._values);
+
+  factory _PrefsSnapshot.capture(
+    SharedPreferences prefs,
+    Iterable<String> keys,
+  ) => _PrefsSnapshot._(prefs, {for (final k in keys) k: prefs.get(k)});
+
+  /// Restores every captured key to its pre-snapshot value, or removes it if
+  /// it didn't exist before. Best-effort: one key failing to roll back must
+  /// not stop the rest of the rollback from running.
   Future<void> rollback() async {
-    for (final entry in snapshot.entries) {
+    for (final entry in _values.entries) {
       try {
         if (entry.value == null) {
-          await prefs.remove(entry.key);
+          await _prefs.remove(entry.key);
         } else {
-          await setTyped(entry.key, entry.value);
+          await _setTyped(_prefs, entry.key, entry.value);
         }
       } catch (e) {
-        // Best-effort: one key failing to roll back must not stop the rest
-        // of the rollback from running.
         log.w(
           'Backup import rollback failed for "${_redactUid(entry.key)}"',
           error: e,
@@ -140,6 +159,31 @@ Future<void> restorePrefsData(
       }
     }
   }
+}
+
+/// Restores [prefsData] into [prefs], skipping disallowed keys and dispatching
+/// each value to the matching typed `SharedPreferences` setter. Extracted from
+/// [commitBackupImport] so the type-dispatch is testable without a file picker.
+///
+/// Full-replace, not merge, for *static* keys: a setting the backup doesn't
+/// mention is cleared, matching what "restore" means to a user. **Not**
+/// applied to the dynamic per-UID prefixes — a device can hold multiple
+/// profiles, and sweeping "not in this backup" there would delete a
+/// *different* profile's stats the backup never claimed to describe.
+/// Dynamic keys stay pure merge: overwritten if present, untouched otherwise.
+///
+/// Snapshots every touched key first and rolls it all back if a write
+/// throws partway through — the *prefs* half is atomic on its own;
+/// [commitBackupImport] adds a real database transaction plus its own
+/// outer [_PrefsSnapshot] for the narrower gap that leaves open.
+@visibleForTesting
+Future<void> restorePrefsData(
+  SharedPreferences prefs,
+  Map<String, dynamic> prefsData,
+) async {
+  final touched = prefsKeysTouchedByRestore(prefs, prefsData);
+  final toClear = touched.where((k) => !prefsData.containsKey(k));
+  final snapshot = _PrefsSnapshot.capture(prefs, touched);
 
   try {
     for (final entry in prefsData.entries) {
@@ -151,7 +195,7 @@ Future<void> restorePrefsData(
       }
       final v = entry.value;
       if (v is String || v is int || v is bool || v is double || v is List) {
-        await setTyped(entry.key, v);
+        await _setTyped(prefs, entry.key, v);
       } else {
         log.w(
           'Backup import: skipping unsupported type for '
@@ -159,8 +203,11 @@ Future<void> restorePrefsData(
         );
       }
     }
+    for (final key in toClear) {
+      await prefs.remove(key);
+    }
   } catch (e) {
-    await rollback();
+    await snapshot.rollback();
     rethrow;
   }
 }
@@ -173,6 +220,24 @@ Map<String, dynamic> _collect(SharedPreferences prefs) {
     if (v != null) result[key] = v;
   }
   return result;
+}
+
+/// JSON-encodes then gzip-compresses [envelope] — the CPU-bound half of
+/// [exportBackup], run via [Isolate.run] rather than inline so it doesn't
+/// block the UI isolate. A top-level function with no captured instance
+/// state, so it's safe to send to the spawned isolate; [envelope] is plain
+/// JSON-safe types throughout, which cross the isolate boundary fine.
+List<int> _encodeAndCompress(Map<String, Object?> envelope) {
+  // No indentation — this file is never hand-read, and pretty-printing
+  // roughly doubles its size for no benefit.
+  final json = jsonEncode(envelope);
+  // Gzipped on top of that: the JSON is highly repetitive (same column names
+  // on every row), so this compresses very well. previewBackup's file picker
+  // accepts `.gz` directly (see decompressIfGzipped) via the app's own
+  // document picker, so restoring stays one step as long as the user goes
+  // through "Restore backup" rather than opening the file from a system file
+  // manager (which may try to extract `.gz` first).
+  return gzip.encode(utf8.encode(json));
 }
 
 /// Shows a save dialog and writes backup JSON to the user's selected location.
@@ -199,16 +264,10 @@ Future<String?> exportBackup(
     'stat_snapshots': statSnapshots,
   };
 
-  // No indentation — this file is never hand-read, and pretty-printing
-  // roughly doubles its size for no benefit.
-  final json = jsonEncode(envelope);
-  // Gzipped on top of that: the JSON is highly repetitive (same column names
-  // on every row), so this compresses very well. previewBackup's file picker
-  // accepts `.gz` directly (see decompressIfGzipped) via the app's own
-  // document picker, so restoring stays one step as long as the user goes
-  // through "Restore backup" rather than opening the file from a system file
-  // manager (which may try to extract `.gz` first).
-  final compressed = gzip.encode(utf8.encode(json));
+  // Off the UI isolate (see [_encodeAndCompress]) — a multi-thousand-match
+  // history is real CPU work, and doing it inline would freeze the UI on
+  // exactly the operation (device migration) where a freeze is most alarming.
+  final compressed = await Isolate.run(() => _encodeAndCompress(envelope));
   final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
   final defaultFilename = 'apexlytics_$stamp.json.gz';
 
@@ -383,6 +442,17 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
         envelope: envelope,
       ),
     );
+  } on BackupTooLargeException {
+    log.w('Backup preview failed — decompressed size exceeded the cap');
+    return PreviewError('This backup is too large to restore.');
+  } on BackupCorruptedException catch (e) {
+    // Realistically a partially-downloaded file from cloud storage, not a
+    // generic I/O problem — worth its own message rather than the catch-all.
+    log.w('Backup preview failed — corrupted gzip stream', error: e);
+    return PreviewError(
+      'This backup file appears to be corrupted or incomplete. Try '
+      're-downloading or re-exporting it.',
+    );
   } on FormatException catch (e) {
     log.w('Backup preview failed — invalid JSON', error: e);
     return PreviewError('The selected file is not a valid backup.');
@@ -392,14 +462,91 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
   }
 }
 
+/// Hard ceiling on a picked backup file's *decompressed* size. Gzip has no
+/// bound relating compressed to decompressed size — a crafted or corrupted
+/// `.gz` a few MB on disk can expand to gigabytes, and decoding it all at
+/// once allocates for that before anything can reject it. 256 MiB is far
+/// beyond any real export, so this only fires on a file that isn't legitimate.
+const int _kMaxDecompressedBackupBytes = 256 * 1024 * 1024;
+
+/// Thrown by [decompressIfGzipped] when decoding would exceed
+/// [_kMaxDecompressedBackupBytes]. Caught in [previewBackup] and turned into
+/// a user-facing [PreviewError] rather than propagating as a generic failure.
+class BackupTooLargeException implements Exception {
+  const BackupTooLargeException();
+}
+
+/// Thrown by [decompressIfGzipped] when the gzip stream itself is malformed
+/// — distinct from [BackupTooLargeException] (well-formed but too big) and
+/// from a JSON [FormatException] (well-formed and correctly sized, but not
+/// valid JSON once decompressed). Given its own message in [previewBackup],
+/// since a truncated cloud-storage download is a more specific failure than
+/// either of those.
+class BackupCorruptedException implements Exception {
+  const BackupCorruptedException();
+}
+
+/// Accumulates decoded gzip output, refusing to grow past [maxBytes]. Used as
+/// the sink [GZipCodec.decoder]'s chunked conversion writes into, so
+/// [decompressIfGzipped] can abort mid-decode instead of only finding out
+/// the total size *after* fully materializing it.
+class _BoundedByteSink implements Sink<List<int>> {
+  final int maxBytes;
+  final BytesBuilder _builder = BytesBuilder(copy: false);
+  bool overflowed = false;
+
+  _BoundedByteSink(this.maxBytes);
+
+  @override
+  void add(List<int> chunk) {
+    // Once flagged, stop accumulating — the caller stops feeding input too,
+    // but a chunk already in flight when that happens must not still grow
+    // an already-abandoned buffer.
+    if (overflowed) return;
+    _builder.add(chunk);
+    if (_builder.length > maxBytes) overflowed = true;
+  }
+
+  @override
+  void close() {}
+
+  Uint8List get bytes => _builder.toBytes();
+}
+
 /// Decompresses [bytes] if they're gzip (magic number `1F 8B`), otherwise
 /// returns them unchanged. A plain-JSON legacy backup always starts with
 /// `{` (`0x7B`) or whitespace — never these two bytes — so this check is
 /// unambiguous and doesn't depend on the picked file's extension.
+///
+/// Feeds the input through [GZipCodec.decoder]'s chunked conversion API in
+/// pieces, rather than `gzip.decode` on it all at once, so a decompression
+/// bomb is caught by [_BoundedByteSink] and aborted partway through instead
+/// of first allocating its full size. The overflow check runs *before* each
+/// chunk, so [BackupTooLargeException] is always thrown deliberately —
+/// never by catching a byproduct exception from the codec itself, which is
+/// reserved for a genuinely malformed stream ([BackupCorruptedException]).
 @visibleForTesting
 List<int> decompressIfGzipped(List<int> bytes) {
   if (bytes.length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
-    return gzip.decode(bytes);
+    const chunkSize = 64 * 1024;
+    final sink = _BoundedByteSink(_kMaxDecompressedBackupBytes);
+    final input = gzip.decoder.startChunkedConversion(sink);
+    try {
+      for (var i = 0; i < bytes.length; i += chunkSize) {
+        if (sink.overflowed) throw const BackupTooLargeException();
+        final end = (i + chunkSize).clamp(0, bytes.length);
+        input.add(bytes.sublist(i, end));
+      }
+      input.close();
+    } on BackupTooLargeException {
+      rethrow;
+    } catch (e) {
+      // add/close reject invalid data — reclassified with a message that
+      // names the actual problem, instead of propagating the codec's own
+      // exception type or silently returning partial garbage.
+      throw const BackupCorruptedException();
+    }
+    return sink.bytes;
   }
   return bytes;
 }
@@ -442,6 +589,18 @@ Future<ImportResult> commitBackupImport(
 }) async {
   final envelope = preview._envelope;
   final prefsData = envelope['prefs'] as Map<String, dynamic>;
+
+  // Captured before anything runs. Covers a gap restorePrefsData's own
+  // snapshot can't: it runs as the *last* step inside importBackupData's
+  // transaction, so it can finish writing every key — its own snapshot now
+  // out of scope — and only then have the transaction's commit fail,
+  // leaving prefs changed under rolled-back database rows. Harmless overlap
+  // with an ordinary restorePrefsData failure, which already restores
+  // prefs correctly before this would even run.
+  final outerSnapshot = _PrefsSnapshot.capture(
+    prefs,
+    prefsKeysTouchedByRestore(prefs, prefsData),
+  );
 
   try {
     // Database rows first, prefs last - a malformed file should fail before
@@ -488,10 +647,11 @@ Future<ImportResult> commitBackupImport(
     return ImportSuccess(prefsData.length);
   } catch (e) {
     log.w('Backup import failed', error: e);
-    // The database half is transactional and the prefs half rolls itself
-    // back (see restorePrefsData), so a failure here should leave the device
-    // as it was before the attempt — but say so rather than assert it, since
-    // a rollback step failing is itself only best-effort.
+    // The database half is transactional, restorePrefsData rolls back its
+    // own failures, and outerSnapshot covers the gap between them (see its
+    // doc) — so this should leave the device as it was. Still say so rather
+    // than assert it, since rollback is itself only best-effort.
+    await outerSnapshot.rollback();
     return ImportError(
       'Failed to restore the backup file. Your existing data should be '
       'unaffected; if something looks wrong, try restoring the backup again.',

@@ -479,16 +479,24 @@ class NotificationService {
       ? '${m.map} (${m.eventName})'
       : m.map;
 
-  static Future<void> cancelAll() async {
-    if (!_initialized) return;
-    await _cancelAllInternal();
-  }
+  /// Attempts cancellation even when [init] never completed (e.g. every
+  /// Android icon fallback failed) — a stale alert from an earlier,
+  /// successfully-initialised session must still be cancellable. Previously
+  /// guarded on [_initialized], leaving "turn off alerts" and "Clear all
+  /// data" unable to cancel anything already scheduled at the OS level.
+  static Future<void> cancelAll() => _cancelAllInternal();
 
   static Future<void> _cancelAllInternal() async {
     for (final t in _desktopTimers) {
       t.cancel();
     }
     _desktopTimers.clear();
-    await _plugin.cancelAll();
+    try {
+      await _plugin.cancelAll();
+    } catch (e) {
+      // Best-effort: no worse than the unconditional no-op this used to be,
+      // and the desktop-timer cleanup above has already run either way.
+      log.w('NotificationService: cancelAll failed', error: e);
+    }
   }
 }

@@ -5,6 +5,7 @@ import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/services/games_service.dart';
+import 'package:apexlytics/utils/error_messages.dart';
 import 'package:apexlytics/utils/storage/ranked_history_store.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -273,6 +274,44 @@ void main() {
         // History is served from what was already there - a failed fetch
         // must not have cleared it.
         expect(await store.count(uid), 1);
+      },
+    );
+
+    test(
+      'a genuine 4xx (AppException.status in 400..499) returns requestError, '
+      'not offline',
+      () async {
+        await setUpWith();
+        await store.upsertAll(uid, [_match(uid, 0)]);
+        when(() => gamesService.getMatches(uid)).thenThrow(
+          const AppException('uid is required (10-20 digits)', status: 400),
+        );
+
+        final result = await readOutcome();
+
+        // A permanently-bad request must not be misdiagnosed as a transient
+        // connectivity problem — that's a different, much longer backoff and
+        // a different message to the user (see ranked_breakdown_body.dart).
+        expect(result, RankedSyncOutcome.requestError);
+        expect(await store.count(uid), 1);
+      },
+    );
+
+    test(
+      'a 5xx AppException still returns offline, not requestError',
+      () async {
+        await setUpWith();
+        await store.upsertAll(uid, [_match(uid, 0)]);
+        when(() => gamesService.getMatches(uid)).thenThrow(
+          const AppException('Server error. Try again later.', status: 502),
+        );
+
+        final result = await readOutcome();
+
+        // A 5xx is the server's own problem, not a rejected request - the
+        // short offline retry is the right treatment, same as a transport
+        // failure with no status at all.
+        expect(result, RankedSyncOutcome.offline);
       },
     );
 

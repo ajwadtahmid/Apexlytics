@@ -8,7 +8,8 @@ import 'package:apexlytics/models/player_stats.dart' show LegendStat;
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/ranked_breakdown_body.dart';
-import 'package:apexlytics/services/games_service.dart' show GamesEligibility;
+import 'package:apexlytics/services/games_service.dart'
+    show GamesCapacity, GamesEligibility;
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
 
 import '../helpers.dart';
@@ -29,6 +30,7 @@ void main() {
     required SharedPreferences prefs,
     required RankedSyncOutcome outcome,
     GamesEligibility? eligibility,
+    GamesCapacity? capacity,
     List<StatSnapshot> snapshots = const [],
     List<LegendStat> legendStats = const [],
     Object? splitsError,
@@ -45,6 +47,7 @@ void main() {
           rankedSplitsProvider(uid).overrideWith((ref) async => []),
         rankedSyncProvider(uid).overrideWith((ref) async => outcome),
         gamesEligibilityProvider(uid).overrideWith((ref) async => eligibility),
+        gamesCapacityProvider.overrideWith((ref) async => capacity),
       ],
       child: MaterialApp(
         theme: ThemeData.dark(),
@@ -111,6 +114,66 @@ void main() {
     expect(find.text('Server busy'), findsOneWidget);
   });
 
+  testWidgets(
+    'queued outcome with a capacity snapshot shows the concrete slot count',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.queued,
+          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          capacity: (
+            maxPerHour: 15,
+            used: 12,
+            free: 3,
+            windowResetsAt: DateTime.now().add(const Duration(minutes: 12)),
+            waitlistDepth: 2,
+            locked: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      // A second pump lets the overridden gamesCapacityProvider's Future
+      // resolve — the first pump only gets as far as its loading state.
+      await tester.pump();
+
+      expect(
+        find.textContaining('3 of 15 history slots free'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'queued outcome with a locked capacity snapshot says so, not just busy',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.queued,
+          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          capacity: (
+            maxPerHour: 15,
+            used: 15,
+            free: 0,
+            windowResetsAt: DateTime.now().add(const Duration(minutes: 40)),
+            waitlistDepth: 6,
+            locked: true,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.textContaining('paused briefly after a hiccup'),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('offline outcome shows the offline message', (tester) async {
     final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
     await tester.pumpWidget(
@@ -120,6 +183,22 @@ void main() {
 
     expect(find.text('Offline'), findsOneWidget);
   });
+
+  testWidgets(
+    'requestError outcome shows a distinct message from offline',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(prefs: prefs, outcome: RankedSyncOutcome.requestError),
+      );
+      await tester.pump();
+
+      expect(find.text('Can\'t sync right now'), findsOneWidget);
+      // Must not be misdiagnosed as a connectivity problem — that's the
+      // whole point of the distinct outcome.
+      expect(find.text('Offline'), findsNothing);
+    },
+  );
 
   testWidgets('synced with nothing recorded yet shows warming up', (
     tester,

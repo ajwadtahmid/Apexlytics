@@ -1,6 +1,5 @@
 import 'dart:async' show unawaited;
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/prefs_keys.dart';
 import '../../models/player_stats.dart';
@@ -27,10 +26,6 @@ final Map<String, List<StatSnapshot>> _cache = {};
 /// Drops every cached entry. For "Clear all data" and for test isolation -
 /// without it a cleared database would still read back through this cache.
 void resetSnapshotCache() => _cache.clear();
-
-@visibleForTesting
-bool isSnapshotCachePrimed(String? uid) =>
-    _cache.containsKey(PrefsKeys.snapshotKeyFor(uid));
 
 /// Parses a legacy prefs blob into snapshots, or an empty list when it can't
 /// be read at all.

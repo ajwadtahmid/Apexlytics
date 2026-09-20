@@ -579,8 +579,11 @@ class RankedHistoryStore {
     );
   }
 
-  /// Match count per season id for [uid] (unclassified NULL rows omitted). The
-  /// cheap enumeration that will drive the season picker — no row hydration.
+  /// Match count per season id for [uid] (unclassified NULL rows omitted),
+  /// including non-ranked games. Test-only — [rankedSeasonCounts] below is
+  /// what actually drives the split picker in production; it additionally
+  /// scopes to ranked games only, which this does not.
+  @visibleForTesting
   Future<Map<String, int>> seasonCounts(String uid) async {
     final db = await _open();
     final rows = await db.rawQuery(
@@ -609,7 +612,10 @@ class RankedHistoryStore {
     return {for (final r in rows) r['sid'] as String: (r['c'] as num).toInt()};
   }
 
-  /// All persisted matches for [uid], newest first.
+  /// All persisted matches for [uid], newest first. Test-only: hydrating the
+  /// whole history is exactly what the split-scoped architecture
+  /// ([getBySeason], the SQL aggregates below) exists to avoid in production.
+  @visibleForTesting
   Future<List<RankedMatch>> getAll(String uid) async {
     final db = await _open();
     final rows = await db.query(
@@ -1033,6 +1039,13 @@ class RankedHistoryStore {
   /// exact string — [mapBreakdownsFor] already merges those into one row, so the
   /// drill-down from that row must return every match behind it, not just
   /// the ones under whichever raw key happened to be its representative.
+  ///
+  /// Matches case-insensitively, and folds a NULL `map_key` into `'UNKNOWN'`
+  /// first — the same two normalizations [mapBreakdownsFor] applies when
+  /// building the group this drill-down opens from. Without both, an
+  /// unrecognised map or differently-cased key returned fewer matches than
+  /// the row it was opened from counted, since a plain `IN (...)` is
+  /// exact-string and never matches NULL.
   Future<List<RankedMatch>> matchesForMap(
     String uid,
     String mapKey, {
@@ -1041,9 +1054,10 @@ class RankedHistoryStore {
     final db = await _open();
     final (where, args) = _rankedScope(uid, seasonId);
     final variants = battleRoyaleMapKeyVariants(mapKey);
-    final placeholders = List.filled(variants.length, '?').join(', ');
+    final placeholders = List.filled(variants.length, 'LOWER(?)').join(', ');
     final rows = await db.rawQuery(
-      'SELECT * FROM $table WHERE $where AND map_key IN ($placeholders) '
+      "SELECT * FROM $table WHERE $where AND "
+      "LOWER(COALESCE(map_key, 'UNKNOWN')) IN ($placeholders) "
       'ORDER BY start_ms DESC',
       [...args, ...variants],
     );

@@ -168,6 +168,61 @@ void main() {
       expect(prefs.getBool(PrefsKeys.uidSearchWarningShown), isNull);
       expect(prefs.getString('api_cache:whatever'), isNull);
     });
+
+    test(
+      'clears a static setting the backup does not mention, instead of '
+      'leaving the on-device value in place',
+      () async {
+        // A favourite map set on this device (e.g. after the backup being
+        // restored was taken) must not survive a restore that says nothing
+        // about favourites — "restore" means "match the backup", not "layer
+        // the backup on top of whatever's here".
+        SharedPreferences.setMockInitialValues({
+          PrefsKeys.favoriteRankedMapNames: '["Olympus"]',
+          PrefsKeys.keepScreenOn: true,
+        });
+        final prefs = await SharedPreferences.getInstance();
+
+        await restorePrefsData(prefs, {
+          // Mentions keepScreenOn but not favoriteRankedMapNames.
+          PrefsKeys.keepScreenOn: false,
+        });
+
+        expect(prefs.getBool(PrefsKeys.keepScreenOn), isFalse);
+        expect(prefs.getString(PrefsKeys.favoriteRankedMapNames), isNull);
+      },
+    );
+
+    test(
+      "a dynamic per-UID key belonging to a profile the backup doesn't "
+      'mention survives the restore',
+      () async {
+        // Regression guard: the full-replace fix above must be scoped to
+        // _staticBackupKeys only — sweeping "not in this backup" for a
+        // dynamic key would delete a different profile's stats just because
+        // this backup never mentioned that UID.
+        const otherUid = '1007849632032';
+        SharedPreferences.setMockInitialValues({
+          PrefsKeys.legendStatsKeyFor(otherUid): '{"Wraith":{}}',
+          PrefsKeys.rankGoalKeyFor(otherUid): 42,
+        });
+        final prefs = await SharedPreferences.getInstance();
+
+        // A backup for a *different* UID that never references otherUid at
+        // all — the realistic shape of restoring someone else's export, or
+        // an older export of this same device from before otherUid was added.
+        const restoredUid = '1012039108394';
+        await restorePrefsData(prefs, {
+          PrefsKeys.legendStatsKeyFor(restoredUid): '{"Bangalore":{}}',
+        });
+
+        expect(
+          prefs.getString(PrefsKeys.legendStatsKeyFor(otherUid)),
+          '{"Wraith":{}}',
+        );
+        expect(prefs.getInt(PrefsKeys.rankGoalKeyFor(otherUid)), 42);
+      },
+    );
   });
 
   group('exportBackup → previewBackup → commitBackupImport round trip', () {
@@ -297,6 +352,22 @@ void main() {
       },
     );
 
+    test(
+      'throws BackupCorruptedException for a truncated/malformed gzip '
+      'stream, instead of silently returning partial garbage',
+      () {
+        // The gzip magic number, but nothing resembling a real gzip stream
+        // after it — mirrors a truncated download from cloud storage, which
+        // starts correctly but cuts off partway through.
+        final malformed = [0x1F, 0x8B, 1, 2, 3, 4, 5];
+
+        expect(
+          () => decompressIfGzipped(malformed),
+          throwsA(isA<BackupCorruptedException>()),
+        );
+      },
+    );
+
     test('compression actually shrinks a realistic repetitive payload', () {
       // Mirrors what a real export looks like: the same column names
       // repeated across many rows — exactly what gzip is good at.
@@ -316,4 +387,60 @@ void main() {
       expect(compressed.length, lessThan(utf8.encode(json).length));
     });
   });
+
+  group('commitBackupImport outer rollback', () {
+    test(
+      "a failure after restorePrefsData already succeeded (e.g. the "
+      "database transaction's own commit failing afterward) still rolls "
+      'prefs back',
+      () async {
+        // Regression guard for commitBackupImport's outer _PrefsSnapshot:
+        // restorePrefsData runs as the transaction's last step, so it can
+        // finish writing successfully and only then have the commit fail.
+        // This fake reproduces that ordering without breaking real SQLite.
+        SharedPreferences.setMockInitialValues({
+          PrefsKeys.playerName: 'OriginalName',
+        });
+        final prefs = await SharedPreferences.getInstance();
+
+        final preview = BackupPreview.forTesting(
+          version: 3,
+          envelope: {
+            'version': 3,
+            'prefs': {PrefsKeys.playerName: 'RestoredName'},
+            'ranked_history': const <Map<String, Object?>>[],
+            'stat_snapshots': const <Map<String, Object?>>[],
+          },
+        );
+
+        final result = await commitBackupImport(
+          preview,
+          prefs,
+          rankedStore: _CommitFailsAfterPrefsRestore(),
+        );
+
+        expect(result, isA<ImportError>());
+        // The point: restorePrefsData's own write DID land (unlike an
+        // ordinary mid-write failure, which it already rolls back itself),
+        // but commitBackupImport's outer snapshot undoes it anyway.
+        expect(prefs.getString(PrefsKeys.playerName), 'OriginalName');
+      },
+    );
+  });
+}
+
+/// Runs the real [restorePrefs] callback (so its writes actually land),
+/// then throws — simulating a database transaction whose callback body
+/// completed successfully but whose own commit step failed afterward. Never
+/// touches a real database; safe to construct without sqflite FFI setup.
+class _CommitFailsAfterPrefsRestore extends RankedHistoryStore {
+  @override
+  Future<void> importBackupData({
+    required List<dynamic> matchRows,
+    required List<dynamic> snapshotRows,
+    Future<void> Function()? restorePrefs,
+  }) async {
+    if (restorePrefs != null) await restorePrefs();
+    throw Exception('simulated transaction commit failure');
+  }
 }

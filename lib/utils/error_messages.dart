@@ -3,7 +3,14 @@ import 'app_logger.dart';
 
 class AppException implements Exception {
   final String message;
-  const AppException(this.message);
+
+  /// The HTTP status this exception represents, when known — set only by
+  /// [ApiService.getWithStatus] for a response whose body carried an
+  /// `error` key, so a caller can tell a real 4xx/5xx apart from a
+  /// transport failure with no status at all. Null everywhere else.
+  final int? status;
+
+  const AppException(this.message, {this.status});
 
   @override
   String toString() => message;

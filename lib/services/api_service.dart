@@ -148,7 +148,13 @@ class ApiService {
       );
       final data = response.data;
       if (data is Map && data.containsKey('error')) {
-        throw AppException(data['error'].toString());
+        // Carries the real status, unlike a bare AppException — a caller
+        // (e.g. rankedSyncProvider) needs to tell a genuine 4xx apart from a
+        // transport failure with no status to report at all.
+        throw AppException(
+          data['error'].toString(),
+          status: response.statusCode,
+        );
       }
       return (status: response.statusCode ?? 0, data: data);
     } on DioException catch (e) {

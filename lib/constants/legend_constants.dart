@@ -73,15 +73,25 @@ final Map<String, Legend> kLegendsByName = {
 };
 
 /// A stable, case-insensitive grouping key for [name]: the canonical roster
-/// name when known (case folded to match [kLegendsByName]), otherwise [name]
-/// unchanged. Mirrors [canonicalMapKey] in `map_constants.dart` — what a
-/// per-legend aggregate should group by, so a case variant upstream sends
-/// for one player (e.g. `"bloodhound"` instead of `"Bloodhound"`) can't split
-/// one legend into two identically-labelled rows. Never shown to the user —
-/// display the [Legend.name] from [kLegendsByName], or the raw value, as
-/// appropriate for the call site.
+/// name when known, otherwise a title-cased fallback. Mirrors
+/// [canonicalMapKey] — groups a case variant upstream sends for one player
+/// (e.g. `"bloodhound"` vs `"Bloodhound"`) into one row instead of two.
+///
+/// Unlike [canonicalMapKey], this value is shown to the user directly
+/// (`LegendBreakdown.legend` is the card's display name) — so an
+/// unrecognised legend's fallback is title-cased, not left raw, since it
+/// still needs to look presentable, not just merge correctly.
 String canonicalLegendName(String name) =>
-    kLegendsByName[name.toLowerCase()]?.name ?? name;
+    kLegendsByName[name.toLowerCase()]?.name ?? _titleCase(name);
+
+/// Title-cases [s] word by word (`"BLOODHOUND"`/`"bloodhound"` →
+/// `"Bloodhound"`). Only [canonicalLegendName]'s fallback uses this — a
+/// known legend's casing always comes from [kLegendsByName] instead.
+String _titleCase(String s) => s
+    .split(RegExp(r'\s+'))
+    .where((w) => w.isNotEmpty)
+    .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+    .join(' ');
 
 /// API name for the career-wide stats entry returned alongside per-legend stats.
 const kCareerLegendName = 'Global';

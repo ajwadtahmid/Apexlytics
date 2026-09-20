@@ -58,6 +58,8 @@ class RankedSummaryHeader extends ConsumerWidget {
               // API image: the latter reflects whatever tier the last match
               // was tagged with, which doesn't track the live Predator cutoff.
               if (progress != null) ...[
+                // Source rank badges run up to 705×739px; without cacheWidth
+                // this decodes at full resolution to render at 36×36.
                 Image.asset(
                   rankAssetPathByTier(
                     progress.isPredator,
@@ -66,6 +68,8 @@ class RankedSummaryHeader extends ConsumerWidget {
                   width: 36,
                   height: 36,
                   fit: BoxFit.contain,
+                  cacheWidth: (36 * MediaQuery.devicePixelRatioOf(context))
+                      .ceil(),
                   errorBuilder: (_, _, _) => const SizedBox(width: 36),
                 ),
                 const SizedBox(width: AppTheme.sm),
@@ -75,6 +79,8 @@ class RankedSummaryHeader extends ConsumerWidget {
                   width: 36,
                   height: 36,
                   fit: BoxFit.contain,
+                  memCacheWidth: (36 * MediaQuery.devicePixelRatioOf(context))
+                      .ceil(),
                   errorWidget: (_, _, _) => const SizedBox(width: 36),
                 ),
                 const SizedBox(width: AppTheme.sm),
@@ -266,12 +272,15 @@ class _GoalFooter extends StatelessWidget {
     final games = progress.gamesTo(goal);
     return Row(
       children: [
+        // Source rank badges run up to 705×739px; without cacheWidth this
+        // decodes at full resolution to render at 24×24.
         Image.asset(
           progress.isPredatorGoal
               ? 'assets/ranks/apex_predator.webp'
               : goal.assetPath,
           width: 24,
           height: 24,
+          cacheWidth: (24 * MediaQuery.devicePixelRatioOf(context)).ceil(),
           errorBuilder: (_, _, _) => Container(
             width: 24,
             height: 24,
@@ -381,10 +390,16 @@ class _GoalFooter extends StatelessWidget {
                       children: [
                         for (final i in ladderOptions)
                           ListTile(
+                            // Source rank badges run up to 705×739px; without
+                            // cacheWidth this decodes at full resolution to
+                            // render at 28×28.
                             leading: Image.asset(
                               kRankLadder[i].assetPath,
                               width: 28,
                               height: 28,
+                              cacheWidth:
+                                  (28 * MediaQuery.devicePixelRatioOf(context))
+                                      .ceil(),
                               errorBuilder: (_, _, _) => Icon(
                                 Icons.military_tech,
                                 color: kRankLadder[i].color,
@@ -412,6 +427,9 @@ class _GoalFooter extends StatelessWidget {
                               'assets/ranks/apex_predator.webp',
                               width: 24,
                               height: 24,
+                              cacheWidth:
+                                  (24 * MediaQuery.devicePixelRatioOf(context))
+                                      .ceil(),
                               errorBuilder: (_, _, _) => const Icon(
                                 Icons.military_tech,
                                 color: kPredatorColor,

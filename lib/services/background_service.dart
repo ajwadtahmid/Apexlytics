@@ -76,6 +76,14 @@ Future<void> _backgroundFetchAndSchedule() async {
       // wipes every notification pref but nothing else here would otherwise
       // tear down alerts scheduled before the clear.
       await NotificationService.cancelAll();
+      // The task still ran successfully — it just had nothing to schedule.
+      // Without this, Settings' "Last background refresh" row kept showing
+      // a stale result from an earlier, mode-enabled run instead of
+      // reflecting that background fetch is alive and working.
+      await prefs.setString(
+        kLastFetchResultKey,
+        'ok:${DateTime.now().toIso8601String()}',
+      );
       return;
     }
 
