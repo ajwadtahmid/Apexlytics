@@ -230,6 +230,7 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
                       label: role.displayName,
                       selected: _roleFilter == role,
                       color: role.color,
+                      iconAsset: role.iconAsset,
                       onTap: () => setState(
                         () => _roleFilter = _roleFilter == role ? null : role,
                       ),
@@ -254,17 +255,20 @@ class _RoleChip extends StatelessWidget {
   final String label;
   final bool selected;
   final Color color;
+  final String? iconAsset;
   final VoidCallback onTap;
 
   const _RoleChip({
     required this.label,
     required this.selected,
     required this.color,
+    this.iconAsset,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final tint = selected ? color : AppTheme.muted;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -279,13 +283,30 @@ class _RoleChip extends StatelessWidget {
             width: 1,
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? color : AppTheme.muted,
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (iconAsset != null) ...[
+              Image.asset(
+                iconAsset!,
+                width: 12,
+                height: 12,
+                color: tint,
+                colorBlendMode: BlendMode.srcIn,
+                cacheWidth: (12 * MediaQuery.devicePixelRatioOf(context))
+                    .ceil(),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: tint,
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
         ),
       ),
     );

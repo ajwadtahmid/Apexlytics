@@ -9,6 +9,7 @@ import '../utils/formatting/tracker_utils.dart';
 import '../utils/formatting/weapon_utils.dart';
 import 'legend_asset_image.dart';
 import 'legend_detail_page.dart';
+import 'role_badge.dart';
 
 class LegendStatsSection extends StatelessWidget {
   final List<LegendStat> legends;
@@ -109,26 +110,7 @@ class _LegendCard extends StatelessWidget {
                         ),
                         if (info != null) ...[
                           const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: info.role.color.withAlpha(35),
-                              borderRadius: BorderRadius.circular(
-                                AppTheme.radiusSm,
-                              ),
-                            ),
-                            child: Text(
-                              info.role.displayName,
-                              style: TextStyle(
-                                color: info.role.color,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
+                          RoleBadge(role: info.role, compact: true),
                         ],
                       ],
                     ),

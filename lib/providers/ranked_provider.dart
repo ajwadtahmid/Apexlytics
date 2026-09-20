@@ -215,40 +215,6 @@ final gamesCapacityProvider = FutureProvider.autoDispose<GamesCapacity?>((
   }
 });
 
-/// Net ranked RP for [uid] over a window, via [RankedHistoryStore.netRpInWindow].
-///
-/// Null means "fall back to the RP snapshots": not the active profile, sync
-/// failed with nothing persisted, or history has a hole. Never throws.
-/// `currentRp` is part of the cache key — [RankedHistoryStore.netRpInWindow]'s
-/// completeness check validates against it.
-///
-/// Restricted to the *active profile* rather than any UID, even though this
-/// provider is also rendered for search results — history only accrues for
-/// players actively being polled.
-final weeklyNetRpProvider = FutureProvider.autoDispose
-    .family<int?, ({String uid, DateTime start, DateTime end, int currentRp})>((
-      ref,
-      arg,
-    ) async {
-      if (arg.uid.isEmpty) return null;
-      final activeUid = ref.watch(playerSettingsProvider.select((s) => s.uid));
-      if (arg.uid != activeUid) return null;
-      try {
-        await ref.watch(rankedSyncProvider(arg.uid).future);
-        return await ref
-            .watch(rankedHistoryStoreProvider)
-            .netRpInWindow(
-              arg.uid,
-              arg.start,
-              arg.end,
-              currentRp: arg.currentRp,
-            );
-      } catch (e) {
-        log.d('Weekly net RP unavailable; using RP snapshots', error: e);
-        return null;
-      }
-    });
-
 /// The split buckets that drive the picker for [uid], built from a cheap ranked
 /// `COUNT` per split — no match hydration. Re-runs after each [rankedSyncProvider].
 final rankedSplitsProvider = FutureProvider.autoDispose
@@ -434,7 +400,6 @@ void invalidatePlayerDerivedProviders(WidgetRef ref) {
   ref.invalidate(rankedLifetimeAggregatesProvider);
   ref.invalidate(rankedPersonalBestProvider);
   ref.invalidate(rankedSplitDetailProvider);
-  ref.invalidate(weeklyNetRpProvider);
   ref.invalidate(gamesEligibilityProvider);
   ref.invalidate(rankedSeasonsProvider);
   ref.invalidate(myPlayerStatsProvider);
@@ -464,5 +429,4 @@ void invalidateMatchDerivedProviders(WidgetRef ref) {
   ref.invalidate(rankedLifetimeAggregatesProvider);
   ref.invalidate(rankedSplitDetailProvider);
   ref.invalidate(rankedPersonalBestProvider);
-  ref.invalidate(weeklyNetRpProvider);
 }

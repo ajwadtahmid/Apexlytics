@@ -12,6 +12,7 @@ import '../../../utils/storage/legend_stats_storage.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/legend_detail_page.dart';
+import '../../../widgets/role_badge.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/win_loss_stat.dart';
 import '../ranked_entity_history_screen.dart';
@@ -144,26 +145,7 @@ class _LegendDetailSheet extends ConsumerWidget {
                       ),
                       if (info != null) ...[
                         const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: info.role.color.withAlpha(35),
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.radiusSm,
-                            ),
-                          ),
-                          child: Text(
-                            info.role.displayName,
-                            style: TextStyle(
-                              color: info.role.color,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
+                        RoleBadge(role: info.role),
                       ],
                     ],
                   ),

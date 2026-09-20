@@ -27,6 +27,16 @@ extension LegendRoleLabel on LegendRole {
     LegendRole.skirmisher => const Color(0xFFFFCA28), // yellow
     LegendRole.support => const Color(0xFF42A5F5), // blue
   };
+
+  /// Single-color glyph asset for this role — tint with [color] via
+  /// `Image.asset`'s `color`/`colorBlendMode: BlendMode.srcIn`.
+  String get iconAsset => switch (this) {
+    LegendRole.assault => 'assets/classes/Assault_Class.webp',
+    LegendRole.controller => 'assets/classes/Controller_Class.webp',
+    LegendRole.recon => 'assets/classes/Recon_Class.webp',
+    LegendRole.skirmisher => 'assets/classes/Skirmisher_Class.webp',
+    LegendRole.support => 'assets/classes/Support_Class.webp',
+  };
 }
 
 class Legend {

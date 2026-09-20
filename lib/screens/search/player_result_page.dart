@@ -12,7 +12,6 @@ import '../../providers/search_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/formatting/search_utils.dart';
-import '../../utils/formatting/season_utils.dart';
 import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
@@ -334,23 +333,10 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
   Future<void> _appendSnapshot(SharedPreferences prefs) async {
     if (!mounted) return;
     if (!_isKnownUid(widget.stats.uid)) return;
-    final week = currentWeekRange(widget.stats.rankedSeason);
-    final historyNetRp = week == null
-        ? null
-        : await ref.read(
-            weeklyNetRpProvider((
-              uid: widget.stats.uid,
-              start: week.start,
-              end: week.end,
-              currentRp: widget.stats.rankScore,
-            )).future,
-          );
-    if (!mounted) return;
     final changed = await appendSnapshotState(
       prefs,
       ref.read(rankedHistoryStoreProvider),
       widget.stats,
-      historyNetRp: historyNetRp,
     );
     if (changed && mounted) ref.invalidate(rankedSeasonsProvider);
   }
@@ -361,12 +347,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     // Populate from the in-memory prefs store synchronously so the graph is
     // present on the very first frame — no layout shift.
     final prefs = ref.read(sharedPreferencesProvider);
-    initSnapshotFields(
-      prefs,
-      widget.stats.uid,
-      widget.stats.rankedSeason,
-      widget.stats.rankScore,
-    );
+    initSnapshotFields(prefs, widget.stats.uid);
     // Append the current data point (disk write) and update if a new entry was added.
     _appendSnapshot(prefs);
   }
@@ -376,12 +357,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     super.didUpdateWidget(old);
     if (old.stats.uid != widget.stats.uid) {
       final prefs = ref.read(sharedPreferencesProvider);
-      initSnapshotFields(
-        prefs,
-        widget.stats.uid,
-        widget.stats.rankedSeason,
-        widget.stats.rankScore,
-      );
+      initSnapshotFields(prefs, widget.stats.uid);
       _appendSnapshot(prefs);
     }
   }
@@ -403,7 +379,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
             StaleBanner(staleAt: widget.staleAt!),
             const SizedBox(height: AppTheme.sm),
           ],
-          PlayerInfoCard(stats: widget.stats, rpDelta: rpDelta),
+          PlayerInfoCard(stats: widget.stats),
           const SizedBox(height: AppTheme.md),
           RankedInfoCard(
             myRp: widget.stats.rankScore,

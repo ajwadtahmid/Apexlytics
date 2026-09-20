@@ -4,6 +4,7 @@ import '../../constants/api_constants.dart';
 import '../../constants/ui_strings.dart';
 import '../../models/predator.dart';
 import '../../utils/formatting/format.dart' show formatNumber, timeAgo;
+import '../../utils/formatting/platform_utils.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
 
@@ -57,28 +58,10 @@ class PlatformCard extends StatelessWidget {
     required this.info,
   });
 
-  static Widget _icon(String platformKey) => switch (platformKey) {
-    'PS4' => const FaIcon(
-      FontAwesomeIcons.playstation,
-      color: AppTheme.blue,
-      size: 16,
-    ),
-    'X1' => const FaIcon(
-      FontAwesomeIcons.xbox,
-      color: AppTheme.green,
-      size: 16,
-    ),
-    'SWITCH' => const FaIcon(
-      FontAwesomeIcons.gamepad,
-      color: AppTheme.red,
-      size: 16,
-    ),
-    _ => const FaIcon(
-      FontAwesomeIcons.desktop,
-      color: AppTheme.muted,
-      size: 16,
-    ),
-  };
+  static Widget _icon(String platformKey) {
+    final p = platformIconFor(platformKey);
+    return FaIcon(p.icon, color: p.color, size: 16);
+  }
 
   @override
   Widget build(BuildContext context) {

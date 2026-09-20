@@ -159,15 +159,6 @@ int? weekDelta(
   return top - baseline;
 }
 
-/// The week [DateTime.now()] falls in for [season] (the last week once it has
-/// ended), or null when there's no season to divide.
-WeekRange? currentWeekRange(SeasonMeta? season) {
-  if (season == null) return null;
-  final weeks = computeWeeks(season);
-  if (weeks.isEmpty) return null;
-  return weeks[currentWeekIndex(weeks)];
-}
-
 /// Where the player sits inside a split, derived from the API's split bounds.
 class SplitContext {
   /// 1-based, clamped to [totalWeeks] once the split has ended.
@@ -210,34 +201,4 @@ SplitContext? splitContext(SeasonMeta? season, {DateTime? now}) {
         ? season.end.difference(at)
         : Duration.zero,
   );
-}
-
-/// RP gained this week, considering the current season and snapshots.
-///
-/// If a ranked season exists, computes the delta for the current week within
-/// that season. Otherwise falls back to a 24-hour delta.
-///
-/// [historyNetRp] is the same week from local match history, or null when it
-/// can't cover the window. It wins when available — see
-/// [RankedHistoryStore.netRpInWindow] for why that source is the reliable one.
-int? computeWeekDelta(
-  List<StatSnapshot> snaps,
-  SeasonMeta? season,
-  int currentRp, {
-  int? historyNetRp,
-}) {
-  if (season != null) {
-    final weeks = computeWeeks(season);
-    if (weeks.isNotEmpty) {
-      if (historyNetRp != null) return historyNetRp;
-      final idx = currentWeekIndex(weeks);
-      return weekDelta(
-        snaps,
-        weeks[idx],
-        currentRp: currentRp,
-        scopeStart: season.start,
-      );
-    }
-  }
-  return computeDelta(snaps, currentRp);
 }

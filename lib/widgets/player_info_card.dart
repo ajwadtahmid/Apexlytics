@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../constants/api_constants.dart';
 import '../models/player_stats.dart';
 import '../utils/formatting/format.dart';
+import '../utils/formatting/platform_utils.dart';
 import '../utils/formatting/rank_utils.dart' show rankAssetPath;
 import '../utils/notifications.dart';
 import '../utils/theme.dart';
@@ -10,18 +13,10 @@ import 'surface_card.dart';
 
 class PlayerInfoCard extends StatelessWidget {
   final PlayerStats stats;
-  final int? rpDelta;
-  const PlayerInfoCard({super.key, required this.stats, this.rpDelta});
+  const PlayerInfoCard({super.key, required this.stats});
 
   @override
   Widget build(BuildContext context) {
-    final delta = rpDelta;
-    final showDelta = delta != null;
-    final deltaColor = (delta ?? 0) >= 0 ? AppTheme.green : AppTheme.red;
-    final deltaAbs = (delta ?? 0).abs();
-    final deltaSign = (delta ?? 0) >= 0 ? '+' : '-';
-    final deltaText = '$deltaSign${formatNumber(deltaAbs)} RP this week';
-
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
       radius: AppTheme.radiusLg,
@@ -116,27 +111,8 @@ class PlayerInfoCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (showDelta) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: deltaColor.withAlpha(30),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                    child: Text(
-                      deltaText,
-                      style: TextStyle(
-                        color: deltaColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+                const SizedBox(width: 8),
+                _PlatformBadge(platform: stats.platform),
               ],
             ),
             const SizedBox(height: 2),
@@ -179,6 +155,42 @@ class PlayerInfoCard extends StatelessWidget {
               'No trackers equipped',
               style: TextStyle(color: AppTheme.muted, fontSize: 13),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small pill showing which platform [platform] (an `ApiConstants.platforms`
+/// code) the player is on. PC can't be split into Steam/Origin — the API
+/// this app reads from doesn't report a storefront, only the console/PC
+/// code itself.
+class _PlatformBadge extends StatelessWidget {
+  final String platform;
+  const _PlatformBadge({required this.platform});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = platformIconFor(platform);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: p.color.withAlpha(30),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FaIcon(p.icon, color: p.color, size: 11),
+          const SizedBox(width: 4),
+          Text(
+            ApiConstants.labelFor(platform),
+            style: TextStyle(
+              color: p.color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

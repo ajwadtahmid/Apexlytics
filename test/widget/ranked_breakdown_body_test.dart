@@ -55,7 +55,6 @@ void main() {
           body: RankedBreakdownBody(
             uid: uid,
             stats: buildStats(uid: uid),
-            rpDelta: null,
             snapshots: snapshots,
             allSeasons: const {},
             legendStats: legendStats,

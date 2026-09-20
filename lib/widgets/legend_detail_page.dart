@@ -8,6 +8,7 @@ import '../utils/theme.dart';
 import '../utils/tracking/legend_tracker_logic.dart';
 import '../utils/formatting/tracker_utils.dart';
 import 'legend_asset_image.dart';
+import 'role_badge.dart';
 import 'tracker_info_sheet.dart';
 
 final _brPrefixPattern = RegExp(r'^BR\s+');
@@ -187,26 +188,7 @@ class LegendDetailPage extends StatelessWidget {
                           ),
                           if (info != null) ...[
                             const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: info.role.color.withAlpha(35),
-                                borderRadius: BorderRadius.circular(
-                                  AppTheme.radiusSm,
-                                ),
-                              ),
-                              child: Text(
-                                info.role.displayName,
-                                style: TextStyle(
-                                  color: info.role.color,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
+                            RoleBadge(role: info.role),
                           ],
                         ],
                       ),

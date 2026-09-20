@@ -9,7 +9,6 @@ import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/error_messages.dart';
-import '../../utils/formatting/season_utils.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/storage/storage.dart';
@@ -399,12 +398,7 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
 
   void _initSnapshots() {
     final prefs = ref.read(sharedPreferencesProvider);
-    initSnapshotFields(
-      prefs,
-      widget.stats.uid,
-      widget.stats.rankedSeason,
-      widget.stats.rankScore,
-    );
+    initSnapshotFields(prefs, widget.stats.uid);
   }
 
   Future<void> _loadAndAppend() async {
@@ -439,7 +433,6 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           ? pushToLegendStack(legend, prefs)
           : loadLegendStack(prefs),
     ).wait;
-    final historyNetRp = await _historyNetRpThisWeek();
     // A newer load superseded us while we were awaiting - its data is the
     // current profile's, ours may not be.
     if (mounted && generation == _loadGeneration) {
@@ -448,31 +441,8 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
         _mergedLegends = legends;
         _legendStack = stack;
         allSeasons = loadAllSeasonsSync(prefs);
-        rpDelta = computeWeekDelta(
-          snaps,
-          widget.stats.rankedSeason,
-          widget.stats.rankScore,
-          historyNetRp: historyNetRp,
-        );
       });
     }
-  }
-
-  // The weekly delta is blended with Ranked's own match-history net RP
-  // (`weeklyNetRpProvider`) when available — that's the "more accurate"
-  // source, since it comes from real recorded matches rather than a diff
-  // between two RP snapshots that could straddle a stats refresh gap.
-  Future<int?> _historyNetRpThisWeek() async {
-    final week = currentWeekRange(widget.stats.rankedSeason);
-    if (week == null) return null;
-    return ref.read(
-      weeklyNetRpProvider((
-        uid: widget.stats.uid,
-        start: week.start,
-        end: week.end,
-        currentRp: widget.stats.rankScore,
-      )).future,
-    );
   }
 
   @override
@@ -494,7 +464,6 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
           child: RankedBreakdownBody(
             uid: stats.uid,
             stats: stats,
-            rpDelta: rpDelta,
             snapshots: snapshots,
             allSeasons: allSeasons,
             legendStats: _mergedLegends,

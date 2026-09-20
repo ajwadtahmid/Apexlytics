@@ -7,7 +7,6 @@ import '../../models/season_meta.dart';
 import '../app_logger.dart';
 import 'ranked_history_store.dart';
 import 'season_storage.dart';
-import '../formatting/season_utils.dart';
 import '../formatting/snapshot_types.dart';
 
 /// Legacy prefix for RP snapshot keys, `stat_snapshots_<uid>`.
@@ -229,18 +228,12 @@ Future<List<StatSnapshot>> appendAndLoadSnapshots(
 }) =>
     appendSnapshot(stats, store, uid: stats.uid, deduplicateRp: deduplicateRp);
 
-/// Loads snapshots, seasons, and computes RP delta for a player in one call.
-/// Used by state initialization in stats views to populate all snapshot-related
-/// data. Reads the primed cache, so it stays synchronous.
-({List<StatSnapshot> snapshots, Map<String, SeasonMeta> allSeasons, int? delta})
-initSnapshotsData(
-  SharedPreferences prefs,
-  String uid,
-  SeasonMeta? season,
-  int currentRp,
-) {
+/// Loads snapshots and seasons for a player in one call. Used by state
+/// initialization in stats views to populate all snapshot-related data.
+/// Reads the primed cache, so it stays synchronous.
+({List<StatSnapshot> snapshots, Map<String, SeasonMeta> allSeasons})
+initSnapshotsData(SharedPreferences prefs, String uid) {
   final snaps = loadSnapshotsSync(uid: uid);
   final seasons = loadAllSeasonsSync(prefs);
-  final delta = computeWeekDelta(snaps, season, currentRp);
-  return (snapshots: snaps, allSeasons: seasons, delta: delta);
+  return (snapshots: snaps, allSeasons: seasons);
 }

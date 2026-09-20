@@ -43,7 +43,6 @@ import '../../widgets/player_info_card.dart';
 class RankedBreakdownBody extends ConsumerStatefulWidget {
   final String uid;
   final PlayerStats stats;
-  final int? rpDelta;
   final List<StatSnapshot> snapshots;
   final Map<String, SeasonMeta> allSeasons;
   final List<LegendStat> legendStats;
@@ -54,7 +53,6 @@ class RankedBreakdownBody extends ConsumerStatefulWidget {
     super.key,
     required this.uid,
     required this.stats,
-    required this.rpDelta,
     required this.snapshots,
     required this.allSeasons,
     required this.legendStats,
@@ -451,7 +449,6 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
         _OverviewTab(
           uid: widget.uid,
           stats: widget.stats,
-          rpDelta: widget.rpDelta,
           snapshots: widget.snapshots,
           allSeasons: widget.allSeasons,
           data: data,
@@ -499,7 +496,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           child: ListView(
             padding: const EdgeInsets.all(AppTheme.md),
             children: [
-              PlayerInfoCard(stats: widget.stats, rpDelta: widget.rpDelta),
+              PlayerInfoCard(stats: widget.stats),
               const SizedBox(height: AppTheme.md),
               RankedStatsCard(summary: agg.summary),
               const SizedBox(height: AppTheme.md),
@@ -571,7 +568,6 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
 class _OverviewTab extends StatelessWidget {
   final String uid;
   final PlayerStats stats;
-  final int? rpDelta;
   final List<StatSnapshot> snapshots;
   final Map<String, SeasonMeta> allSeasons;
 
@@ -589,7 +585,6 @@ class _OverviewTab extends StatelessWidget {
   const _OverviewTab({
     required this.uid,
     required this.stats,
-    required this.rpDelta,
     required this.snapshots,
     required this.allSeasons,
     required this.data,
@@ -612,7 +607,7 @@ class _OverviewTab extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
-          PlayerInfoCard(stats: stats, rpDelta: rpDelta),
+          PlayerInfoCard(stats: stats),
           const SizedBox(height: AppTheme.md),
           RankedSummaryHeader(
             summary: summary,

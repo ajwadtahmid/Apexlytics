@@ -113,6 +113,7 @@ flutter:
     - assets/ranks/
     - assets/weapons/
     - assets/maps/
+    - assets/classes/
 
 # No dependency_overrides. permission_handler_android was pinned to 13.0.1
 # because 14.0.0 needs compileSdk 37; that is now set explicitly in
