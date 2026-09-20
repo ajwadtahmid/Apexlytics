@@ -19,7 +19,6 @@ class RankedAvailableNowScreen extends StatelessWidget {
   final Map<String, SeasonMeta> allSeasons;
   final int? currentRp;
   final List<LegendStat> legendStats;
-  final bool compact;
   final List<String> legendStack;
 
   const RankedAvailableNowScreen({
@@ -29,7 +28,6 @@ class RankedAvailableNowScreen extends StatelessWidget {
     required this.allSeasons,
     required this.currentRp,
     required this.legendStats,
-    required this.compact,
     required this.legendStack,
   });
 
@@ -72,7 +70,6 @@ class RankedAvailableNowScreen extends StatelessWidget {
             else
               PlayerStatsTabs(
                 legendStats: legendStats,
-                compact: compact,
                 legendStack: legendStack,
               ),
             const SizedBox(height: AppTheme.lg),

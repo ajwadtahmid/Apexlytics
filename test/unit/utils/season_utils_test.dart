@@ -477,4 +477,54 @@ void main() {
       expect(computeDelta(snaps, 6400), 400);
     });
   });
+
+  group('seasonIdForEndTime', () {
+    final s1 = SeasonMeta(
+      id: 'br_ranked_s1_s1',
+      displayName: 'S1',
+      start: DateTime.utc(2024, 1, 1),
+      end: DateTime.utc(2024, 2, 1),
+    );
+    final s2 = SeasonMeta(
+      id: 'br_ranked_s1_s2',
+      displayName: 'S2',
+      start: DateTime.utc(2024, 2, 1),
+      end: DateTime.utc(2024, 3, 1),
+    );
+
+    test('returns the id of the season whose window contains endTime', () {
+      expect(seasonIdForEndTime(DateTime.utc(2024, 1, 15), [s1, s2]), s1.id);
+      expect(seasonIdForEndTime(DateTime.utc(2024, 2, 15), [s1, s2]), s2.id);
+    });
+
+    test('returns kUnknownSeasonId when no window covers endTime', () {
+      expect(
+        seasonIdForEndTime(DateTime.utc(2023, 12, 1), [s1, s2]),
+        kUnknownSeasonId,
+      );
+    });
+
+    test('picks the latest-starting season when windows overlap, regardless '
+        'of iteration order', () {
+      final overlapping = SeasonMeta(
+        id: 'br_ranked_s1_s2_early',
+        displayName: 'S2 (bad bounds)',
+        start: DateTime.utc(2024, 1, 20), // overlaps s1's tail
+        end: DateTime.utc(2024, 3, 1),
+      );
+      // Inside both s1 and overlapping.
+      final endTime = DateTime.utc(2024, 1, 25);
+
+      expect(
+        seasonIdForEndTime(endTime, [s1, overlapping]),
+        overlapping.id,
+        reason: 'overlapping starts later, so it should win',
+      );
+      expect(
+        seasonIdForEndTime(endTime, [overlapping, s1]),
+        overlapping.id,
+        reason: 'the winner must not depend on iteration order',
+      );
+    });
+  });
 }

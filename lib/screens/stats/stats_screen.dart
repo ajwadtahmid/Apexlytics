@@ -209,9 +209,6 @@ class _StatsViewState extends ConsumerState<_StatsView> {
     final platform = ref.watch(
       playerSettingsProvider.select((s) => s.platform),
     );
-    final compactLegendCards = ref.watch(
-      playerSettingsProvider.select((s) => s.compactLegendCards),
-    );
     final statsAsync = ref.watch(myPlayerStatsProvider);
     final isSyncing =
         statsAsync.isLoading || ref.watch(rankedSyncProvider(uid)).isLoading;
@@ -310,14 +307,16 @@ class _StatsViewState extends ConsumerState<_StatsView> {
             stats: stats,
             staleAt: result.staleAt,
             platform: platform,
-            compactLegendCards: compactLegendCards,
             onRefresh: _sync,
           );
         },
         loading: () => const _StatsSkeleton(),
-        error: (e, _) => ErrorView(
+        error: (e, _) => ErrorCard(
+          fullScreen: true,
+          iconColor: AppTheme.red,
+          iconSize: 48,
           message: friendlyError(e),
-          onAction: () => ref.invalidate(myPlayerStatsProvider),
+          onRetry: () => ref.invalidate(myPlayerStatsProvider),
         ),
       ),
     );
@@ -353,13 +352,11 @@ class _StatsBody extends ConsumerStatefulWidget {
   final PlayerStats stats;
   final DateTime? staleAt;
   final String platform;
-  final bool compactLegendCards;
   final Future<void> Function() onRefresh;
 
   const _StatsBody({
     required this.stats,
     required this.platform,
-    required this.compactLegendCards,
     required this.onRefresh,
     this.staleAt,
   });
@@ -501,7 +498,6 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
             snapshots: snapshots,
             allSeasons: allSeasons,
             legendStats: _mergedLegends,
-            compactLegendCards: widget.compactLegendCards,
             legendStack: _legendStack,
             onRefresh: widget.onRefresh,
           ),

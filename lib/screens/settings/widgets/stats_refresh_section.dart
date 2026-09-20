@@ -28,9 +28,6 @@ class StatsRefreshSection extends ConsumerWidget {
     final statsRefreshMinutes = ref.watch(
       playerSettingsProvider.select((s) => s.statsRefreshMinutes),
     );
-    final compactLegendCards = ref.watch(
-      playerSettingsProvider.select((s) => s.compactLegendCards),
-    );
     final keepScreenOn = ref.watch(
       playerSettingsProvider.select((s) => s.keepScreenOn),
     );
@@ -110,31 +107,6 @@ class StatsRefreshSection extends ConsumerWidget {
                     ),
                   ],
                 ),
-              ),
-              const Divider(color: AppTheme.surface2, height: 24),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.view_list_outlined,
-                    color: AppTheme.textPrimary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: AppTheme.sm),
-                  const Expanded(
-                    child: Text(
-                      'Compact legend cards',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ),
-                  Switch(
-                    value: compactLegendCards,
-                    onChanged: (v) => ref
-                        .read(playerSettingsProvider.notifier)
-                        .setCompactLegendCards(v),
-                    activeThumbColor: AppTheme.accent,
-                    activeTrackColor: AppTheme.accent.withAlpha(120),
-                  ),
-                ],
               ),
               const Divider(color: AppTheme.surface2, height: 24),
               Row(

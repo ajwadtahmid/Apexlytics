@@ -147,6 +147,7 @@ jobs:
       - name: Build Windows Installer
         run: |
           $env:GITHUB_WORKSPACE = "${{ github.workspace }}"
+          $env:PRODUCT_VERSION = "${{ needs.extract-version.outputs.version }}"
           & 'C:\Program Files (x86)\NSIS\makensis.exe' "${{ github.workspace }}\windows\installer\apexlytics.nsi"
 
       - name: Rename Windows installer

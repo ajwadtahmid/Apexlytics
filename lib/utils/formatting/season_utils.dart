@@ -21,11 +21,19 @@ const String kUnknownSeasonId = '__unknown__';
 /// The season/split id whose window contains [endTime], or [kUnknownSeasonId] when
 /// no known season covers it. A match belongs to the season its *end* time falls
 /// in — the same rule the ranked views use to bucket matches.
+///
+/// Picks the latest-starting match if two windows somehow overlap — same
+/// tie-break as `ranked_period.dart`'s `_currentSeasonByDate`. Matters more
+/// here: a row's [seasonId] is a one-way upgrade once set, so a
+/// classification made without this tie-break would be permanent.
 String seasonIdForEndTime(DateTime endTime, Iterable<SeasonMeta> seasons) {
+  SeasonMeta? best;
   for (final s in seasons) {
-    if (!endTime.isBefore(s.start) && endTime.isBefore(s.end)) return s.id;
+    if (!endTime.isBefore(s.start) && endTime.isBefore(s.end)) {
+      if (best == null || s.start.isAfter(best.start)) best = s;
+    }
   }
-  return kUnknownSeasonId;
+  return best?.id ?? kUnknownSeasonId;
 }
 
 /// Divides a season into 7-day week windows. The final window may be shorter

@@ -39,7 +39,10 @@ Section "Install"
   ; Add to Add/Remove Programs
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apexlytics" "DisplayName" "Apexlytics"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apexlytics" "UninstallString" "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apexlytics" "DisplayVersion" "0.9.0"
+  ; Substituted by makensis at compile time, same as $%GITHUB_WORKSPACE%
+  ; above — set from the release tag in build-release.yml. Don't hand-edit;
+  ; it would just go stale again.
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apexlytics" "DisplayVersion" "$%PRODUCT_VERSION%"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apexlytics" "Publisher" "Ajwad Tahmid"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apexlytics" "DisplayIcon" "$INSTDIR\apexlytics.exe"
 SectionEnd

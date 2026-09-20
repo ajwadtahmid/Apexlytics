@@ -5,7 +5,6 @@ import '../utils/formatting/format.dart';
 import '../utils/navigation_utils.dart';
 import '../utils/theme.dart';
 import 'stat_display.dart';
-import 'surface_card.dart';
 import '../utils/formatting/tracker_utils.dart';
 import '../utils/formatting/weapon_utils.dart';
 import 'legend_asset_image.dart';
@@ -13,115 +12,34 @@ import 'legend_detail_page.dart';
 
 class LegendStatsSection extends StatelessWidget {
   final List<LegendStat> legends;
-  final bool compact;
-  const LegendStatsSection({
-    super.key,
-    required this.legends,
-    this.compact = false,
-  });
+  const LegendStatsSection({super.key, required this.legends});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (compact)
-          SurfaceCard(
-            child: Column(
-              children: legends
-                  .where((legend) {
-                    // Skip Career/Global tracker if it only has weapon trackers
-                    if (legend.name.toLowerCase() == 'global') {
-                      final nonWeaponTrackers = legend.trackers
-                          .where(
-                            (t) => findWeaponFromTracker(t.displayName) == null,
-                          )
-                          .toList();
-                      return nonWeaponTrackers.isNotEmpty;
-                    }
-                    return true;
-                  })
-                  .indexed
-                  .map((record) {
-                    final (index, legend) = record;
-                    final isLast = index == legends.length - 1;
-                    return Column(
-                      key: ValueKey(legend.name),
-                      children: [
-                        InkWell(
-                          onTap: () => _openDetail(context, legend),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppTheme.md,
-                              vertical: 11,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    legendDisplayName(legend.name),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  legend.killCount > 0
-                                      ? '${formatNumber(legend.killCount)} kills'
-                                      : 'No kills',
-                                  style: const TextStyle(
-                                    color: AppTheme.muted,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  size: 16,
-                                  color: AppTheme.muted,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (!isLast)
-                          const Divider(
-                            color: AppTheme.surface2,
-                            height: 1,
-                            indent: 16,
-                          ),
-                      ],
-                    );
-                  })
-                  .toList(),
+      children: legends
+          .where((legend) {
+            // Skip Career/Global tracker if it only has weapon trackers
+            if (legend.name.toLowerCase() == 'global') {
+              final nonWeaponTrackers = legend.trackers
+                  .where((t) => findWeaponFromTracker(t.displayName) == null)
+                  .toList();
+              return nonWeaponTrackers.isNotEmpty;
+            }
+            return true;
+          })
+          .map(
+            (legend) => Padding(
+              key: ValueKey(legend.name),
+              padding: const EdgeInsets.only(bottom: AppTheme.sm),
+              child: _LegendCard(
+                legend: legend,
+                onTap: () => _openDetail(context, legend),
+              ),
             ),
           )
-        else
-          ...legends
-              .where((legend) {
-                // Skip Career/Global tracker if it only has weapon trackers
-                if (legend.name.toLowerCase() == 'global') {
-                  final nonWeaponTrackers = legend.trackers
-                      .where(
-                        (t) => findWeaponFromTracker(t.displayName) == null,
-                      )
-                      .toList();
-                  return nonWeaponTrackers.isNotEmpty;
-                }
-                return true;
-              })
-              .map(
-                (legend) => Padding(
-                  key: ValueKey(legend.name),
-                  padding: const EdgeInsets.only(bottom: AppTheme.sm),
-                  child: _LegendCard(
-                    legend: legend,
-                    onTap: () => _openDetail(context, legend),
-                  ),
-                ),
-              ),
-      ],
+          .toList(),
     );
   }
 

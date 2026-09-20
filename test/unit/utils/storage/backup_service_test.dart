@@ -29,7 +29,6 @@ void main() {
       PrefsKeys.playerUid: true,
       PrefsKeys.playerPlatform: true,
       PrefsKeys.statsRefreshMinutes: true,
-      PrefsKeys.compactLegendCards: true,
       PrefsKeys.keepScreenOn: true,
       PrefsKeys.notifyPubsMapRotation: true,
       PrefsKeys.notifyRankedMapRotation: true,
@@ -149,13 +148,11 @@ void main() {
       await restorePrefsData(prefs, {
         PrefsKeys.playerName: 'Aceu',
         PrefsKeys.statsRefreshMinutes: 30,
-        PrefsKeys.compactLegendCards: true,
         PrefsKeys.keepScreenOn: true,
       });
 
       expect(prefs.getString(PrefsKeys.playerName), 'Aceu');
       expect(prefs.getInt(PrefsKeys.statsRefreshMinutes), 30);
-      expect(prefs.getBool(PrefsKeys.compactLegendCards), isTrue);
       expect(prefs.getBool(PrefsKeys.keepScreenOn), isTrue);
     });
 
@@ -173,120 +170,111 @@ void main() {
     });
   });
 
-  group(
-    'exportBackup → previewBackup → commitBackupImport round trip',
-    () {
-      RankedMatch match(String uid, int startSecs) => RankedMatch.fromJson({
-        'uid': uid,
-        'name': 'Tester',
-        'legendPlayed': 'Wraith',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': startSecs,
-        'gameEndTimestamp': startSecs + 600,
-        'gameData': [
-          {'key': 'kills', 'value': 5, 'name': 'BR Kills'},
-          {'key': 'damage', 'value': 800, 'name': 'BR Damage'},
+  group('exportBackup → previewBackup → commitBackupImport round trip', () {
+    RankedMatch match(String uid, int startSecs) => RankedMatch.fromJson({
+      'uid': uid,
+      'name': 'Tester',
+      'legendPlayed': 'Wraith',
+      'gameMode': 'BATTLE_ROYALE',
+      'gameLengthSecs': 600,
+      'gameStartTimestamp': startSecs,
+      'gameEndTimestamp': startSecs + 600,
+      'gameData': [
+        {'key': 'kills', 'value': 5, 'name': 'BR Kills'},
+        {'key': 'damage', 'value': 800, 'name': 'BR Damage'},
+      ],
+      'BRScoreChange': 20,
+      'BRScore': 1020,
+      'map': 'olympus_rotation',
+      'isPartyFull': true,
+    });
+
+    test('a real export round-trips through preview and commit: prefs, '
+        'ranked history, and RP snapshots all land', () async {
+      const uid = '1006838015507';
+
+      // The exact envelope shape exportBackup produces.
+      final envelope = {
+        'version': 3,
+        'exported_at': DateTime.now().toIso8601String(),
+        'prefs': {
+          PrefsKeys.playerName: 'Aceu',
+          PrefsKeys.playerUid: uid,
+          PrefsKeys.statsRefreshMinutes: 15,
+        },
+        'ranked_history': [match(uid, 1000).toStoredMap()],
+        'stat_snapshots': [
+          {'uid': uid, 'ts_ms': 5000, 'rp': 1020, 'season_id': null},
         ],
-        'BRScoreChange': 20,
-        'BRScore': 1020,
-        'map': 'olympus_rotation',
-        'isPartyFull': true,
-      });
+      };
 
-      test(
-        'a real export round-trips through preview and commit: prefs, '
-        'ranked history, and RP snapshots all land',
-        () async {
-          const uid = '1006838015507';
+      // Round-trip through JSON exactly as a real file write/read would
+      // — this is what proves the no-indentation change still produces
+      // valid, fully round-trippable JSON, not just shorter JSON.
+      final json = jsonEncode(envelope);
+      expect(json.contains('\n  '), isFalse); // confirms no pretty-print
+      final decoded = jsonDecode(json) as Map<String, dynamic>;
 
-          // The exact envelope shape exportBackup produces.
-          final envelope = {
-            'version': 3,
-            'exported_at': DateTime.now().toIso8601String(),
-            'prefs': {
-              PrefsKeys.playerName: 'Aceu',
-              PrefsKeys.playerUid: uid,
-              PrefsKeys.statsRefreshMinutes: 15,
-            },
-            'ranked_history': [match(uid, 1000).toStoredMap()],
-            'stat_snapshots': [
-              {'uid': uid, 'ts_ms': 5000, 'rp': 1020, 'season_id': null},
-            ],
-          };
-
-          // Round-trip through JSON exactly as a real file write/read would
-          // — this is what proves the no-indentation change still produces
-          // valid, fully round-trippable JSON, not just shorter JSON.
-          final json = jsonEncode(envelope);
-          expect(json.contains('\n  '), isFalse); // confirms no pretty-print
-          final decoded = jsonDecode(json) as Map<String, dynamic>;
-
-          final preview = BackupPreview.forTesting(
-            version: decoded['version'] as int,
-            envelope: decoded,
-          );
-
-          SharedPreferences.setMockInitialValues({});
-          final prefs = await SharedPreferences.getInstance();
-          final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-          addTearDown(store.close);
-
-          final result = await commitBackupImport(
-            preview,
-            prefs,
-            rankedStore: store,
-          );
-
-          expect(result, isA<ImportSuccess>());
-
-          expect(prefs.getString(PrefsKeys.playerName), 'Aceu');
-          expect(prefs.getString(PrefsKeys.playerUid), uid);
-          expect(prefs.getInt(PrefsKeys.statsRefreshMinutes), 15);
-
-          final matches = await store.getAll(uid);
-          expect(matches, hasLength(1));
-          expect(matches.single.legend, 'Wraith');
-          expect(matches.single.kills, 5);
-          expect(matches.single.rpChange, 20);
-
-          final snapshots = await store.snapshotsFor(uid);
-          expect(snapshots, hasLength(1));
-          expect(snapshots.single.rp, 1020);
-        },
+      final preview = BackupPreview.forTesting(
+        version: decoded['version'] as int,
+        envelope: decoded,
       );
 
-      test(
-        'importing the same export twice is idempotent (no duplicate rows)',
-        () async {
-          const uid = '1006838015507';
-          final envelope = {
-            'version': 3,
-            'exported_at': DateTime.now().toIso8601String(),
-            'prefs': <String, dynamic>{},
-            'ranked_history': [match(uid, 2000).toStoredMap()],
-            'stat_snapshots': <Map<String, dynamic>>[],
-          };
-          final decoded =
-              jsonDecode(jsonEncode(envelope)) as Map<String, dynamic>;
-          final preview = BackupPreview.forTesting(
-            version: 3,
-            envelope: decoded,
-          );
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
 
-          SharedPreferences.setMockInitialValues({});
-          final prefs = await SharedPreferences.getInstance();
-          final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-          addTearDown(store.close);
-
-          await commitBackupImport(preview, prefs, rankedStore: store);
-          await commitBackupImport(preview, prefs, rankedStore: store);
-
-          expect(await store.count(uid), 1);
-        },
+      final result = await commitBackupImport(
+        preview,
+        prefs,
+        rankedStore: store,
       );
-    },
-  );
+
+      expect(result, isA<ImportSuccess>());
+
+      expect(prefs.getString(PrefsKeys.playerName), 'Aceu');
+      expect(prefs.getString(PrefsKeys.playerUid), uid);
+      expect(prefs.getInt(PrefsKeys.statsRefreshMinutes), 15);
+
+      final matches = await store.getAll(uid);
+      expect(matches, hasLength(1));
+      expect(matches.single.legend, 'Wraith');
+      expect(matches.single.kills, 5);
+      expect(matches.single.rpChange, 20);
+
+      final snapshots = await store.snapshotsFor(uid);
+      expect(snapshots, hasLength(1));
+      expect(snapshots.single.rp, 1020);
+    });
+
+    test(
+      'importing the same export twice is idempotent (no duplicate rows)',
+      () async {
+        const uid = '1006838015507';
+        final envelope = {
+          'version': 3,
+          'exported_at': DateTime.now().toIso8601String(),
+          'prefs': <String, dynamic>{},
+          'ranked_history': [match(uid, 2000).toStoredMap()],
+          'stat_snapshots': <Map<String, dynamic>>[],
+        };
+        final decoded =
+            jsonDecode(jsonEncode(envelope)) as Map<String, dynamic>;
+        final preview = BackupPreview.forTesting(version: 3, envelope: decoded);
+
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+        addTearDown(store.close);
+
+        await commitBackupImport(preview, prefs, rankedStore: store);
+        await commitBackupImport(preview, prefs, rankedStore: store);
+
+        expect(await store.count(uid), 1);
+      },
+    );
+  });
 
   group('decompressIfGzipped', () {
     test('decompresses real gzip bytes back to the original JSON', () {

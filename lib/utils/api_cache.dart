@@ -17,10 +17,13 @@ class CachedEntry {
 
 /// Per-endpoint TTL overrides (in minutes). Endpoints not listed fall back to
 /// [ApiCache.defaultMaxAgeMinutes].
+///
+/// `/maprotation` deliberately has no entry: [MapService.getMapRotation]
+/// always fetches with `noCache: true`, and the background-fetch path
+/// bypasses this cache entirely — no caller could ever hit its TTL.
 const Map<String, int> kEndpointCacheTtlMinutes = {
   '/predator': 60,
   '/servers': 5,
-  '/maprotation': 15,
 };
 
 /// Response cache for [ApiService].

@@ -730,9 +730,14 @@ class RankedHistoryStore {
   }) async {
     final db = await _open();
     final (where, args) = _rankedScope(uid, seasonId);
+    // COALESCE'd on both sides: a NULL is_party_full (e.g. an imported row
+    // missing the column) must join the partial-squad bucket, not form its
+    // own group that neither `== 1` nor `== 0` below ever matches — matches
+    // RankedMatch.fromStoredMap's null-to-false convention.
     final rows = await db.rawQuery(
-      'SELECT is_party_full, $_aggCols FROM $table WHERE $where '
-      'GROUP BY is_party_full',
+      'SELECT COALESCE(is_party_full, 0) AS is_party_full, $_aggCols '
+      'FROM $table WHERE $where '
+      'GROUP BY COALESCE(is_party_full, 0)',
       args,
     );
 
@@ -826,7 +831,7 @@ class RankedHistoryStore {
             (s, r) => s + (r['losses'] as num).toInt(),
           ),
         ),
-    ]..sort((a, b) => b.totalRp.compareTo(a.totalRp));
+    ]..sort(byTotalRpThenName);
   }
 
   /// Per-map breakdown for [uid] across [seasonId] (null = lifetime), sorted by
@@ -894,7 +899,7 @@ class RankedHistoryStore {
             (s, r) => s + (r['losses'] as num).toInt(),
           ),
         ),
-    ]..sort((a, b) => b.games.compareTo(a.games));
+    ]..sort(byGamesThenName);
     return out;
   }
 
@@ -1326,7 +1331,10 @@ class RankedHistoryStore {
   /// a newer one.
   ///
   /// [executor] — see [importSnapshotRows]'s doc for why this exists.
-  Future<void> importRows(List<dynamic> rows, {DatabaseExecutor? executor}) async {
+  Future<void> importRows(
+    List<dynamic> rows, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await _open();
     final batch = db.batch();
     for (final r in rows) {
@@ -1376,14 +1384,21 @@ class RankedHistoryStore {
   /// mid-restore failure can't leave one table updated and the other not.
   /// Prefer this over calling [importRows] / [importSnapshotRows] separately
   /// whenever a backup carries both, which is every version since v3.
+  ///
+  /// [restorePrefs], when given, runs last, still inside this transaction —
+  /// if it throws, sqflite rolls back the row imports too. That's what makes
+  /// `commitBackupImport`'s combined restore atomic despite
+  /// `SharedPreferences` having no transaction primitive of its own.
   Future<void> importBackupData({
     required List<dynamic> matchRows,
     required List<dynamic> snapshotRows,
+    Future<void> Function()? restorePrefs,
   }) async {
     final db = await _open();
     await db.transaction((txn) async {
       await importRows(matchRows, executor: txn);
       await importSnapshotRows(snapshotRows, executor: txn);
+      if (restorePrefs != null) await restorePrefs();
     });
   }
 

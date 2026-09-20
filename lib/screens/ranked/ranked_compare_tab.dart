@@ -4,9 +4,11 @@ import '../../models/season_meta.dart';
 import '../../providers/ranked_provider.dart';
 import '../../utils/formatting/format.dart'
     show formatNumber, formatSigned, formatSignedInt;
+import '../../utils/error_messages.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
+import '../../widgets/error_card.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_legend_map_matrix_screen.dart';
 import 'widgets/ranked_day_of_week_chart.dart';
@@ -250,13 +252,18 @@ class _CompareBody extends ConsumerWidget {
     }
     final error = aAsync.error ?? bAsync.error;
     if (error != null) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppTheme.lg),
-        child: Center(
-          child: Text(
-            'Could not load one of these splits.',
-            style: TextStyle(color: AppTheme.muted, fontSize: 13),
-          ),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppTheme.lg),
+        child: ErrorCard(
+          message: friendlyError(error),
+          onRetry: () {
+            ref.invalidate(
+              rankedSplitDetailProvider((uid: uid, splitId: bucketA.id)),
+            );
+            ref.invalidate(
+              rankedSplitDetailProvider((uid: uid, splitId: bucketB.id)),
+            );
+          },
         ),
       );
     }

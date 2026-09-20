@@ -38,7 +38,6 @@ const _staticBackupKeys = {
   PrefsKeys.playerUid,
   PrefsKeys.playerPlatform,
   PrefsKeys.statsRefreshMinutes,
-  PrefsKeys.compactLegendCards,
   PrefsKeys.keepScreenOn,
   PrefsKeys.notifyPubsMapRotation,
   PrefsKeys.notifyRankedMapRotation,
@@ -344,10 +343,7 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
         // uncompressed backups (from before this file started gzipping
         // exports) importable.
         extensions: ['gz', 'json'],
-        uniformTypeIdentifiers: [
-          'public.json',
-          'org.gnu.gnu-zip-archive',
-        ],
+        uniformTypeIdentifiers: ['public.json', 'org.gnu.gnu-zip-archive'],
       ),
     ],
   );
@@ -428,7 +424,10 @@ int _rowCount(Object? rows) => rows is List ? rows.length : 0;
 /// How many of [rows] (raw `ranked_history` entries) aren't already in
 /// [rankedStore] by id. Matches [rankedStore]'s own dedup key, so this is
 /// exact, not an estimate. 0 when there's no store to compare against.
-Future<int> _countNewMatches(Object? rows, RankedHistoryStore? rankedStore) async {
+Future<int> _countNewMatches(
+  Object? rows,
+  RankedHistoryStore? rankedStore,
+) async {
   if (rows is! List || rows.isEmpty || rankedStore == null) return 0;
   final existing = await rankedStore.allIds();
   return rows.where((r) => r is Map && !existing.contains(r['id'])).length;
@@ -445,22 +444,25 @@ Future<ImportResult> commitBackupImport(
   final prefsData = envelope['prefs'] as Map<String, dynamic>;
 
   try {
-    // Database sections first, prefs last - a malformed file should fail
-    // before any pref commits, not after. The two database sections commit in
-    // one sqflite transaction: match rows and snapshot rows either both land
-    // or neither does. Prefs can't share that transaction (SharedPreferences
-    // has no such primitive), but restorePrefsData rolls itself back on
-    // failure instead — see its doc.
+    // Database rows first, prefs last - a malformed file should fail before
+    // any pref commits, not after. When there's DB data, restorePrefsData
+    // runs *inside* importBackupData's own transaction (see its doc), so a
+    // failure on either side rolls back both. Without DB data (a prefs-only
+    // v1 file, or no rankedStore), restorePrefsData's own internal rollback
+    // is already atomic on its own.
     final rankedHistory = envelope['ranked_history']; // absent in v1
     final statSnapshots =
         envelope['stat_snapshots']; // absent in v1/v2 (rode along in prefs)
-    if (rankedStore != null &&
-        (rankedHistory is List || statSnapshots is List)) {
+    final hasDbData =
+        rankedStore != null && (rankedHistory is List || statSnapshots is List);
+
+    if (hasDbData) {
       final matchRows = rankedHistory is List ? rankedHistory : const [];
       final snapshotRows = statSnapshots is List ? statSnapshots : const [];
       await rankedStore.importBackupData(
         matchRows: matchRows,
         snapshotRows: snapshotRows,
+        restorePrefs: () => restorePrefsData(prefs, prefsData),
       );
       if (matchRows.isNotEmpty) {
         log.i('Backup restored ${matchRows.length} ranked matches');
@@ -468,9 +470,10 @@ Future<ImportResult> commitBackupImport(
       if (snapshotRows.isNotEmpty) {
         log.i('Backup restored ${snapshotRows.length} RP snapshots');
       }
+    } else {
+      await restorePrefsData(prefs, prefsData);
     }
 
-    await restorePrefsData(prefs, prefsData);
     if (rankedStore != null) {
       // A v1/v2 file restores its snapshots as prefs keys; drain them now
       // rather than leaving the graph empty until the next launch. No-op for

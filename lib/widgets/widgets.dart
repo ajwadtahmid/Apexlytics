@@ -5,7 +5,6 @@ export 'graph_season_picker.dart';
 export 'graph_week_tab_strip.dart';
 export 'icon_text_row.dart';
 export 'stat_display.dart';
-export 'error_view.dart';
 export 'graph_card.dart';
 export 'legend_asset_image.dart';
 export 'legend_detail_page.dart';

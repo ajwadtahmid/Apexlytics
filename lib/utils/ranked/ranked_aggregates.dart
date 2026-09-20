@@ -224,8 +224,19 @@ List<LegendBreakdown> legendBreakdowns(List<RankedMatch> matches) {
       wins: wins,
       losses: losses,
     );
-  }).toList()..sort((a, b) => b.totalRp.compareTo(a.totalRp));
+  }).toList()..sort(byTotalRpThenName);
   return out;
+}
+
+/// Deterministic tie-break for an exact [LegendBreakdown.totalRp] tie:
+/// alphabetical by legend name. Shared with [RankedHistoryStore]'s SQL
+/// counterpart ([RankedHistoryStore.legendBreakdownsFor]), which builds its
+/// pre-sort map in a different (SQLite-determined) iteration order — without
+/// a shared, deterministic tie-break the two paths could render the same
+/// tied pair in a different order.
+int byTotalRpThenName(LegendBreakdown a, LegendBreakdown b) {
+  final rp = b.totalRp.compareTo(a.totalRp);
+  return rp != 0 ? rp : a.legend.compareTo(b.legend);
 }
 
 // ── Map breakdown ───────────────────────────────────────────────────────────
@@ -324,8 +335,16 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
       wins: wins,
       losses: losses,
     );
-  }).toList()..sort((a, b) => b.games.compareTo(a.games));
+  }).toList()..sort(byGamesThenName);
   return out;
+}
+
+/// Deterministic tie-break for an exact [MapBreakdown.games] tie: alphabetical
+/// by display name. See [byTotalRpThenName] for why this needs to be shared
+/// with the SQL path ([RankedHistoryStore.mapBreakdownsFor]).
+int byGamesThenName(MapBreakdown a, MapBreakdown b) {
+  final g = b.games.compareTo(a.games);
+  return g != 0 ? g : a.displayName.compareTo(b.displayName);
 }
 
 // ── Legend × Map matrix ──────────────────────────────────────────────────────

@@ -128,17 +128,6 @@ void main() {
       });
     });
 
-    test('setCompactLegendCards toggles value', () async {
-      final container = await makeContainer();
-      addTearDown(container.dispose);
-
-      await container
-          .read(playerSettingsProvider.notifier)
-          .setCompactLegendCards(true);
-
-      expect(container.read(playerSettingsProvider).compactLegendCards, isTrue);
-    });
-
     test('setKeepScreenOn toggles value', () async {
       final container = await makeContainer();
       addTearDown(container.dispose);
@@ -374,14 +363,13 @@ void main() {
     );
 
     test('clearAll() resets UI prefs (defaultTab, statsRefreshMinutes, '
-        'compactLegendCards, keepScreenOn)', () async {
+        'keepScreenOn)', () async {
       final container = await makeContainer();
       addTearDown(container.dispose);
       final notifier = container.read(playerSettingsProvider.notifier);
 
       await notifier.setDefaultTab(2);
       await notifier.setStatsRefreshMinutes(5);
-      await notifier.setCompactLegendCards(true);
       await notifier.setKeepScreenOn(true);
       await notifier.clearAll();
 
@@ -390,7 +378,6 @@ void main() {
       // Reset to the default rather than 0: the key is removed, so the next
       // launch reads the default anyway.
       expect(settings.statsRefreshMinutes, kDefaultStatsRefreshMinutes);
-      expect(settings.compactLegendCards, isFalse);
       expect(settings.keepScreenOn, isFalse);
 
       // Reload from prefs to confirm the keys were actually removed, not
@@ -398,7 +385,6 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getInt('default_tab'), isNull);
       expect(prefs.getInt('stats_refresh_minutes'), isNull);
-      expect(prefs.getBool('compact_legend_cards'), isNull);
       expect(prefs.getBool('keep_screen_on'), isNull);
     });
 
@@ -574,14 +560,13 @@ void main() {
   group('PlayerSettings equality exhaustiveness', () {
     const base = PlayerSettings();
     final mutators = <String, PlayerSettings Function(PlayerSettings)>{
-      'profiles': (s) =>
-          s.copyWith(profiles: const [PlayerProfile(name: 'X', uid: '1')]),
+      'profiles': (s) => s.copyWith(
+        profiles: const [PlayerProfile(name: 'X', uid: '1')],
+      ),
       'activeProfileIndex': (s) => s.copyWith(activeProfileIndex: 1),
       'statsRefreshMinutes': (s) => s.copyWith(statsRefreshMinutes: 15),
-      'compactLegendCards': (s) => s.copyWith(compactLegendCards: true),
       'keepScreenOn': (s) => s.copyWith(keepScreenOn: true),
-      'notifyPubsMapRotation': (s) =>
-          s.copyWith(notifyPubsMapRotation: true),
+      'notifyPubsMapRotation': (s) => s.copyWith(notifyPubsMapRotation: true),
       'notifyRankedMapRotation': (s) =>
           s.copyWith(notifyRankedMapRotation: true),
       'notifyMixtapeMapRotation': (s) =>
@@ -590,8 +575,7 @@ void main() {
           s.copyWith(notifyWildcardMapRotation: true),
       'rankedNotifyMinutesBefore': (s) =>
           s.copyWith(rankedNotifyMinutesBefore: 5),
-      'pubsNotifyMinutesBefore': (s) =>
-          s.copyWith(pubsNotifyMinutesBefore: 5),
+      'pubsNotifyMinutesBefore': (s) => s.copyWith(pubsNotifyMinutesBefore: 5),
       'mixtapeNotifyMinutesBefore': (s) =>
           s.copyWith(mixtapeNotifyMinutesBefore: 5),
       'wildcardNotifyMinutesBefore': (s) =>
@@ -613,7 +597,7 @@ void main() {
 
     test('every field on PlayerSettings has a mutator above', () {
       // Bump this alongside the map when a field is added to the class.
-      expect(mutators.length, 16);
+      expect(mutators.length, 15);
     });
   });
 }

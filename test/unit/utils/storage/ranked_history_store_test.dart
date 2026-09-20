@@ -521,32 +521,29 @@ void main() {
       expect(m.editedFields, {'kills'});
     });
 
-    test(
-      'importing over an existing edited, classified row keeps the '
-      'correction and does not demote its season_id',
-      () async {
-        // Used to be a plain INSERT OR REPLACE (delete-then-insert), so any
-        // column absent from the incoming row — season_id on an export from
-        // before that column existed, or a hand correction the backup
-        // predates — silently reverted to NULL/unedited.
-        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-        addTearDown(store.close);
-        final seasons = {'s1': season('br_ranked_s1_s1', 0, 1000)};
-        await store.upsertAll('1', [match('1', 100)], seasons: seasons);
-        await store.editMatch('1_100', {'kills': 99});
+    test('importing over an existing edited, classified row keeps the '
+        'correction and does not demote its season_id', () async {
+      // Used to be a plain INSERT OR REPLACE (delete-then-insert), so any
+      // column absent from the incoming row — season_id on an export from
+      // before that column existed, or a hand correction the backup
+      // predates — silently reverted to NULL/unedited.
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final seasons = {'s1': season('br_ranked_s1_s1', 0, 1000)};
+      await store.upsertAll('1', [match('1', 100)], seasons: seasons);
+      await store.editMatch('1_100', {'kills': 99});
 
-        // A stale backup row: same id, but the pre-edit kills value and no
-        // season_id at all (the shape `toStoredMap()` produces — season_id
-        // is derived separately by upsertAll, never stored on the model).
-        final staleRow = match('1', 100).toStoredMap();
-        await store.importRows([staleRow]);
+      // A stale backup row: same id, but the pre-edit kills value and no
+      // season_id at all (the shape `toStoredMap()` produces — season_id
+      // is derived separately by upsertAll, never stored on the model).
+      final staleRow = match('1', 100).toStoredMap();
+      await store.importRows([staleRow]);
 
-        final m = (await store.getAll('1')).single;
-        expect(m.kills, 99); // the correction survived the import
-        expect(m.editedFields, {'kills'});
-        expect(m.seasonId, 'br_ranked_s1_s1'); // not demoted back to null
-      },
-    );
+      final m = (await store.getAll('1')).single;
+      expect(m.kills, 99); // the correction survived the import
+      expect(m.editedFields, {'kills'});
+      expect(m.seasonId, 'br_ranked_s1_s1'); // not demoted back to null
+    });
   });
 
   group('importBackupData', () {
@@ -565,90 +562,106 @@ void main() {
       expect(await store.snapshotCount('1'), 1);
     });
 
-    test(
-      'a failure in one half rolls back both — neither table keeps a '
-      'partial import',
-      () async {
-        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-        addTearDown(store.close);
-        // Pre-existing data, untouched by the failed import below — proves
-        // the rollback doesn't wipe anything beyond what the import itself
-        // would have written.
-        await store.upsertAll('1', [match('1', 0)]);
+    test('a failure in one half rolls back both — neither table keeps a '
+        'partial import', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      // Pre-existing data, untouched by the failed import below — proves
+      // the rollback doesn't wipe anything beyond what the import itself
+      // would have written.
+      await store.upsertAll('1', [match('1', 0)]);
 
-        // A raw Map isn't a type sqflite can bind as a SQL argument — this
-        // throws when the batch commits, which is what should trigger the
-        // whole transaction to roll back.
-        final badMatchRow = {
-          ...match('1', 100).toStoredMap(),
-          'rp_change': {'not': 'bindable'},
-        };
+      // A raw Map isn't a type sqflite can bind as a SQL argument — this
+      // throws when the batch commits, which is what should trigger the
+      // whole transaction to roll back.
+      final badMatchRow = {
+        ...match('1', 100).toStoredMap(),
+        'rp_change': {'not': 'bindable'},
+      };
 
-        await expectLater(
-          () => store.importBackupData(
-            matchRows: [badMatchRow],
-            snapshotRows: [
-              {'uid': '1', 'ts_ms': 500, 'rp': 1200, 'season_id': null},
-            ],
-          ),
-          throwsA(anything),
-        );
+      await expectLater(
+        () => store.importBackupData(
+          matchRows: [badMatchRow],
+          snapshotRows: [
+            {'uid': '1', 'ts_ms': 500, 'rp': 1200, 'season_id': null},
+          ],
+        ),
+        throwsA(anything),
+      );
 
-        // The failed match row never landed...
-        expect(await store.count('1'), 1); // only the pre-existing row
-        // ...and neither did the snapshot row that came after it in the
-        // same transaction, even though importSnapshotRows itself would
-        // have succeeded in isolation.
-        expect(await store.snapshotCount('1'), 0);
-      },
-    );
+      // The failed match row never landed...
+      expect(await store.count('1'), 1); // only the pre-existing row
+      // ...and neither did the snapshot row that came after it in the
+      // same transaction, even though importSnapshotRows itself would
+      // have succeeded in isolation.
+      expect(await store.snapshotCount('1'), 0);
+    });
+
+    test('a restorePrefs failure rolls back the row imports too', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 0)]);
+
+      await expectLater(
+        () => store.importBackupData(
+          matchRows: [match('1', 100).toStoredMap()],
+          snapshotRows: [
+            {'uid': '1', 'ts_ms': 500, 'rp': 1200, 'season_id': null},
+          ],
+          restorePrefs: () async => throw Exception('prefs restore failed'),
+        ),
+        throwsA(anything),
+      );
+
+      // Both row imports ran before restorePrefs and committed inside the
+      // same transaction — sqflite must roll them back too.
+      expect(await store.count('1'), 1); // only the pre-existing row
+      expect(await store.snapshotCount('1'), 0);
+    });
   });
 
   group('forEachRowInBatches', () {
-    test(
-      'visits every row across multiple pages, surviving rows dropping '
-      'out of `where` as they are fixed mid-pass',
-      () async {
-        final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-        addTearDown(db.close);
-        await db.execute(
-          'CREATE TABLE t (id TEXT PRIMARY KEY, fixed INTEGER NOT NULL)',
-        );
-        // 12 rows needing "fixing", paged 5 at a time — exercises more than
-        // one full page and a partial last page (12 % 5 != 0).
-        final seed = db.batch();
-        for (var i = 0; i < 12; i++) {
-          seed.insert('t', {'id': 'id$i', 'fixed': 0});
-        }
-        await seed.commit(noResult: true);
+    test('visits every row across multiple pages, surviving rows dropping '
+        'out of `where` as they are fixed mid-pass', () async {
+      final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+      addTearDown(db.close);
+      await db.execute(
+        'CREATE TABLE t (id TEXT PRIMARY KEY, fixed INTEGER NOT NULL)',
+      );
+      // 12 rows needing "fixing", paged 5 at a time — exercises more than
+      // one full page and a partial last page (12 % 5 != 0).
+      final seed = db.batch();
+      for (var i = 0; i < 12; i++) {
+        seed.insert('t', {'id': 'id$i', 'fixed': 0});
+      }
+      await seed.commit(noResult: true);
 
-        final visited = <String>[];
-        await RankedHistoryStore.forEachRowInBatches(
-          db,
-          't',
-          columns: ['fixed'],
-          where: 'fixed = 0', // shrinks as rows get "fixed" below
-          batchSize: 5,
-          apply: (batch, row) {
-            visited.add(row['id'] as String);
-            // Mutating the row so it stops matching `where` mid-pass is
-            // exactly the hazard OFFSET pagination gets wrong: if this
-            // method paged by OFFSET instead of by id, the next page's
-            // OFFSET would skip rows shifted earlier by this update.
-            batch.update(
-              't',
-              {'fixed': 1},
-              where: 'id = ?',
-              whereArgs: [row['id']],
-            );
-          },
-        );
+      final visited = <String>[];
+      await RankedHistoryStore.forEachRowInBatches(
+        db,
+        't',
+        columns: ['fixed'],
+        where: 'fixed = 0', // shrinks as rows get "fixed" below
+        batchSize: 5,
+        apply: (batch, row) {
+          visited.add(row['id'] as String);
+          // Mutating the row so it stops matching `where` mid-pass is
+          // exactly the hazard OFFSET pagination gets wrong: if this
+          // method paged by OFFSET instead of by id, the next page's
+          // OFFSET would skip rows shifted earlier by this update.
+          batch.update(
+            't',
+            {'fixed': 1},
+            where: 'id = ?',
+            whereArgs: [row['id']],
+          );
+        },
+      );
 
-        expect(visited.length, 12);
-        expect(visited.toSet(), {for (var i = 0; i < 12; i++) 'id$i'});
-        expect(await db.query('t', where: 'fixed = 0'), isEmpty);
-      },
-    );
+      expect(visited.length, 12);
+      expect(visited.toSet(), {for (var i = 0; i < 12; i++) 'id$i'});
+      expect(await db.query('t', where: 'fixed = 0'), isEmpty);
+    });
 
     test('an empty table is a no-op', () async {
       final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
@@ -666,27 +679,30 @@ void main() {
       expect(calls, 0);
     });
 
-    test('a page exactly the size of batchSize does not loop forever', () async {
-      final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-      addTearDown(db.close);
-      await db.execute('CREATE TABLE t (id TEXT PRIMARY KEY)');
-      final seed = db.batch();
-      for (var i = 0; i < 5; i++) {
-        seed.insert('t', {'id': 'id$i'});
-      }
-      await seed.commit(noResult: true);
+    test(
+      'a page exactly the size of batchSize does not loop forever',
+      () async {
+        final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+        addTearDown(db.close);
+        await db.execute('CREATE TABLE t (id TEXT PRIMARY KEY)');
+        final seed = db.batch();
+        for (var i = 0; i < 5; i++) {
+          seed.insert('t', {'id': 'id$i'});
+        }
+        await seed.commit(noResult: true);
 
-      var calls = 0;
-      await RankedHistoryStore.forEachRowInBatches(
-        db,
-        't',
-        columns: const [],
-        batchSize: 5,
-        apply: (batch, row) => calls++,
-      );
+        var calls = 0;
+        await RankedHistoryStore.forEachRowInBatches(
+          db,
+          't',
+          columns: const [],
+          batchSize: 5,
+          apply: (batch, row) => calls++,
+        );
 
-      expect(calls, 5);
-    });
+        expect(calls, 5);
+      },
+    );
   });
 
   test('deleteAll drops snapshots as well as matches', () async {
@@ -1312,6 +1328,32 @@ void main() {
         final split = await store.squadBreakdownFor('nobody');
         expect(split.full.games, 0);
         expect(split.partial.games, 0);
+      },
+    );
+
+    test(
+      'squadBreakdownFor folds a NULL is_party_full (e.g. an imported row '
+      'missing the column) into the partial bucket instead of dropping it',
+      () async {
+        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+        addTearDown(store.close);
+        // importRows leaves is_party_full NULL when the source row omits the
+        // key entirely — a hand-edited or foreign backup file.
+        await store.importRows([
+          {
+            'id': '1_100',
+            'uid': '1',
+            'game_mode': 'BATTLE_ROYALE',
+            'rp_change': 40,
+            'start_ms': 100000,
+            'end_ms': 160000,
+          },
+        ]);
+
+        final split = await store.squadBreakdownFor('1');
+        expect(split.full.games, 0);
+        expect(split.partial.games, 1);
+        expect(split.partial.netRp, 40);
       },
     );
   });

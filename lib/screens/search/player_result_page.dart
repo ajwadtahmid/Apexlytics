@@ -189,11 +189,14 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppTheme.accent),
         ),
-        error: (e, _) => ErrorView(
-          message: friendlyError(e),
-          onAction: () => Navigator.pop(context),
-          actionLabel: 'Back',
+        error: (e, _) => ErrorCard(
+          fullScreen: true,
           icon: Icons.search_off,
+          iconColor: AppTheme.red,
+          iconSize: 48,
+          message: friendlyError(e),
+          actionLabel: 'Back',
+          onAction: () => Navigator.pop(context),
         ),
       ),
     );

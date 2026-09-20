@@ -37,25 +37,39 @@ void main() {
       expect((entry!.data as Map<String, dynamic>)['foo'], 'bar');
     });
 
-    test('load returns null for a corrupt row picked up at prime time', () async {
-      final store = freshStore();
-      await store.upsert('key', 'bad-json', DateTime.now().millisecondsSinceEpoch);
-      final cache = ApiCache(store);
-      await cache.primeFromDisk();
-      expect(cache.load('key'), isNull);
-    });
+    test(
+      'load returns null for a corrupt row picked up at prime time',
+      () async {
+        final store = freshStore();
+        await store.upsert(
+          'key',
+          'bad-json',
+          DateTime.now().millisecondsSinceEpoch,
+        );
+        final cache = ApiCache(store);
+        await cache.primeFromDisk();
+        expect(cache.load('key'), isNull);
+      },
+    );
 
-    test('a corrupt row is dropped from disk too, not left to re-fail forever', () async {
-      final store = freshStore();
-      await store.upsert('key', 'bad-json', DateTime.now().millisecondsSinceEpoch);
-      final cache = ApiCache(store);
-      await cache.primeFromDisk();
-      expect(cache.load('key'), isNull);
-      // The removal is fire-and-forget; let it settle before asserting.
-      await Future<void>.delayed(Duration.zero);
-      final remaining = await store.loadAll();
-      expect(remaining.containsKey('key'), isFalse);
-    });
+    test(
+      'a corrupt row is dropped from disk too, not left to re-fail forever',
+      () async {
+        final store = freshStore();
+        await store.upsert(
+          'key',
+          'bad-json',
+          DateTime.now().millisecondsSinceEpoch,
+        );
+        final cache = ApiCache(store);
+        await cache.primeFromDisk();
+        expect(cache.load('key'), isNull);
+        // The removal is fire-and-forget; let it settle before asserting.
+        await Future<void>.delayed(Duration.zero);
+        final remaining = await store.loadAll();
+        expect(remaining.containsKey('key'), isFalse);
+      },
+    );
 
     test('savedAt is approximately now', () async {
       final before = DateTime.now();
@@ -72,7 +86,11 @@ void main() {
       // No primeFromDisk() call — mirrors app startup before priming
       // completes (see ApiCache's doc comment). Deliberate, not a bug.
       final store = freshStore();
-      await store.upsert('key', jsonEncode({'a': 1}), DateTime.now().millisecondsSinceEpoch);
+      await store.upsert(
+        'key',
+        jsonEncode({'a': 1}),
+        DateTime.now().millisecondsSinceEpoch,
+      );
       final cache = ApiCache(store);
       expect(cache.load('key'), isNull);
       expect(cache.loadStale('key'), isNull);
@@ -80,7 +98,10 @@ void main() {
   });
 
   group('Per-endpoint TTL', () {
-    Future<ApiCache> primedCacheWithAgedEntry(String key, int minutesAgo) async {
+    Future<ApiCache> primedCacheWithAgedEntry(
+      String key,
+      int minutesAgo,
+    ) async {
       final store = freshStore();
       final ts = DateTime.now()
           .subtract(Duration(minutes: minutesAgo))
@@ -109,11 +130,6 @@ void main() {
     test('/predator entry is fresh within 60 minutes', () async {
       final cache = await primedCacheWithAgedEntry('/predator', 59);
       expect(cache.load('/predator'), isNotNull);
-    });
-
-    test('/maprotation entry expires after 15 minutes', () async {
-      final cache = await primedCacheWithAgedEntry('/maprotation', 16);
-      expect(cache.load('/maprotation'), isNull);
     });
 
     test('unknown endpoint falls back to 24h TTL', () async {

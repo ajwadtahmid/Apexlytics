@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/map_constants.dart';
+import '../../models/seasonal_maps.dart';
 import '../../providers/map_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/background_service.dart';
+import '../../services/map_notification_service.dart';
 import '../../services/notification_service.dart';
 import '../../utils/app_logger.dart';
+import '../../utils/error_messages.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
+import '../../widgets/error_card.dart';
 import '../../widgets/setting_row.dart';
 import 'widgets/map_mode_list.dart';
 
@@ -42,6 +46,14 @@ class _MapAlertsSheetContentState
   bool _showAllRanked = false;
   bool _showAllPubs = false;
 
+  // Whether _initializeFromSettings() last saw real map names. "Empty
+  // favorites" means "notify every map" and seeds from the current name
+  // list — but if the sheet opens before seasonalMaps resolves, that list is
+  // itself empty, so every map renders unchecked instead of all-checked.
+  // Lets the listener below re-seed once real names arrive.
+  bool _namesInitialized = false;
+  ProviderSubscription<AsyncValue<SeasonalMaps>>? _seasonalMapsSub;
+
   static const _battleRoyaleOptions = [0, 5, 15, 30];
   static const _otherModesOptions = [0, 5, 10, 15];
   static const _kDefaultBattleRoyaleMinutes = 15;
@@ -51,6 +63,17 @@ class _MapAlertsSheetContentState
   void initState() {
     super.initState();
     _initializeFromSettings();
+    _seasonalMapsSub = ref.listenManual(seasonalMapsProvider, (prev, next) {
+      if (!_namesInitialized && next.asData?.value != null) {
+        setState(_initializeFromSettings);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _seasonalMapsSub?.close();
+    super.dispose();
   }
 
   void _initializeFromSettings() {
@@ -59,6 +82,7 @@ class _MapAlertsSheetContentState
 
     final rankedNames = seasonalMaps?.ranked.map((m) => m.name).toList() ?? [];
     final pubsNames = seasonalMaps?.pubs.map((m) => m.name).toList() ?? [];
+    _namesInitialized = rankedNames.isNotEmpty || pubsNames.isNotEmpty;
 
     _rankedNotify = settings.favoriteRankedMapNames.isEmpty
         ? Set.from(rankedNames)
@@ -347,23 +371,14 @@ class _MapAlertsSheetContentState
     );
   }
 
+  // Delegates to the same scheduling call Home uses, instead of rebuilding
+  // scheduleAll's argument list here — a second copy previously omitted
+  // rankedSequence/pubsSequence, so alerts used generic copy instead of
+  // naming the upcoming map.
   Future<void> _reschedule() async {
     try {
       final result = await ref.read(mapRotationProvider.future);
-      final s = ref.read(playerSettingsProvider);
-      await NotificationService.scheduleAll(
-        result.data,
-        notifyRanked: s.notifyRankedMapRotation,
-        rankedMinutesBefore: s.rankedNotifyMinutesBefore,
-        notifyPubs: s.notifyPubsMapRotation,
-        pubsMinutesBefore: s.pubsNotifyMinutesBefore,
-        notifyWildcard: s.notifyWildcardMapRotation,
-        wildcardMinutesBefore: s.wildcardNotifyMinutesBefore,
-        notifyMixtape: s.notifyMixtapeMapRotation,
-        mixtapeMinutesBefore: s.mixtapeNotifyMinutesBefore,
-        favoriteRankedMapNames: s.favoriteRankedMapNames,
-        favoritePubsMapNames: s.favoritePubsMapNames,
-      );
+      MapNotificationService.schedule(ref, result.data);
     } catch (e) {
       log.w('Notification reschedule failed', error: e);
     }
@@ -569,7 +584,11 @@ class _MapAlertsSheetContentState
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('Error loading maps: $err')),
+        error: (err, _) => ErrorCard(
+          fullScreen: true,
+          message: friendlyError(err),
+          onRetry: () => ref.invalidate(seasonalMapsProvider),
+        ),
       ),
     );
   }

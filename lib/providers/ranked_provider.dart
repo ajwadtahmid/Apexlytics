@@ -11,6 +11,7 @@ import '../utils/storage/ranked_history_store.dart';
 import '../utils/storage/season_storage.dart';
 import 'api_provider.dart';
 import 'player_provider.dart';
+import 'rank_goal_provider.dart';
 import 'settings_provider.dart';
 
 /// App-lifetime handle to the local ranked-history database.
@@ -400,6 +401,9 @@ void invalidatePlayerDerivedProviders(WidgetRef ref) {
   // already falls back gracefully when that happens, but the picker
   // otherwise shows a stale selection until the user changes it themselves.
   ref.invalidate(rankedPeriodProvider);
+  // Family-wide (no UID arg) so a stale goal can't survive "Clear all data"
+  // or a backup import that restores a different value for the same UID.
+  ref.invalidate(rankGoalProvider);
 }
 
 /// Every provider whose value is derived from stored *match rows* — the set

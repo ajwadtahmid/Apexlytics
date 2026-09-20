@@ -10,13 +10,11 @@ enum _LegendSortOrder { byLastPlayed, byKills, byDamage, byWins, byRole }
 
 class PlayerStatsTabs extends StatefulWidget {
   final List<LegendStat> legendStats;
-  final bool compact;
   final List<String> legendStack;
 
   const PlayerStatsTabs({
     super.key,
     required this.legendStats,
-    this.compact = false,
     this.legendStack = const [],
   });
 
@@ -244,10 +242,7 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
         ],
         const SizedBox(height: AppTheme.md),
         if (_tab == 0)
-          LegendStatsSection(
-            legends: _displayedLegends,
-            compact: widget.compact,
-          )
+          LegendStatsSection(legends: _displayedLegends)
         else
           WeaponStatsSection(legendStats: widget.legendStats),
       ],

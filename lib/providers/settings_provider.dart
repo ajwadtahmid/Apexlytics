@@ -110,7 +110,6 @@ abstract class PlayerSettings with _$PlayerSettings {
     @Default(0) int activeProfileIndex,
     @Default(kDefaultStatsRefreshMinutes)
     int statsRefreshMinutes, // 0 = manual only
-    @Default(false) bool compactLegendCards,
     @Default(false) bool keepScreenOn,
     @Default(false) bool notifyPubsMapRotation,
     @Default(false) bool notifyRankedMapRotation,
@@ -244,7 +243,6 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       profiles: profiles,
       activeProfileIndex: activeIdx,
       statsRefreshMinutes: refreshMinutes,
-      compactLegendCards: _prefs.getBool(PrefsKeys.compactLegendCards) ?? false,
       keepScreenOn: _prefs.getBool(PrefsKeys.keepScreenOn) ?? false,
       notifyPubsMapRotation:
           _prefs.getBool(PrefsKeys.notifyPubsMapRotation) ?? false,
@@ -423,12 +421,6 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     PrefsKeys.statsRefreshMinutes,
     v,
     (s) => s.copyWith(statsRefreshMinutes: v),
-  );
-
-  Future<void> setCompactLegendCards(bool v) => _setBool(
-    PrefsKeys.compactLegendCards,
-    v,
-    (s) => s.copyWith(compactLegendCards: v),
   );
 
   Future<void> setKeepScreenOn(bool v) =>

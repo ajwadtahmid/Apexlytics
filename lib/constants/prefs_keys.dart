@@ -8,7 +8,6 @@ class PrefsKeys {
   static const playerPlatform = 'player_platform';
 
   static const statsRefreshMinutes = 'stats_refresh_minutes';
-  static const compactLegendCards = 'compact_legend_cards';
   static const keepScreenOn = 'keep_screen_on';
 
   // Legacy global timing key — kept only for one-time migration to per-mode keys.

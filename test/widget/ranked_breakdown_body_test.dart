@@ -56,7 +56,6 @@ void main() {
             snapshots: snapshots,
             allSeasons: const {},
             legendStats: legendStats,
-            compactLegendCards: false,
             legendStack: const [],
             onRefresh: () async {},
           ),
@@ -155,10 +154,7 @@ void main() {
       // Distinct from the pollCount == 0 "hasn't seen this profile yet"
       // message - this player *was* being tracked and stopped.
       expect(find.text('Not being tracked yet'), findsOneWidget);
-      expect(
-        find.textContaining('Tracking has paused'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Tracking has paused'), findsOneWidget);
     },
   );
 
@@ -226,7 +222,8 @@ void main() {
       await tester.pumpWidget(
         app(
           prefs: prefs,
-          outcome: RankedSyncOutcome.offline, // irrelevant - splits errors first
+          outcome:
+              RankedSyncOutcome.offline, // irrelevant - splits errors first
           splitsError: Exception('cold start, no connection'),
         ),
       );

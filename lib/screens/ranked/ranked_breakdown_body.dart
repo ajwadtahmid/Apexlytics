@@ -13,6 +13,7 @@ import '../../utils/error_messages.dart';
 import '../../utils/formatting/snapshot_types.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
+import '../../widgets/error_card.dart';
 import '../../widgets/graph_card.dart' show showSnapshotBackupSheet;
 import 'ranked_all_trackers_screen.dart';
 import 'ranked_available_now_screen.dart';
@@ -46,7 +47,6 @@ class RankedBreakdownBody extends ConsumerStatefulWidget {
   final List<StatSnapshot> snapshots;
   final Map<String, SeasonMeta> allSeasons;
   final List<LegendStat> legendStats;
-  final bool compactLegendCards;
   final List<String> legendStack;
   final Future<void> Function() onRefresh;
 
@@ -58,7 +58,6 @@ class RankedBreakdownBody extends ConsumerStatefulWidget {
     required this.snapshots,
     required this.allSeasons,
     required this.legendStats,
-    required this.compactLegendCards,
     required this.legendStack,
     required this.onRefresh,
   });
@@ -197,18 +196,23 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     // Nothing is being recorded for this UID at all — the only state that
     // needs an action rather than just patience.
     if (outcome == RankedSyncOutcome.notTracked && !recording) {
-      return _MessageState(
+      return ErrorCard(
+        fullScreen: true,
         icon: Icons.radio_button_checked,
         title: 'Ready to record',
         message:
             'Only matches played from now on can be recorded — earlier ones '
             'are not recoverable.',
-        steps: steps,
+        extra: steps,
         actionLabel: 'Start recording',
         onAction: _startRecording,
         onRetry: _refresh,
         onLearnMore: onLearnMore,
-        onViewAvailable: onViewAvailable,
+        secondaryActionLabel: onViewAvailable != null
+            ? 'View available stats'
+            : null,
+        secondaryActionIcon: Icons.bar_chart,
+        onSecondaryAction: onViewAvailable,
       );
     }
 
@@ -218,7 +222,8 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     if (recording && outcome != RankedSyncOutcome.offline) {
       final eligibility = ref.watch(gamesEligibilityProvider(widget.uid)).value;
       if (eligibility != null && !eligibility.eligible) {
-        return _MessageState(
+        return ErrorCard(
+          fullScreen: true,
           icon: Icons.wifi_tethering_off,
           title: 'Not being tracked yet',
           message: eligibility.pollCount == 0
@@ -226,10 +231,14 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
                     'open - tracking starts within a few minutes.'
               : 'Tracking has paused. Keep Apexlytics open while you play so '
                     'matches keep being recorded.',
-          steps: steps,
+          extra: steps,
           onRetry: _refresh,
           onLearnMore: onLearnMore,
-          onViewAvailable: onViewAvailable,
+          secondaryActionLabel: onViewAvailable != null
+              ? 'View available stats'
+              : null,
+          secondaryActionIcon: Icons.bar_chart,
+          onSecondaryAction: onViewAvailable,
         );
       }
     }
@@ -254,14 +263,19 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
       ),
     };
 
-    return _MessageState(
+    return ErrorCard(
+      fullScreen: true,
       icon: icon,
       title: title,
       message: statusNote,
-      steps: steps,
+      extra: steps,
       onRetry: _refresh,
       onLearnMore: onLearnMore,
-      onViewAvailable: onViewAvailable,
+      secondaryActionLabel: onViewAvailable != null
+          ? 'View available stats'
+          : null,
+      secondaryActionIcon: Icons.bar_chart,
+      onSecondaryAction: onViewAvailable,
     );
   }
 
@@ -276,7 +290,6 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           allSeasons: widget.allSeasons,
           currentRp: widget.stats.rankScore,
           legendStats: widget.legendStats,
-          compact: widget.compactLegendCards,
           legendStack: widget.legendStack,
         ),
       ),
@@ -302,7 +315,8 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
 
   /// Shown when the sync failed and there is no persisted history to fall back
   /// on, which is a cold start without a working connection.
-  Widget _errorState(Object e) => _MessageState(
+  Widget _errorState(Object e) => ErrorCard(
+    fullScreen: true,
     icon: Icons.cloud_off,
     title: 'Can\'t load history',
     message: friendlyError(e),
@@ -378,7 +392,8 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     // list by canonicalMapKey (see rankedSplitViewProvider), so every mapKey
     // here is guaranteed an entry there.
     final mapTrends = {
-      for (final mb in maps) mb.mapKey: data.mapTrends[canonicalMapKey(mb.mapKey)]!,
+      for (final mb in maps)
+        mb.mapKey: data.mapTrends[canonicalMapKey(mb.mapKey)]!,
     };
 
     return _tabShell(
@@ -393,7 +408,6 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           allSeasons: widget.allSeasons,
           data: data,
           legendStats: widget.legendStats,
-          compactLegendCards: widget.compactLegendCards,
           legendStack: widget.legendStack,
           legendMatchesFor: legendMatches,
           mapMatchesFor: mapMatches,
@@ -458,7 +472,6 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
                     Expanded(
                       child: RankedAllTrackersEntry(
                         legendStats: widget.legendStats,
-                        compact: widget.compactLegendCards,
                         legendStack: widget.legendStack,
                       ),
                     ),
@@ -520,7 +533,6 @@ class _OverviewTab extends StatelessWidget {
   final RankedSplitView data;
 
   final List<LegendStat> legendStats;
-  final bool compactLegendCards;
   final List<String> legendStack;
   final Future<List<RankedMatch>> Function(String) legendMatchesFor;
   final Future<List<RankedMatch>> Function(String) mapMatchesFor;
@@ -534,7 +546,6 @@ class _OverviewTab extends StatelessWidget {
     required this.allSeasons,
     required this.data,
     required this.legendStats,
-    required this.compactLegendCards,
     required this.legendStack,
     required this.legendMatchesFor,
     required this.mapMatchesFor,
@@ -590,7 +601,6 @@ class _OverviewTab extends StatelessWidget {
                 Expanded(
                   child: RankedAllTrackersEntry(
                     legendStats: legendStats,
-                    compact: compactLegendCards,
                     legendStack: legendStack,
                   ),
                 ),
@@ -647,112 +657,6 @@ class _OverviewTab extends StatelessWidget {
           ),
           const SizedBox(height: AppTheme.lg),
         ],
-      ),
-    );
-  }
-}
-
-class _MessageState extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String message;
-  final Future<void> Function() onRetry;
-
-  /// Optional primary action shown above Retry, for states the user can
-  /// actually resolve rather than just wait out.
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  /// Optional progress breakdown (e.g. [_TrackingSteps]) shown below the
-  /// message.
-  final Widget? steps;
-
-  /// Optional link to the full explainer sheet.
-  final VoidCallback? onLearnMore;
-
-  /// Optional link to [RankedAvailableNowScreen], shown only when the graph
-  /// or trackers it displays actually have data to show.
-  final VoidCallback? onViewAvailable;
-
-  const _MessageState({
-    required this.icon,
-    required this.title,
-    required this.message,
-    required this.onRetry,
-    this.actionLabel,
-    this.onAction,
-    this.steps,
-    this.onLearnMore,
-    this.onViewAvailable,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: AppTheme.muted, size: 40),
-            const SizedBox(height: AppTheme.md),
-            Text(
-              title,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: AppTheme.xs),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppTheme.muted,
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-            ?steps,
-            const SizedBox(height: AppTheme.md),
-            if (onViewAvailable != null) ...[
-              OutlinedButton.icon(
-                onPressed: onViewAvailable,
-                icon: const Icon(Icons.bar_chart, size: 16),
-                label: const Text('View available stats'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.accent,
-                  side: const BorderSide(color: AppTheme.accent),
-                ),
-              ),
-              const SizedBox(height: AppTheme.xs),
-            ],
-            if (actionLabel != null && onAction != null) ...[
-              FilledButton(
-                onPressed: onAction,
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
-                child: Text(actionLabel!),
-              ),
-              const SizedBox(height: AppTheme.xs),
-            ],
-            TextButton(
-              onPressed: onRetry,
-              child: const Text(
-                'Retry',
-                style: TextStyle(color: AppTheme.accent),
-              ),
-            ),
-            if (onLearnMore != null)
-              TextButton(
-                onPressed: onLearnMore,
-                child: const Text(
-                  'How does this work?',
-                  style: TextStyle(color: AppTheme.muted, fontSize: 12),
-                ),
-              ),
-          ],
-        ),
       ),
     );
   }
@@ -831,7 +735,7 @@ class _StepRow extends StatelessWidget {
 
 /// Strip shown above the tabs when the last sync failed and persisted history
 /// is still on screen. Sits in the layout alongside the tabs rather than
-/// replacing them, unlike [_MessageState].
+/// replacing them, unlike the full-screen [ErrorCard] states above.
 class _OfflineBanner extends StatelessWidget {
   const _OfflineBanner();
 

@@ -8,6 +8,16 @@ class MapHeroImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Card height is fixed by design; width just stretches to fill it, so
+    // decoding to a physical-pixel height derived from the fixed dimension
+    // is enough on any screen density — a wide landscape source fit into
+    // this short card is height-constrained under BoxFit.cover regardless.
+    // Only memCacheHeight is set: passing both dimensions would resize to
+    // that exact box before BoxFit.cover runs, distorting a mismatched
+    // source aspect ratio.
+    final cacheHeight =
+        (AppTheme.mapCardImageHeight * MediaQuery.devicePixelRatioOf(context))
+            .ceil();
     return SizedBox(
       height: AppTheme.mapCardImageHeight,
       width: double.infinity,
@@ -15,6 +25,7 @@ class MapHeroImage extends StatelessWidget {
           ? CachedNetworkImage(
               imageUrl: assetUrl,
               fit: BoxFit.cover,
+              memCacheHeight: cacheHeight,
               placeholder: (ctx, url) => const ColoredBox(
                 color: AppTheme.surface2,
                 child: Center(

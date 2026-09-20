@@ -23,22 +23,33 @@ class MapNotificationService {
       final seasonal = ref.read(seasonalMapsProvider).asData?.value;
       unawaited(
         NotificationService.scheduleAll(
-          data,
-          notifyRanked: s.notifyRankedMapRotation,
-          rankedMinutesBefore: s.rankedNotifyMinutesBefore,
-          notifyPubs: s.notifyPubsMapRotation,
-          pubsMinutesBefore: s.pubsNotifyMinutesBefore,
-          notifyMixtape: s.notifyMixtapeMapRotation,
-          mixtapeMinutesBefore: s.mixtapeNotifyMinutesBefore,
-          notifyWildcard: s.notifyWildcardMapRotation,
-          wildcardMinutesBefore: s.wildcardNotifyMinutesBefore,
-          favoriteRankedMapNames: s.favoriteRankedMapNames,
-          favoritePubsMapNames: s.favoritePubsMapNames,
-          rankedSequence: seasonal?.rankedNames ?? const [],
-          pubsSequence: seasonal?.pubsNames ?? const [],
-        ).catchError((Object e) {
-          log.e('Notification scheduling failed', error: e);
-        }),
+              data,
+              notifyRanked: s.notifyRankedMapRotation,
+              rankedMinutesBefore: s.rankedNotifyMinutesBefore,
+              notifyPubs: s.notifyPubsMapRotation,
+              pubsMinutesBefore: s.pubsNotifyMinutesBefore,
+              notifyMixtape: s.notifyMixtapeMapRotation,
+              mixtapeMinutesBefore: s.mixtapeNotifyMinutesBefore,
+              notifyWildcard: s.notifyWildcardMapRotation,
+              wildcardMinutesBefore: s.wildcardNotifyMinutesBefore,
+              favoriteRankedMapNames: s.favoriteRankedMapNames,
+              favoritePubsMapNames: s.favoritePubsMapNames,
+              rankedSequence: seasonal?.rankedNames ?? const [],
+              pubsSequence: seasonal?.pubsNames ?? const [],
+            )
+            .then((_) {
+              // scheduleAll silently no-ops if the plugin never initialized —
+              // background_service.dart checks this too, so this can't fail
+              // silently here.
+              if (!NotificationService.isInitialized) {
+                log.w(
+                  'Notification scheduling skipped: plugin not initialized',
+                );
+              }
+            })
+            .catchError((Object e) {
+              log.e('Notification scheduling failed', error: e);
+            }),
       );
     } else {
       unawaited(NotificationService.cancelAll());

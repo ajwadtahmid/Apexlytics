@@ -10,13 +10,11 @@ import '../../widgets/tracker_info_sheet.dart';
 /// compete for space there.
 class RankedAllTrackersEntry extends StatelessWidget {
   final List<LegendStat> legendStats;
-  final bool compact;
   final List<String> legendStack;
 
   const RankedAllTrackersEntry({
     super.key,
     required this.legendStats,
-    required this.compact,
     this.legendStack = const [],
   });
 
@@ -30,7 +28,6 @@ class RankedAllTrackersEntry extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => RankedAllTrackersScreen(
               legendStats: legendStats,
-              compact: compact,
               legendStack: legendStack,
             ),
           ),
@@ -64,13 +61,11 @@ class RankedAllTrackersEntry extends StatelessWidget {
 /// Stats used to show inline, now reached from Ranked's Overview instead.
 class RankedAllTrackersScreen extends StatelessWidget {
   final List<LegendStat> legendStats;
-  final bool compact;
   final List<String> legendStack;
 
   const RankedAllTrackersScreen({
     super.key,
     required this.legendStats,
-    required this.compact,
     this.legendStack = const [],
   });
 
@@ -91,11 +86,7 @@ class RankedAllTrackersScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(AppTheme.md),
           children: [
-            PlayerStatsTabs(
-              legendStats: legendStats,
-              compact: compact,
-              legendStack: legendStack,
-            ),
+            PlayerStatsTabs(legendStats: legendStats, legendStack: legendStack),
           ],
         ),
       ),

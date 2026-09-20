@@ -175,7 +175,15 @@ class ApiService {
             _dio.get(endpoint, queryParameters: params, cancelToken: token),
       );
       final data = normalizer(response.data);
-      if (!noCache) await _cache.save(key, data);
+      if (!noCache) {
+        // Best-effort: a cache-write failure (e.g. disk full) must not turn
+        // an already-successful fetch into a thrown error.
+        try {
+          await _cache.save(key, data);
+        } catch (e) {
+          log.w('API cache save failed', error: e);
+        }
+      }
       return ApiResult(data);
     } on DioException catch (e) {
       if (!noCache) {
