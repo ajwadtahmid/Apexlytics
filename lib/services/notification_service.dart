@@ -59,11 +59,11 @@ class NotificationService {
 
   // The plugin resolves an Android icon name via getIdentifier(name,
   // "drawable", package) — a runtime string lookup, redone every time a
-  // notification is built. Confirmed by inspecting a built release .aab/.apk
-  // that both icons below survive R8 shrinking via keep.xml, so a
-  // getIdentifier miss in production is a runtime/process-state issue (e.g.
-  // Play swapping split APKs under a still-running process), not a missing
-  // resource — hence graceful degradation below instead of more retries.
+  // notification is built. Both icons below are pinned against R8 shrinking
+  // by android/app/src/main/res/raw/keep.xml, so a getIdentifier miss in
+  // production is a runtime/process-state issue (e.g. Play swapping split
+  // APKs under a still-running process), not a missing resource — hence
+  // graceful degradation below instead of more retries.
   //
   // ic_notification_fallback also gets a static AndroidManifest meta-data
   // reference so AAPT2 verifies its resource ID at compile time.
