@@ -30,7 +30,7 @@ const _pages = <_OnboardingPage>[
     icon: Icons.insights,
     title: 'Welcome to Apexlytics',
     body:
-        'Your companion for Apex Legends — track your stats, follow the map '
+        'Your companion for Apex Legends. Track your stats, follow the map '
         'rotation, and dig into your performance.',
     footnote:
         'Unofficial companion app. Not made by, affiliated with, or endorsed '
@@ -47,12 +47,27 @@ const _pages = <_OnboardingPage>[
         'play. Stats only update for trackers that are equipped.',
   ),
   _OnboardingPage(
+    icon: Icons.leaderboard_outlined,
+    title: 'Record your ranked history',
+    body:
+        'Your ranked breakdown lives on the My Stats tab: RP over time, '
+        'your best legends and maps, and how you play by time of day.',
+    tip:
+        'Tip: matches only record while your profile is actively tracked, '
+        'so keep Apexlytics open (turn on "Keep screen on" in Settings) '
+        'while you play, or keep your profile open on '
+        'apexlegendsstatus.com.',
+    footnote:
+        "Recording only covers matches played while tracked; earlier "
+        "matches can't be recovered.",
+  ),
+  _OnboardingPage(
     icon: Icons.map_outlined,
     title: "Know where you're dropping",
     body:
-        'The Home tab shows live map rotations for Ranked, Pubs, Wildcard, and '
-        'Mixtape — plus news, server status, and the Predator cutoff. Turn on '
-        'notifications to get a heads-up before maps change.',
+        'The Home tab shows live map rotations for Ranked, Pubs, Wildcard, '
+        'and Mixtape, plus news, server status, and the Predator cutoff. '
+        'Turn on notifications to get a heads-up before maps change.',
   ),
   _OnboardingPage(
     icon: Icons.search,
@@ -60,20 +75,6 @@ const _pages = <_OnboardingPage>[
     body:
         'Search any player by name, compare stats side by side, and save '
         'favorites for quick access.',
-  ),
-  _OnboardingPage(
-    icon: Icons.leaderboard_outlined,
-    title: 'Record your ranked history',
-    body:
-        'The Ranked tab breaks down every match — RP over time, your best '
-        'legends and maps, and how you play by time of day. Open it and tap '
-        'Start recording to begin.',
-    tip:
-        'Matches are only recorded while Apexlytics is open and in the '
-        'foreground, so turn on "Keep screen on" while you play.',
-    footnote:
-        'Recording starts from the moment you turn it on — matches played '
-        'before that cannot be recovered.',
   ),
 ];
 

@@ -60,7 +60,7 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      expect(find.text('Record your ranked history'), findsOneWidget);
+      expect(find.text('Scout friends and rivals'), findsOneWidget);
       expect(find.text('Get started'), findsOneWidget);
 
       await tester.tap(find.text('Get started'));

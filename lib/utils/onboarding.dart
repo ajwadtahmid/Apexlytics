@@ -9,7 +9,7 @@ import '../screens/onboarding/onboarding_screen.dart';
 /// Current orientation-tour revision. Bump this when the tour changes enough to
 /// re-show it to existing users as a "what's new" pass — [showOnboardingIfNeeded]
 /// compares it against the stored [PrefsKeys.onboardingVersion].
-const int kOnboardingVersion = 1;
+const int kOnboardingVersion = 2;
 
 /// Shows the orientation tour on first launch (or after [kOnboardingVersion] is
 /// bumped). Marks it seen, then drops the user on My Stats so setting up an
