@@ -9,6 +9,7 @@ import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
 import '../../widgets/error_card.dart';
+import '../../widgets/legend_icon.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_legend_map_matrix_screen.dart';
 import 'widgets/ranked_day_of_week_chart.dart';
@@ -595,6 +596,8 @@ class _PickRateList extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
+                  LegendIcon(legendName: l.legend, size: 14),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       l.legend,

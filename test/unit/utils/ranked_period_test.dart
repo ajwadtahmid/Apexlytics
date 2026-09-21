@@ -78,12 +78,27 @@ void main() {
       expect(buckets.map((b) => b.id), ['br_ranked_s28_s2']);
     });
 
-    test('falls back to the raw id when metadata is missing', () {
-      final buckets = buildSplitBuckets({'br_ranked_s30_s1': 2}, const {});
-      expect(buckets.single.id, 'br_ranked_s30_s1');
-      expect(buckets.single.displayName, 'br_ranked_s30_s1');
-      expect(buckets.single.season, isNull);
-    });
+    test(
+      'derives a display name from the id when metadata is missing, rather '
+      'than showing the raw id',
+      () {
+        final buckets = buildSplitBuckets({'br_ranked_s30_s1': 2}, const {});
+        expect(buckets.single.id, 'br_ranked_s30_s1');
+        expect(buckets.single.displayName, 'Season 30 (Split 1)');
+        expect(buckets.single.season, isNull);
+      },
+    );
+
+    test(
+      'a non-split id with missing metadata falls back to "Other", not the '
+      'raw id — e.g. the API\'s "__other__" placeholder season',
+      () {
+        final buckets = buildSplitBuckets({'__other__': 2}, const {});
+        expect(buckets.single.id, '__other__');
+        expect(buckets.single.displayName, 'Other');
+        expect(buckets.single.season, isNull);
+      },
+    );
 
     test('empty counts yield no buckets', () {
       expect(buildSplitBuckets(const {}, seasons), isEmpty);

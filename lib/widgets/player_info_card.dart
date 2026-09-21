@@ -8,6 +8,7 @@ import '../utils/formatting/platform_utils.dart';
 import '../utils/formatting/rank_utils.dart' show rankAssetPath;
 import '../utils/notifications.dart';
 import '../utils/theme.dart';
+import 'legend_icon.dart';
 import 'status_dot.dart';
 import 'surface_card.dart';
 
@@ -117,9 +118,15 @@ class PlayerInfoCard extends StatelessWidget {
             ),
             const SizedBox(height: 2),
           ],
-          Text(
-            'Currently Tracking: ${stats.currentLegend}',
-            style: const TextStyle(color: AppTheme.accent2, fontSize: 13),
+          Row(
+            children: [
+              LegendIcon(legendName: stats.currentLegend, size: 14),
+              const SizedBox(width: 4),
+              Text(
+                'Currently Tracking: ${stats.currentLegend}',
+                style: const TextStyle(color: AppTheme.accent2, fontSize: 13),
+              ),
+            ],
           ),
           const SizedBox(height: AppTheme.md),
           if (stats.trackers.isNotEmpty)

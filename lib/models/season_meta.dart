@@ -12,12 +12,24 @@ class SeasonMeta {
   });
 
   // "br_ranked_s29_s1" → "Season 29 (Split 1)"
-  static String _parseDisplayName(String id) {
+  //
+  // An id that doesn't match falls back to "Other" rather than the raw id —
+  // the upstream ranked API is known to send non-split placeholder ids (e.g.
+  // "__other__") verbatim through `rankedSeason`, and showing that raw,
+  // underscored string to the user is worse than a generic label for
+  // whatever this season actually is.
+  //
+  // Public (not just used by [fromApi]/[fromJson]) so `buildSplitBuckets`
+  // can apply the same rule to a bare season id that has no [SeasonMeta] at
+  // all — a match's persisted `season_id` with nothing ever learned for it
+  // would otherwise show that raw id too, via a completely different
+  // fallback path this class doesn't control.
+  static String parseDisplayName(String id) {
     final match = RegExp(r's(\d+)_s(\d+)$').firstMatch(id);
     if (match != null) {
       return 'Season ${match.group(1)} (Split ${match.group(2)})';
     }
-    return id;
+    return 'Other';
   }
 
   /// Constructs from the raw API fields (timestamps are Unix seconds).
@@ -27,7 +39,7 @@ class SeasonMeta {
     required int endSeconds,
   }) => SeasonMeta(
     id: id,
-    displayName: _parseDisplayName(id),
+    displayName: parseDisplayName(id),
     start: DateTime.fromMillisecondsSinceEpoch(startSeconds * 1000),
     end: DateTime.fromMillisecondsSinceEpoch(endSeconds * 1000),
   );
@@ -51,14 +63,14 @@ class SeasonMeta {
     if (start is! num || end is! num) return null;
     return SeasonMeta(
       id: id,
-      displayName: _parseDisplayName(id),
+      displayName: parseDisplayName(id),
       start: DateTime.fromMillisecondsSinceEpoch(start.toInt()),
       end: DateTime.fromMillisecondsSinceEpoch(end.toInt()),
     );
   }
 
   // displayName is excluded from equality/hashCode because it is always derived
-  // from id via _parseDisplayName — two objects with identical id/start/end are
+  // from id via parseDisplayName — two objects with identical id/start/end are
   // always equal, regardless of how displayName was constructed.
   @override
   bool operator ==(Object other) =>

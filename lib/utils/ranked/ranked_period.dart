@@ -71,9 +71,15 @@ List<RankedSplitBucket> buildSplitBuckets(
       RankedSplitBucket(
         id: entry.key,
         // Metadata may be momentarily missing (e.g. the local season cache was
-        // cleared after this id was assigned) — fall back to the raw id rather
-        // than lose the bucket entirely.
-        displayName: seasons[entry.key]?.displayName ?? entry.key,
+        // cleared after this id was assigned) — fall back to a bucket built
+        // from the bare id rather than lose it entirely. Runs the same
+        // id-to-label logic [SeasonMeta] uses, so an id shaped like a real
+        // split ("br_ranked_s30_s1") still reads as one, and anything else
+        // (a non-split placeholder id the API sent, e.g. "__other__") shows
+        // as "Other" instead of that raw string.
+        displayName:
+            seasons[entry.key]?.displayName ??
+            SeasonMeta.parseDisplayName(entry.key),
         season: seasons[entry.key],
       ),
     );

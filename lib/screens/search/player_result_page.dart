@@ -15,6 +15,7 @@ import '../../utils/formatting/search_utils.dart';
 import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
+import '../../widgets/legend_icon.dart';
 import '../../widgets/widgets.dart';
 import 'player_compare_sheet.dart';
 
@@ -267,10 +268,7 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
                   itemBuilder: (_, i) {
                     final legend = them.legendStats[i];
                     return ListTile(
-                      leading: const Icon(
-                        Icons.person_outline,
-                        color: AppTheme.muted,
-                      ),
+                      leading: LegendIcon(legendName: legend.name, size: 20),
                       title: Text(legend.name),
                       onTap: () {
                         Navigator.pop(sheetCtx);

@@ -7,6 +7,7 @@ import '../../../models/ranked_match.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/theme.dart';
+import '../../../widgets/legend_icon.dart';
 
 /// Opens the correction form for [match]. Resolves to the updated match if a
 /// correction was actually saved or cleared, or null if nothing changed, so
@@ -434,7 +435,17 @@ class _LegendRow extends StatelessWidget {
             decoration: const InputDecoration(isDense: true),
             items: [
               for (final name in options)
-                DropdownMenuItem(value: name, child: Text(name)),
+                DropdownMenuItem(
+                  value: name,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      LegendIcon(legendName: name, size: 16),
+                      const SizedBox(width: 8),
+                      Text(name),
+                    ],
+                  ),
+                ),
             ],
             onChanged: (v) {
               if (v != null) onChanged(v);
