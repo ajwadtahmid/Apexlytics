@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -220,7 +223,7 @@ class _AppShellState extends ConsumerState<_AppShell>
     var index = tabs.indexOf(currentTab);
     if (index < 0) index = 0;
 
-    return Scaffold(
+    final shell = Scaffold(
       body: IndexedStack(
         index: index,
         children: [for (final t in tabs) _screenFor(t)],
@@ -232,6 +235,12 @@ class _AppShellState extends ConsumerState<_AppShell>
         onTap: (i) => ref.read(currentTabProvider.notifier).setTab(tabs[i]),
         items: [for (final t in tabs) _navItemFor(t)],
       ),
+    );
+    // Android only — keeps the transparent nav bar (see AppTheme).
+    if (defaultTargetPlatform != TargetPlatform.android) return shell;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.systemOverlayStyle,
+      child: shell,
     );
   }
 }

@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'
-    show SystemChrome, SystemUiMode, SystemUiOverlayStyle;
+import 'package:flutter/services.dart' show SystemChrome, SystemUiMode;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -20,6 +19,7 @@ import 'services/background_service.dart';
 import 'services/notification_service.dart';
 import 'utils/app_logger.dart';
 import 'utils/storage/api_cache_store.dart';
+import 'utils/theme.dart';
 
 void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -30,14 +30,7 @@ void main() async {
   // with unstyled bars. AppTheme (utils/theme.dart) is dark end-to-end, hence
   // light system-bar icons on transparent bars.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
+  SystemChrome.setSystemUIOverlayStyle(AppTheme.systemOverlayStyle);
 
   // Desktop (Linux/Windows/macOS) has no native sqflite binding — use the FFI
   // factory. iOS/Android keep sqflite's native factory.

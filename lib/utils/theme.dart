@@ -1,7 +1,22 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import '../models/player_stats.dart';
 
 class AppTheme {
+  /// Transparent system bars with light icons (the app is dark end-to-end).
+  /// Applied in main(), and on Android also via the AppBarTheme and around the
+  /// app shell: Flutter's default AppBar overlay style has a black nav bar that
+  /// overrides main()'s and paints an opaque strip under the bottom bar below
+  /// Android 15. Not applied on iOS, which never had that problem.
+  static const systemOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+  );
+
   static const bg = Color(0xFF0d1117);
   static const surface = Color(0xFF161b22);
   static const surface2 = Color(0xFF1c2330);
@@ -59,10 +74,15 @@ class AppTheme {
     useMaterial3: true,
     brightness: Brightness.dark,
     scaffoldBackgroundColor: bg,
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: surface,
       elevation: 0,
       foregroundColor: textPrimary,
+      // Android only: on iOS the AppBar default (which sets statusBarBrightness)
+      // must stay in effect.
+      systemOverlayStyle: defaultTargetPlatform == TargetPlatform.android
+          ? systemOverlayStyle
+          : null,
     ),
     colorScheme: const ColorScheme.dark(
       primary: accent,
