@@ -10,10 +10,6 @@
 -keepattributes SourceFile,LineNumberTable
 -keepattributes *Annotation*
 
-# Don't rename the exception types whose names we key logging and crash
-# grouping on.
--keep public class com.ajwadtahmid.apexlytics.** extends java.lang.Exception
-
 # Keeps the flutter_local_notifications classes (manifest receivers, Gson-
 # serialized notifications). Doesn't protect the icon drawables — res/raw/
 # keep.xml does.

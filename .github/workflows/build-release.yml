@@ -141,6 +141,19 @@ jobs:
       - name: Build Windows
         run: flutter build windows --release -v
 
+      # flutter build doesn't ship the MSVC runtime; without these next to the
+      # exe, a machine lacking the VC++ redistributable fails at launch with a
+      # missing-DLL error. The installer's `File /r` picks them up from here.
+      - name: Bundle Visual C++ runtime
+        shell: pwsh
+        run: |
+          $release = "build\windows\x64\runner\Release"
+          foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
+            $src = Join-Path $env:SystemRoot "System32\$dll"
+            if (-not (Test-Path $src)) { throw "$dll not found at $src" }
+            Copy-Item $src $release
+          }
+
       - name: Install NSIS
         run: choco install nsis -y
 

@@ -1,15 +1,21 @@
+Unicode true
+
 !include "MUI2.nsh"
+!include "LogicLib.nsh"
 !include "x64.nsh"
 
 ; Basic settings
 Name "Apexlytics"
 OutFile "$%GITHUB_WORKSPACE%\apexlytics-installer.exe"
-InstallDir "$PROGRAMFILES\Apexlytics"
+; Fixed subfolder with no directory page: the uninstaller removes $INSTDIR
+; recursively, so a user-chosen path like D:\Games would be wiped entirely.
+; $PROGRAMFILES64 because makensis builds a 32-bit installer, where plain
+; $PROGRAMFILES resolves to "Program Files (x86)".
+InstallDir "$PROGRAMFILES64\Apexlytics"
 RequestExecutionLevel admin
 
 ; MUI Settings
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
@@ -19,7 +25,18 @@ RequestExecutionLevel admin
 
 !insertmacro MUI_LANGUAGE "English"
 
+Function .onInit
+  ${IfNot} ${RunningX64}
+    MessageBox MB_OK|MB_ICONSTOP "Apexlytics requires 64-bit Windows."
+    Abort
+  ${EndIf}
+FunctionEnd
+
 Section "Install"
+  ; Machine-wide install (Program Files, HKLM), so shortcuts must be too;
+  ; otherwise they land in whichever profile the UAC prompt elevated as.
+  SetShellVarContext all
+  SetRegView 64
   SetOutPath "$INSTDIR"
 
   ; Copy all files from the Release folder
@@ -48,6 +65,9 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  SetShellVarContext all
+  SetRegView 64
+
   ; Remove shortcuts
   RMDir /r "$SMPROGRAMS\Apexlytics"
   Delete "$DESKTOP\Apexlytics.lnk"
