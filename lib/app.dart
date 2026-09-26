@@ -15,6 +15,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/search/search_screen.dart';
 import 'screens/stats/stats_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'services/notification_service.dart';
 import 'utils/app_logger.dart';
 import 'utils/onboarding.dart';
 import 'utils/storage/rp_snapshot_storage.dart';
@@ -114,6 +115,17 @@ class _AppShellState extends ConsumerState<_AppShell>
     if (state == AppLifecycleState.resumed) {
       // Re-check the OS notification permission — catches a toggle flipped in
       // system settings while the app was backgrounded.
+      ref.invalidate(notificationsEnabledProvider);
+      unawaited(_retryNotificationInit());
+    }
+  }
+
+  /// Retries a failed [NotificationService.init] (icon lookup miss), which
+  /// otherwise leaves alerts off for the whole process.
+  Future<void> _retryNotificationInit() async {
+    if (NotificationService.isInitialized) return;
+    await NotificationService.init();
+    if (NotificationService.isInitialized && mounted) {
       ref.invalidate(notificationsEnabledProvider);
     }
   }

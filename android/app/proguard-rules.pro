@@ -14,7 +14,7 @@
 # grouping on.
 -keep public class com.ajwadtahmid.apexlytics.** extends java.lang.Exception
 
-# flutter_local_notifications resolves the notification icon by name at
-# runtime via Resources.getIdentifier(); R8 cannot see that reference, and
-# shrinkResources would otherwise be free to strip the drawable.
+# Keeps the flutter_local_notifications classes (manifest receivers, Gson-
+# serialized notifications). Doesn't protect the icon drawables — res/raw/
+# keep.xml does.
 -keep class com.dexterous.** { *; }

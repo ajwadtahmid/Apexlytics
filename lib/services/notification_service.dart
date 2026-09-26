@@ -61,12 +61,14 @@ class NotificationService {
   // "drawable", package) — a runtime string lookup, redone every time a
   // notification is built. Both icons below are pinned against R8 shrinking
   // by android/app/src/main/res/raw/keep.xml, so a getIdentifier miss in
-  // production is a runtime/process-state issue (e.g. Play swapping split
-  // APKs under a still-running process), not a missing resource — hence
-  // graceful degradation below instead of more retries.
+  // production is a runtime/process-state issue (suspected: stale Resources
+  // after Play swaps the APKs under a live process; unconfirmed), not a
+  // missing resource. All three names share the same lookup, so extra
+  // fallbacks can't help: init() degrades with a warning and the app shell
+  // retries it on the next resume.
   //
-  // ic_notification_fallback also gets a static AndroidManifest meta-data
-  // reference so AAPT2 verifies its resource ID at compile time.
+  // ic_notification_fallback's AndroidManifest meta-data reference only keeps
+  // the drawable through shrinking; it doesn't affect the runtime lookup.
   // _lastResortAndroidIcon (ic_launcher_foreground) is a last resort because
   // it's fully opaque, so the status bar paints it as a solid square instead
   // of a shape. @mipmap/ic_launcher was ruled out entirely — getIdentifier is
@@ -124,9 +126,11 @@ class NotificationService {
         try {
           await initializeWith(_lastResortAndroidIcon);
         } catch (e3) {
-          log.e(
+          // Warning, not error: nothing actionable, so no Sentry exception.
+          // The app shell retries on the next resume.
+          log.w(
             'NotificationService: all Android icons unavailable, '
-            'notifications disabled for this session',
+            'notifications disabled until init is retried',
             error: e3,
           );
           return;
