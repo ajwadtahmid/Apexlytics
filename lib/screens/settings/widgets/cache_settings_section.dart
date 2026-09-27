@@ -7,6 +7,7 @@ import '../../../providers/search_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../services/background_service.dart';
 import '../../../services/notification_service.dart';
+import '../../../utils/app_logger.dart';
 import '../../../utils/error_messages.dart';
 import '../../../utils/notifications.dart';
 import '../../../utils/storage/backup_service.dart';
@@ -107,23 +108,60 @@ class CacheSettingsSection extends ConsumerWidget {
 
   /// Erases every persisted surface: prefs (bar first-run state), the ranked
   /// match database, and the API response cache.
+  ///
+  /// Every step runs even if an earlier one fails, and the message names
+  /// whatever didn't clear. Match history goes first on purpose: clearing
+  /// settings first and then failing on history would remove the profile
+  /// that shows it while the history stayed on disk, unseen. This order
+  /// fails the other way — data still visible, profile still there, and a
+  /// retry finishes the job.
   Future<void> _clearAll(BuildContext context, WidgetRef ref) async {
-    await ref.read(searchStateProvider.notifier).clearFavorites();
-    await ref.read(playerSettingsProvider.notifier).clearAll();
-    await ref.read(rankedHistoryStoreProvider).deleteAll();
-    await ref.read(apiServiceProvider).clearCache();
+    final failed = <String>[];
+    Future<void> step(String what, Future<void> Function() run) async {
+      try {
+        await run();
+      } catch (e) {
+        // The type only: a storage error's text can carry the SQL arguments
+        // (a player's UID or name), and warnings reach crash reports.
+        log.w('Clear all data: "$what" failed (${e.runtimeType})');
+        failed.add(what);
+      }
+    }
+
+    await step(
+      'match & RP history',
+      () => ref.read(rankedHistoryStoreProvider).deleteAll(),
+    );
+    await step('profiles, favorites & settings', () async {
+      await ref.read(searchStateProvider.notifier).clearFavorites();
+      await ref.read(playerSettingsProvider.notifier).clearAll();
+    });
+    await step(
+      'cached responses',
+      () => ref.read(apiServiceProvider).clearCache(),
+    );
     // clearAll() wipes every notification pref, but nothing else tears down
     // alerts already scheduled with the OS or resets the background-fetch
-    // cadence — without this, up to 56 map-rotation alerts (some surviving a
-    // reboot) keep firing after the user erased everything.
-    await NotificationService.cancelAll();
-    await BackgroundService.updateInterval(0);
+    // cadence — without this, up to a dozen map-rotation alerts per enabled
+    // mode (some surviving a reboot) keep firing after the user erased
+    // everything.
+    await step('scheduled map alerts', () async {
+      await NotificationService.cancelAll();
+      await BackgroundService.updateInterval(0);
+    });
     // These read through caches that deleteAll() alone won't invalidate, so
-    // they'd otherwise keep serving erased data until relaunch.
+    // they'd otherwise keep serving erased data until relaunch. Done even
+    // after a partial failure: what did clear must stop showing.
     resetSnapshotCache();
     invalidatePlayerDerivedProviders(ref);
-    if (context.mounted) {
+    if (!context.mounted) return;
+    if (failed.isEmpty) {
       context.showMessage('All data cleared.');
+    } else {
+      context.showError(
+        "Couldn't clear ${failed.join(' or ')}. Everything else was cleared "
+        '— try again to finish.',
+      );
     }
   }
 
@@ -209,7 +247,7 @@ class CacheSettingsSection extends ConsumerWidget {
     if (!context.mounted) return;
 
     switch (importResult) {
-      case ImportSuccess():
+      case ImportSuccess(:final skippedRows):
         ref.invalidate(playerSettingsProvider);
         ref.invalidate(searchStateProvider);
         // Same UID as before restore, so these families' cached values would
@@ -222,7 +260,8 @@ class CacheSettingsSection extends ConsumerWidget {
         // wrong match/profile count and was more confusing than useful.
         context.showMessage(
           'Backup restored: ${_profilesLabel(preview.profileCount)}, '
-          '${preview.matchCount} matches.',
+          '${preview.matchCount} matches.'
+          '${skippedRows > 0 ? ' $skippedRows unreadable ${skippedRows == 1 ? 'entry was' : 'entries were'} skipped.' : ''}',
         );
       case ImportError(:final message):
         context.showError(message);

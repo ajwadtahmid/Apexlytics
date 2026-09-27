@@ -95,22 +95,36 @@ class ApiCache {
   /// layout if done inline. Being `unawaited` at the call site doesn't
   /// prevent that on its own: without a real isolate hop, every `jsonDecode`
   /// still runs back-to-back in the one microtask after `loadAll()` resolves.
+  ///
+  /// Unawaited at startup, so a real request can [save] while this is still
+  /// reading and decoding — what it read is then stale and must not replace
+  /// a fresher entry, or [load] would later expire it and delete the fresh
+  /// row from disk along with it.
   Future<void> primeFromDisk() async {
+    final generation = _generation;
     final rows = await _store.loadAll();
     final result = await Isolate.run(() => _decodeCacheRows(rows));
+    // Cleared while priming: everything read predates the clear.
+    if (generation != _generation) return;
     for (final entry in result.decoded.entries) {
       final (data, savedAtMs) = entry.value;
-      _cache[entry.key] = CachedEntry(
-        data: data,
-        savedAt: DateTime.fromMillisecondsSinceEpoch(savedAtMs),
-      );
+      final savedAt = DateTime.fromMillisecondsSinceEpoch(savedAtMs);
+      final current = _cache[entry.key];
+      if (current != null && !current.savedAt.isBefore(savedAt)) continue;
+      _cache[entry.key] = CachedEntry(data: data, savedAt: savedAt);
     }
-    if (result.corrupt.isNotEmpty) {
-      // A corrupt row would otherwise keep occupying a slot in [_maxEntries]
-      // and re-fail on every subsequent prime.
-      unawaited(_store.removeMany(result.corrupt));
-    }
+    // A corrupt row would otherwise keep a slot in [_maxEntries] and re-fail
+    // every prime. Skip a key saved again since it was read — that's fresh now.
+    final corrupt = [
+      for (final key in result.corrupt)
+        if (!_cache.containsKey(key)) key,
+    ];
+    if (corrupt.isNotEmpty) unawaited(_store.removeMany(corrupt));
   }
+
+  /// Bumped by [clear], so a [primeFromDisk] already reading when the cache
+  /// was cleared doesn't put the cleared entries back into memory.
+  int _generation = 0;
 
   /// Saves [data] with a timestamp, then evicts the oldest entries if the
   /// cache has grown past [_maxEntries]. Updates the in-memory copy first, so
@@ -165,6 +179,7 @@ class ApiCache {
 
   /// Removes every cached response — used by "Clear all data".
   Future<void> clear() async {
+    _generation++;
     _cache.clear();
     await _store.clear();
   }

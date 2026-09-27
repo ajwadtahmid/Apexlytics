@@ -17,6 +17,51 @@ void main() {
     );
   });
 
+  group('calendarDaysBetween', () {
+    test('ignores time of day', () {
+      expect(
+        calendarDaysBetween(
+          DateTime(2026, 9, 26, 0, 5),
+          DateTime(2026, 9, 25, 23, 55),
+        ),
+        1,
+      );
+      expect(
+        calendarDaysBetween(
+          DateTime(2026, 9, 26, 23, 59),
+          DateTime(2026, 9, 26),
+        ),
+        0,
+      );
+    });
+
+    // Local midnights either side of a DST change are 23 or 25 hours apart;
+    // both must still count as exactly one day. Only exercises the transition
+    // when the test machine's zone observes DST on these dates (e.g. US
+    // zones: 2026-03-08 and 2026-11-01), but holds everywhere.
+    test('counts the day either side of a DST change as one day', () {
+      expect(
+        calendarDaysBetween(DateTime(2026, 3, 9), DateTime(2026, 3, 8)),
+        1,
+      );
+      expect(
+        calendarDaysBetween(DateTime(2026, 11, 2), DateTime(2026, 11, 1)),
+        1,
+      );
+    });
+
+    test('crosses month and year boundaries', () {
+      expect(
+        calendarDaysBetween(DateTime(2027, 1, 1), DateTime(2026, 12, 31)),
+        1,
+      );
+      expect(
+        calendarDaysBetween(DateTime(2026, 3, 1), DateTime(2026, 2, 1)),
+        28,
+      );
+    });
+  });
+
   group('formatSigned', () {
     test('adds a + for non-negative values', () {
       expect(formatSigned(4.2), '+4.2');

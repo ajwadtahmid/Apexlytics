@@ -4,13 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:apexlytics/constants/prefs_keys.dart';
-import 'package:apexlytics/models/player_stats.dart' show LegendStat;
+import 'package:apexlytics/models/player_stats.dart'
+    show LegendStat, PlayerStats;
+import 'package:apexlytics/models/ranked_match.dart';
+import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/ranked_breakdown_body.dart';
 import 'package:apexlytics/services/games_service.dart'
     show GamesCapacity, GamesEligibility;
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
+import 'package:apexlytics/utils/ranked/ranked_period.dart';
 
 import '../helpers.dart';
 
@@ -26,6 +30,24 @@ void main() {
     return SharedPreferences.getInstance();
   }
 
+  /// A minimal ranked match, just enough to give a split a non-zero
+  /// [RankedSummary.currentRp] via [RankedMatch.cumulativeRp].
+  RankedMatch matchWith({required String uid, required int cumulativeRp}) =>
+      RankedMatch.fromJson({
+        'uid': uid,
+        'name': 'TestPlayer',
+        'legendPlayed': 'Wraith',
+        'gameMode': 'BATTLE_ROYALE',
+        'gameLengthSecs': 600,
+        'gameStartTimestamp': 1700000000,
+        'gameEndTimestamp': 1700000600,
+        'gameData': const [],
+        'BRScoreChange': 40,
+        'BRScore': cumulativeRp,
+        'map': 'olympus_rotation',
+        'isPartyFull': false,
+      });
+
   Widget app({
     required SharedPreferences prefs,
     required RankedSyncOutcome outcome,
@@ -34,8 +56,15 @@ void main() {
     List<StatSnapshot> snapshots = const [],
     List<LegendStat> legendStats = const [],
     Object? splitsError,
+    PlayerStats? stats,
+    List<RankedSplitBucket>? splits,
+    List<RankedMatch>? splitMatches,
   }) {
     const uid = 'uid123';
+    // A single bucket with no user selection always resolves to itself (see
+    // effectiveSplitId), so every populated-view test below can override
+    // both providers for this one fixed key.
+    const splitId = 'br_ranked_s29_s1';
     return ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
@@ -44,7 +73,12 @@ void main() {
             uid,
           ).overrideWith((ref) async => throw splitsError)
         else
-          rankedSplitsProvider(uid).overrideWith((ref) async => []),
+          rankedSplitsProvider(uid).overrideWith((ref) async => splits ?? []),
+        if (splits != null)
+          rankedSplitMatchesProvider((
+            uid: uid,
+            splitId: splitId,
+          )).overrideWith((ref) async => splitMatches ?? []),
         rankedSyncProvider(uid).overrideWith((ref) async => outcome),
         gamesEligibilityProvider(uid).overrideWith((ref) async => eligibility),
         gamesCapacityProvider.overrideWith((ref) async => capacity),
@@ -54,7 +88,7 @@ void main() {
         home: Scaffold(
           body: RankedBreakdownBody(
             uid: uid,
-            stats: buildStats(uid: uid),
+            stats: stats ?? buildStats(uid: uid),
             snapshots: snapshots,
             allSeasons: const {},
             legendStats: legendStats,
@@ -311,4 +345,72 @@ void main() {
       expect(find.text('Retry'), findsOneWidget);
     },
   );
+
+  group('the "not synced" badge only compares live RP against the current split', () {
+    const uid = 'uid123';
+    // The only bucket, so it's on screen by default in both tests below.
+    // "old" relative to the second test's live split (numbered later).
+    const splitId = 'br_ranked_s29_s1';
+    const liveSplitId = 'br_ranked_s30_s1';
+
+    testWidgets(
+      'shows when the split on screen is the live current split and its '
+      'RP disagrees with the match history',
+      (tester) async {
+        final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+        await tester.pumpWidget(
+          app(
+            prefs: prefs,
+            outcome: RankedSyncOutcome.synced,
+            splits: const [
+              RankedSplitBucket(id: splitId, displayName: 'S29 Split 1'),
+            ],
+            splitMatches: [matchWith(uid: uid, cumulativeRp: 1000)],
+            stats: buildStats(
+              uid: uid,
+              rankScore: 1200, // hasn't synced into history yet
+              rankedSeason: SeasonMeta.fromApi(
+                id: splitId, // the split on screen IS the live one
+                startSeconds: 0,
+                endSeconds: 1000000,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.sync), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'stays hidden on an old split even though its final RP disagrees '
+      'with the live RP',
+      (tester) async {
+        final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+        await tester.pumpWidget(
+          app(
+            prefs: prefs,
+            outcome: RankedSyncOutcome.synced,
+            splits: const [
+              RankedSplitBucket(id: splitId, displayName: 'S29 Split 1'),
+            ],
+            splitMatches: [matchWith(uid: uid, cumulativeRp: 1000)],
+            stats: buildStats(
+              uid: uid,
+              rankScore: 1200, // the player's *current* RP, a new split away
+              rankedSeason: SeasonMeta.fromApi(
+                id: liveSplitId, // a later split is the live one, not splitId
+                startSeconds: 0,
+                endSeconds: 1000000,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.sync), findsNothing);
+      },
+    );
+  });
 }

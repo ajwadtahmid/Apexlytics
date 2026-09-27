@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
@@ -27,6 +29,7 @@ class _ThrowingUpsertStore extends RankedHistoryStore {
     String uid,
     List<RankedMatch> matches, {
     Map<String, SeasonMeta> seasons = const {},
+    int? onlyIfEpoch,
   }) async {
     throw Exception('simulated write failure');
   }
@@ -191,6 +194,28 @@ void main() {
       );
     });
 
+    test('a sync still in flight when the store is cleared writes nothing '
+        'afterwards', () async {
+      // "Clear all data" while /games is still answering: the late response
+      // must not put ~100 matches, or this uid's backoff prefs, back.
+      await setUpWith();
+      final response = Completer<GamesResult>();
+      when(
+        () => gamesService.getMatches(uid),
+      ).thenAnswer((_) => response.future);
+
+      final outcome = readOutcome();
+      await Future<void>.delayed(Duration.zero); // the fetch is now pending
+      await store.deleteAll();
+      response.complete(GamesMatches([_match(uid, 0), _match(uid, 700)]));
+      await outcome;
+
+      expect(await store.count(uid), 0);
+      final prefs = container.read(sharedPreferencesProvider);
+      expect(prefs.getInt(PrefsKeys.gamesNextSync(uid)), isNull);
+      expect(prefs.getString(PrefsKeys.gamesLastOutcome(uid)), isNull);
+    });
+
     test('an empty GamesMatches list still counts as synced', () async {
       await setUpWith();
       when(
@@ -298,6 +323,35 @@ void main() {
     );
 
     test(
+      'a 429 reads as busy and waits the server\'s Retry-After, not '
+      'requestError\'s hour',
+      () async {
+        await setUpWith();
+        await store.upsertAll(uid, [_match(uid, 0)]);
+        when(() => gamesService.getMatches(uid)).thenThrow(
+          const AppException(
+            'Rate limit reached. Wait a moment and try again.',
+            status: 429,
+            retryAfter: Duration(seconds: 40),
+          ),
+        );
+
+        final result = await readOutcome();
+
+        // Rate limiting clears on its own; it must not be reported as a
+        // rejected request that "needs attention".
+        expect(result, RankedSyncOutcome.queued);
+        final nextSync = container
+            .read(sharedPreferencesProvider)
+            .getInt(PrefsKeys.gamesNextSync(uid))!;
+        final expected = DateTime.now()
+            .add(const Duration(seconds: 40))
+            .millisecondsSinceEpoch;
+        expect((nextSync - expected).abs() < 3000, isTrue);
+      },
+    );
+
+    test(
       'a 5xx AppException still returns offline, not requestError',
       () async {
         await setUpWith();
@@ -367,5 +421,46 @@ void main() {
         verify(() => gamesService.getMatches(uid)).called(1);
       },
     );
+  });
+
+  group('rankedSyncDue', () {
+    // The periodic refresh only invalidates the sync when this is true —
+    // inside the window, invalidating would re-run every downstream provider
+    // just to replay a stored answer.
+    final now = DateTime.utc(2026, 9, 26, 12);
+
+    test('is due when no sync was ever recorded', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      expect(rankedSyncDue(prefs, uid, now: now), isTrue);
+    });
+
+    test('is not due inside the recorded backoff window', () async {
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.gamesNextSync(uid): now
+            .add(const Duration(minutes: 1))
+            .millisecondsSinceEpoch,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      expect(rankedSyncDue(prefs, uid, now: now), isFalse);
+    });
+
+    test('is due again once the window has passed', () async {
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.gamesNextSync(uid): now.millisecondsSinceEpoch,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      expect(rankedSyncDue(prefs, uid, now: now), isTrue);
+    });
+
+    test('is scoped to the uid', () async {
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.gamesNextSync('someone-else'): now
+            .add(const Duration(hours: 1))
+            .millisecondsSinceEpoch,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      expect(rankedSyncDue(prefs, uid, now: now), isTrue);
+    });
   });
 }

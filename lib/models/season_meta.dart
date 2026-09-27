@@ -11,6 +11,14 @@ class SeasonMeta {
     required this.end,
   });
 
+  static final _splitIdPattern = RegExp(r's(\d+)_s(\d+)$');
+
+  /// Whether [id] names a real ranked split (`br_ranked_s29_s1`), not a
+  /// placeholder the API sometimes sends instead (e.g. `__other__`). Only a
+  /// real split may be stored or used to classify matches — a placeholder's
+  /// window can overlap the real one's, permanently misfiling a match.
+  static bool isSplitId(String id) => _splitIdPattern.hasMatch(id);
+
   // "br_ranked_s29_s1" → "Season 29 (Split 1)"
   //
   // An id that doesn't match falls back to "Other" rather than the raw id —
@@ -25,7 +33,7 @@ class SeasonMeta {
   // would otherwise show that raw id too, via a completely different
   // fallback path this class doesn't control.
   static String parseDisplayName(String id) {
-    final match = RegExp(r's(\d+)_s(\d+)$').firstMatch(id);
+    final match = _splitIdPattern.firstMatch(id);
     if (match != null) {
       return 'Season ${match.group(1)} (Split ${match.group(2)})';
     }

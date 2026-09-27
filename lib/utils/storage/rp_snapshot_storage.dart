@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/prefs_keys.dart';
 import '../../models/player_stats.dart';
@@ -22,9 +23,21 @@ const String snapshotKeyPrefix = 'stat_snapshots_';
 /// it, [appendSnapshot] keeps both in step. Keyed like [PrefsKeys.snapshotKeyFor].
 final Map<String, List<StatSnapshot>> _cache = {};
 
+/// Notifies after every [resetSnapshotCache], so a view holding its own copy
+/// of the snapshot list (the RP graph) knows to re-read after a backup
+/// import or a clear, instead of showing the old list until RP next moves.
+final snapshotCacheResets = _SnapshotCacheResets();
+
+class _SnapshotCacheResets extends ChangeNotifier {
+  void _notify() => notifyListeners();
+}
+
 /// Drops every cached entry. For "Clear all data" and for test isolation -
 /// without it a cleared database would still read back through this cache.
-void resetSnapshotCache() => _cache.clear();
+void resetSnapshotCache() {
+  _cache.clear();
+  snapshotCacheResets._notify();
+}
 
 /// Parses a legacy prefs blob into snapshots, or an empty list when it can't
 /// be read at all.
@@ -175,6 +188,8 @@ Future<List<StatSnapshot>> _appendSnapshotLocked(
   bool deduplicateRp = true,
 }) async {
   final key = PrefsKeys.snapshotKeyFor(uid);
+  // Read before any await, so a clear mid-append can't be undone below.
+  final epoch = store.dataEpoch;
   // A UID that was never primed would otherwise dedup against an empty list
   // and re-append a reading already on disk.
   final snapshots = _cache.containsKey(key)
@@ -212,7 +227,9 @@ Future<List<StatSnapshot>> _appendSnapshotLocked(
     rp: stats.rankScore,
     seasonId: seasonId,
   );
-  await store.appendSnapshotFor(uid ?? '', snapshot);
+  await store.appendSnapshotFor(uid ?? '', snapshot, onlyIfEpoch: epoch);
+  // Cleared meanwhile, so the write was dropped — don't cache it as if it landed.
+  if (store.dataEpoch != epoch) return snapshots;
   // One row appended, one list element appended - no full re-encode of the
   // series, which is what made the old prefs blob O(n) on every poll tick.
   final updated = [...snapshots, snapshot];

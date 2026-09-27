@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/api_constants.dart';
 import '../constants/prefs_keys.dart';
 import '../models/ranked_match.dart';
@@ -104,11 +105,16 @@ final rankedSyncProvider = FutureProvider.autoDispose
       final store = ref.watch(rankedHistoryStoreProvider);
       final seasons = ref.watch(rankedSeasonsProvider);
       final prefs = ref.watch(sharedPreferencesProvider);
+      // Read before the network call, so a "Clear all data" that lands while
+      // it's in flight isn't undone by this sync's writes (see dataEpoch).
+      final epoch = store.dataEpoch;
+      bool cleared() => store.dataEpoch != epoch;
 
       Future<RankedSyncOutcome> remember(
         RankedSyncOutcome outcome,
         Duration wait,
       ) async {
+        if (cleared()) return outcome;
         await prefs.setInt(
           PrefsKeys.gamesNextSync(uid),
           DateTime.now().add(wait).millisecondsSinceEpoch,
@@ -117,8 +123,7 @@ final rankedSyncProvider = FutureProvider.autoDispose
         return outcome;
       }
 
-      final nextSyncAt = prefs.getInt(PrefsKeys.gamesNextSync(uid)) ?? 0;
-      if (DateTime.now().millisecondsSinceEpoch < nextSyncAt) {
+      if (!rankedSyncDue(prefs, uid)) {
         // Inside the backoff window: replay the outcome the last real fetch
         // recorded, falling back to a plain cooldown when nothing is stored.
         final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
@@ -145,6 +150,16 @@ final rankedSyncProvider = FutureProvider.autoDispose
         // outcome and backoff instead of `offline`'s 5-minute retry loop,
         // which would just fail the same way every time.
         final status = e is AppException ? e.status : null;
+        // A 429 is rate limiting, not a rejection — it clears on its own, so
+        // it reads as "busy" (waiting the server's Retry-After), not
+        // requestError's hour-long "needs attention".
+        if (status == 429) {
+          log.w('games fetch rate-limited; serving persisted history');
+          return remember(
+            RankedSyncOutcome.queued,
+            (e as AppException).retryAfter ?? _kOfflineRetry,
+          );
+        }
         if (status != null && status >= 400 && status < 500) {
           log.w(
             'games fetch rejected by server; serving persisted history',
@@ -169,7 +184,12 @@ final rankedSyncProvider = FutureProvider.autoDispose
         case GamesMatches(:final matches):
           // An empty list is a valid answer — tracking is live, nothing recorded
           // yet — so it still counts as a successful sync.
-          await store.upsertAll(uid, matches, seasons: seasons);
+          await store.upsertAll(
+            uid,
+            matches,
+            seasons: seasons,
+            onlyIfEpoch: epoch,
+          );
       }
       // Re-read from prefs rather than reusing the watched `seasons` above: other
       // screens (e.g. the stats tab) call upsertSeason() directly against prefs
@@ -184,6 +204,17 @@ final rankedSyncProvider = FutureProvider.autoDispose
       // of retrying for 6 h.
       return remember(RankedSyncOutcome.synced, ApiConstants.gamesSyncCooldown);
     });
+
+/// Whether [rankedSyncProvider] for [uid] would hit the network if rebuilt
+/// now, rather than replay its stored outcome from inside the backoff window.
+///
+/// Check this before invalidating the sync on a timer: invalidating re-runs
+/// every downstream provider (the split's matches and all its aggregates),
+/// which is wasted work when the sync was only going to replay itself.
+bool rankedSyncDue(SharedPreferences prefs, String uid, {DateTime? now}) {
+  final nextSyncAt = prefs.getInt(PrefsKeys.gamesNextSync(uid)) ?? 0;
+  return (now ?? DateTime.now()).millisecondsSinceEpoch >= nextSyncAt;
+}
 
 /// Whether the backend is currently seeing polls for [uid] — that is, whether
 /// history is actually accruing right now. Backed by our own `/player` traffic,

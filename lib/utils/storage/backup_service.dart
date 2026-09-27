@@ -311,7 +311,12 @@ sealed class ImportResult {}
 
 class ImportSuccess extends ImportResult {
   final int keyCount;
-  ImportSuccess(this.keyCount);
+
+  /// Match/snapshot rows the file carried that couldn't be read and were
+  /// left out, rather than failing the whole restore over them.
+  final int skippedRows;
+
+  ImportSuccess(this.keyCount, {this.skippedRows = 0});
 }
 
 class ImportError extends ImportResult {
@@ -615,10 +620,11 @@ Future<ImportResult> commitBackupImport(
     final hasDbData =
         rankedStore != null && (rankedHistory is List || statSnapshots is List);
 
+    var skippedRows = 0;
     if (hasDbData) {
       final matchRows = rankedHistory is List ? rankedHistory : const [];
       final snapshotRows = statSnapshots is List ? statSnapshots : const [];
-      await rankedStore.importBackupData(
+      skippedRows = await rankedStore.importBackupData(
         matchRows: matchRows,
         snapshotRows: snapshotRows,
         restorePrefs: () => restorePrefsData(prefs, prefsData),
@@ -628,6 +634,9 @@ Future<ImportResult> commitBackupImport(
       }
       if (snapshotRows.isNotEmpty) {
         log.i('Backup restored ${snapshotRows.length} RP snapshots');
+      }
+      if (skippedRows > 0) {
+        log.w('Backup import skipped $skippedRows unreadable rows');
       }
     } else {
       await restorePrefsData(prefs, prefsData);
@@ -644,7 +653,7 @@ Future<ImportResult> commitBackupImport(
     log.i(
       'Backup restored: ${prefsData.length} keys from v${preview.version} backup',
     );
-    return ImportSuccess(prefsData.length);
+    return ImportSuccess(prefsData.length, skippedRows: skippedRows);
   } catch (e) {
     log.w('Backup import failed', error: e);
     // The database half is transactional, restorePrefsData rolls back its

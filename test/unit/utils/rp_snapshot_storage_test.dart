@@ -370,4 +370,16 @@ void main() {
       expect(computeDelta(snaps, 1800), -200);
     });
   });
+
+  test('resetSnapshotCache notifies listeners, so a view holding its own copy '
+      'knows to re-read', () {
+    var notified = 0;
+    void listener() => notified++;
+    snapshotCacheResets.addListener(listener);
+    addTearDown(() => snapshotCacheResets.removeListener(listener));
+
+    resetSnapshotCache();
+
+    expect(notified, 1);
+  });
 }

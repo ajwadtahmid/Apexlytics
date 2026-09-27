@@ -601,6 +601,12 @@ class _OverviewTab extends StatelessWidget {
     final matches = data.view.filtered;
     final legends = data.legends;
     final maps = data.maps;
+    // stats.rankScore is always the player's *live* RP, regardless of which
+    // split is on screen — comparing it against an old split's final RP
+    // reads as "not synced" forever. Only feed it through when the split on
+    // screen is the one live RP belongs to (mirrors graph_card.dart's
+    // isCurrentSeason check).
+    final isCurrentSplit = data.view.effectiveSplitId == stats.rankedSeason?.id;
     return RefreshIndicator(
       color: AppTheme.accent,
       onRefresh: onRefresh,
@@ -612,7 +618,7 @@ class _OverviewTab extends StatelessWidget {
           RankedSummaryHeader(
             summary: summary,
             uid: uid,
-            livePlayerRp: stats.rankScore,
+            livePlayerRp: isCurrentSplit ? stats.rankScore : null,
           ),
           const SizedBox(height: AppTheme.md),
           RankedRpChart(

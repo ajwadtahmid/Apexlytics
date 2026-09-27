@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
+import '../constants/timeout_constants.dart';
 import 'app_logger.dart';
 
 const _kRetryKey = '_retry_count';
@@ -11,6 +12,10 @@ const _kUsedBackupKey = '_used_backup';
 // during the window fall back to the primary instead of hard-failing for
 // the rest of [primaryDownFor].
 const _kPreferredBackupKey = '_preferred_backup';
+// Set when a sticky-window request falls back from a failed backup to the
+// primary. The backup has already been tried for this request, so a primary
+// failure after that must not fail over to it a second time.
+const _kBackupSpentKey = '_backup_spent';
 
 /// Retries requests on transient server errors (5xx) and network failures.
 ///
@@ -25,12 +30,16 @@ const _kPreferredBackupKey = '_preferred_backup';
 /// retry budget) before giving up — this is what covers a primary host that's
 /// asleep or down, e.g. a free-tier server that spins down.
 ///
-/// [maxRetries] defaults to 1 (2 attempts per host) rather than 2, keeping the
-/// worst case for one logical request — every attempt against both the
-/// primary and the backup timing out — at roughly two minutes instead of
-/// three. The sticky [primaryDownFor] window already prevents re-paying this
-/// full budget on every request during a sustained outage, so the ladder
-/// itself only needs to be just long enough to ride out one transient blip.
+/// A *timeout* skips the same-host retry when another host is available and
+/// moves straight to it — a second timeout on the same host rarely helps,
+/// and used up too much of `TimeoutConstants.overallRequestDeadline` to leave
+/// room for the backup. Fast failures (5xx, refused connections) keep their
+/// retry, and so does the last host in the chain, so a waking backup still
+/// gets caught on its second try.
+///
+/// [maxRetries] defaults to 1 (2 attempts per host). The sticky
+/// [primaryDownFor] window prevents re-paying the ladder on every request
+/// during a sustained outage, so it only needs to ride out one blip.
 class RetryInterceptor extends Interceptor {
   final Dio dio;
   final int maxRetries;
@@ -42,8 +51,8 @@ class RetryInterceptor extends Interceptor {
 
   RetryInterceptor({
     required this.dio,
-    this.maxRetries = 1,
-    this.initialDelay = const Duration(seconds: 1),
+    this.maxRetries = TimeoutConstants.retriesPerHost,
+    this.initialDelay = TimeoutConstants.retryDelay,
     this.backupBaseUrl,
     this.primaryDownFor = const Duration(minutes: 5),
   });
@@ -99,8 +108,18 @@ class RetryInterceptor extends Interceptor {
     }
 
     final attempt = (err.requestOptions.extra[_kRetryKey] as int?) ?? 0;
+    final usedBackup = err.requestOptions.extra[_kUsedBackupKey] == true;
+    final preferredBackup =
+        err.requestOptions.extra[_kPreferredBackupKey] == true;
+    final backupSpent = err.requestOptions.extra[_kBackupSpentKey] == true;
+    final backup = backupBaseUrl;
+    final canFailOverToBackup =
+        !usedBackup && !backupSpent && backup != null && backup.isNotEmpty;
+    // Whether the chain below still has a different host to try.
+    final hasOtherHost =
+        (preferredBackup && !usedBackup) || canFailOverToBackup;
 
-    if (attempt < maxRetries) {
+    if (attempt < maxRetries && !(_isTimeout(err) && hasOtherHost)) {
       // Exponential backoff with max ceiling of maxRetries. Attempt counter tracked in
       // RequestOptions.extra[_kRetryKey] so it persists across the interceptor chain.
       final delay = initialDelay * pow(2, attempt).toInt();
@@ -116,15 +135,13 @@ class RetryInterceptor extends Interceptor {
       return _refetch(err, handler);
     }
 
-    // Retries against the current host are exhausted.
-    final usedBackup = err.requestOptions.extra[_kUsedBackupKey] == true;
-    final preferredBackup =
-        err.requestOptions.extra[_kPreferredBackupKey] == true;
-    final backup = backupBaseUrl;
+    // Retries against the current host are exhausted (or skipped for a
+    // timeout — see the class doc).
 
     // Started on the backup by preference, not a real failover, and the
     // backup failed too — fall back to the primary rather than staying stuck
-    // for the rest of the window. A still-down primary re-fails over below.
+    // for the rest of the window. Marking the backup spent stops a
+    // still-down primary from bouncing straight back to it.
     if (preferredBackup && !usedBackup) {
       log.w(
         'Backup proxy failed while preferred; falling back to primary '
@@ -134,6 +151,7 @@ class RetryInterceptor extends Interceptor {
       err.requestOptions
         ..baseUrl = dio.options.baseUrl
         ..extra[_kPreferredBackupKey] = false
+        ..extra[_kBackupSpentKey] = true
         ..extra[_kRetryKey] = 0;
       return _refetch(err, handler);
     }
@@ -142,10 +160,10 @@ class RetryInterceptor extends Interceptor {
     // tracked separately so it gets the same retry budget the primary just
     // used, and the [_kUsedBackupKey] flag stops this from ever bouncing
     // back and forth.
-    if (!usedBackup && backup != null && backup.isNotEmpty) {
+    if (canFailOverToBackup) {
       log.w(
-        'Primary proxy failed after $maxRetries retries, trying backup '
-        'for ${err.requestOptions.path}',
+        'Primary proxy failed (${err.response?.statusCode ?? err.type.name}), '
+        'trying backup for ${err.requestOptions.path}',
       );
       err.requestOptions
         ..baseUrl = backup
@@ -170,6 +188,11 @@ class RetryInterceptor extends Interceptor {
       return handler.next(e);
     }
   }
+
+  static bool _isTimeout(DioException err) =>
+      err.type == DioExceptionType.connectionTimeout ||
+      err.type == DioExceptionType.receiveTimeout ||
+      err.type == DioExceptionType.sendTimeout;
 
   bool _shouldRetry(DioException err) {
     final status = err.response?.statusCode;

@@ -544,6 +544,81 @@ void main() {
       expect(m.editedFields, {'kills'});
       expect(m.seasonId, 'br_ranked_s1_s1'); // not demoted back to null
     });
+
+    test('a correction restored over an already-synced row stays protected '
+        'from the next sync', () async {
+      // The new-phone flow: the old device corrected a match and exported;
+      // the new device synced the same match (unedited) before the restore.
+      final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      await source.upsertAll('1', [match('1', 100)]);
+      await source.editMatch('1_100', {'kills': 7});
+      final rows = await source.exportRows();
+      await source.close();
+
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100)]);
+      await store.importRows(rows);
+
+      var m = (await store.getAll('1')).single;
+      expect(m.kills, 7);
+      expect(m.editedFields, {'kills'});
+
+      // Upstream still reports 3 kills; the restored correction must hold.
+      await store.upsertAll('1', [match('1', 100)]);
+      m = (await store.getAll('1')).single;
+      expect(m.kills, 7);
+      expect(m.editedFields, {'kills'});
+    });
+
+    test('flags from the backup and the device are merged; a column flagged '
+        'on both keeps the device value', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100)]);
+      await store.editMatch('1_100', {'legend': 'Wraith', 'kills': 5});
+
+      final backupRow = {
+        ...match('1', 100, legend: 'Bangalore').toStoredMap(),
+        'kills': 9,
+        'damage': 2500,
+        'edited_fields': encodeEditedFields({'kills', 'damage'}),
+      };
+      await store.importRows([backupRow]);
+
+      final m = (await store.getAll('1')).single;
+      expect(m.legend, 'Wraith'); // device-only flag: device value
+      expect(m.kills, 5); // flagged on both: device value
+      expect(m.damage, 2500); // backup-only flag: backup value
+      expect(m.editedFields, {'legend', 'kills', 'damage'});
+    });
+
+    test(
+      'a backup listing the same id twice keeps both rows\' flags',
+      () async {
+        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+        addTearDown(store.close);
+        final base = match('1', 100).toStoredMap();
+
+        await store.importRows([
+          {
+            ...base,
+            'kills': 4,
+            'edited_fields': encodeEditedFields({'kills'}),
+          },
+          {
+            ...base,
+            'damage': 900,
+            'edited_fields': encodeEditedFields({'damage'}),
+          },
+        ]);
+
+        final m = (await store.getAll('1')).single;
+        expect(m.editedFields, {'kills', 'damage'});
+        expect(m.kills, 4);
+        expect(m.damage, 900);
+      },
+    );
   });
 
   group('importBackupData', () {
@@ -562,39 +637,48 @@ void main() {
       expect(await store.snapshotCount('1'), 1);
     });
 
-    test('a failure in one half rolls back both — neither table keeps a '
-        'partial import', () async {
+    test('an unusable row is skipped and counted instead of failing the '
+        'whole restore', () async {
       final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
       addTearDown(store.close);
-      // Pre-existing data, untouched by the failed import below — proves
-      // the rollback doesn't wipe anything beyond what the import itself
-      // would have written.
       await store.upsertAll('1', [match('1', 0)]);
 
-      // A raw Map isn't a type sqflite can bind as a SQL argument — this
-      // throws when the batch commits, which is what should trigger the
-      // whole transaction to roll back.
-      final badMatchRow = {
+      // Each used to fail the batch (and the whole restore) over one bad
+      // row: a raw Map isn't bindable, a missing uid violates NOT NULL, and
+      // a row without timestamps isn't a match at all.
+      final unbindable = {
         ...match('1', 100).toStoredMap(),
         'rp_change': {'not': 'bindable'},
       };
+      final noUid = {...match('1', 200).toStoredMap(), 'uid': null};
+      final noTimes = Map<String, Object?>.from(match('1', 300).toStoredMap())
+        ..remove('start_ms');
+      final badSnapshot = {'uid': '1', 'ts_ms': 'yesterday', 'rp': 1};
 
-      await expectLater(
-        () => store.importBackupData(
-          matchRows: [badMatchRow],
-          snapshotRows: [
-            {'uid': '1', 'ts_ms': 500, 'rp': 1200, 'season_id': null},
-          ],
-        ),
-        throwsA(anything),
+      final skipped = await store.importBackupData(
+        matchRows: [unbindable, noUid, noTimes, match('1', 400).toStoredMap()],
+        snapshotRows: [
+          badSnapshot,
+          {'uid': '1', 'ts_ms': 500, 'rp': 1200, 'season_id': null},
+        ],
       );
 
-      // The failed match row never landed...
-      expect(await store.count('1'), 1); // only the pre-existing row
-      // ...and neither did the snapshot row that came after it in the
-      // same transaction, even though importSnapshotRows itself would
-      // have succeeded in isolation.
-      expect(await store.snapshotCount('1'), 0);
+      expect(skipped, 4);
+      // The good rows in the same file still restored.
+      expect(await store.allIds(), {'1_0', '1_400'});
+      expect(await store.snapshotCount('1'), 1);
+    });
+
+    test('a JSON boolean is stored as 1/0 rather than skipping the row', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+
+      final skipped = await store.importRows([
+        {...match('1', 100).toStoredMap(), 'is_party_full': true},
+      ]);
+
+      expect(skipped, 0);
+      expect((await store.getAll('1')).single.isPartyFull, isTrue);
     });
 
     test('a restorePrefs failure rolls back the row imports too', () async {
@@ -850,169 +934,6 @@ void main() {
     expect(summary.killsGames, 2);
     expect(summary.totalKills, 6);
     expect(summary.avgKills, 3.0, reason: 'divided by 2, not 3');
-  });
-
-  group('netRpInWindow', () {
-    // Window spanning matches at t=2000s onwards (each match ends 600s later).
-    final windowStart = DateTime.fromMillisecondsSinceEpoch(1500 * 1000);
-    final windowEnd = DateTime.fromMillisecondsSinceEpoch(9000 * 1000);
-
-    /// A match carrying an explicit running total, so the completeness chain
-    /// (`cum == prevCum + rpChange`) can be set up or deliberately broken.
-    RankedMatch chained(int startSecs, {required int rp, required int cum}) =>
-        RankedMatch.fromJson({
-          'uid': '1',
-          'name': 'Tester',
-          'legendPlayed': 'Axle',
-          'gameMode': 'BATTLE_ROYALE',
-          'gameLengthSecs': 600,
-          'gameStartTimestamp': startSecs,
-          'gameEndTimestamp': startSecs + 600,
-          'gameData': const [],
-          'BRScoreChange': rp,
-          'BRScore': cum,
-          'map': 'olympus_rotation',
-        });
-
-    Future<RankedHistoryStore> storeWith(List<RankedMatch> matches) async {
-      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-      addTearDown(store.close);
-      await store.upsertAll('1', matches);
-      return store;
-    }
-
-    test('sums RP over an unbroken chain', () async {
-      final store = await storeWith([
-        chained(100, rp: 50, cum: 1000), // anchor, before the window
-        chained(2000, rp: 205, cum: 1205),
-        chained(3000, rp: -13, cum: 1192),
-      ]);
-      expect(
-        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1192),
-        192,
-      );
-    });
-
-    test('counts only RP earned after a rank reset', () async {
-      final store = await storeWith([
-        chained(100, rp: 50, cum: 12085), // anchor: end of the previous split
-        chained(2000, rp: 0, cum: 12085),
-        chained(2500, rp: 0, cum: 4420), // ← reset
-        chained(3000, rp: 205, cum: 4625),
-        chained(3500, rp: -13, cum: 4612),
-      ]);
-      expect(
-        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 4612),
-        192,
-      );
-    });
-
-    test(
-      'returns null when history does not reach back to the start',
-      () async {
-        final store = await storeWith([chained(2000, rp: 205, cum: 1205)]);
-        expect(
-          await store.netRpInWindow(
-            '1',
-            windowStart,
-            windowEnd,
-            currentRp: 1205,
-          ),
-          isNull,
-        );
-      },
-    );
-
-    test('returns null when the chain is broken mid-window', () async {
-      final store = await storeWith([
-        chained(100, rp: 50, cum: 1000),
-        chained(2000, rp: 205, cum: 1205),
-        // A gap: the running total jumped by more than this row's rp_change.
-        chained(3000, rp: 20, cum: 1600),
-      ]);
-      expect(
-        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1600),
-        isNull,
-      );
-    });
-
-    test('returns null when the newest row is behind the live RP', () async {
-      final store = await storeWith([
-        chained(100, rp: 50, cum: 6000),
-        chained(2000, rp: 315, cum: 6315),
-      ]);
-      expect(
-        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 6758),
-        isNull,
-      );
-    });
-
-    test('returns null for a uid with no history at all', () async {
-      final store = await storeWith([chained(100, rp: 50, cum: 1000)]);
-      expect(
-        await store.netRpInWindow(
-          'nobody',
-          windowStart,
-          windowEnd,
-          currentRp: 1000,
-        ),
-        isNull,
-      );
-    });
-
-    test('an empty window with an intact chain is a provable zero', () async {
-      // Current RP still equals the anchor's total - nothing was played, so
-      // this is a provable 0, not "can't determine".
-      final store = await storeWith([chained(100, rp: 50, cum: 1000)]);
-      expect(
-        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1000),
-        0,
-      );
-    });
-
-    test(
-      'an empty window still returns null when RP has moved since',
-      () async {
-        // Same shape, but current RP has drifted from the anchor - so matches
-        // were played that local history never saw. The window is not covered
-        // and the answer is genuinely unknown.
-        final store = await storeWith([chained(100, rp: 50, cum: 1000)]);
-        expect(
-          await store.netRpInWindow(
-            '1',
-            windowStart,
-            windowEnd,
-            currentRp: 1240,
-          ),
-          isNull,
-        );
-      },
-    );
-
-    test('counts pubs as chain links without adding RP', () async {
-      final store = await storeWith([
-        chained(100, rp: 50, cum: 1000),
-        chained(2000, rp: 205, cum: 1205),
-        chained(2500, rp: 0, cum: 1205), // pubs — no RP movement
-        chained(3000, rp: -13, cum: 1192),
-      ]);
-      expect(
-        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1192),
-        192,
-      );
-    });
-
-    test('is scoped to the requested uid', () async {
-      final store = await storeWith([
-        chained(100, rp: 50, cum: 1000),
-        chained(2000, rp: 205, cum: 1205),
-      ]);
-      await store.upsertAll('2', [match('2', 2000, rp: 999)]);
-      expect(
-        await store.netRpInWindow('1', windowStart, windowEnd, currentRp: 1205),
-        205,
-      );
-    });
   });
 
   group('SQL aggregation parity with the Dart aggregates', () {
@@ -1392,7 +1313,7 @@ void main() {
           .close(); // flush schema + rows to the file for a 2nd connection
 
       expect(
-        await planFor("season_id IS NULL OR season_id = '$kUnknownSeasonId'"),
+        await planFor("season_id IS NULL OR season_id NOT GLOB '*s[0-9]*_s[0-9]*'"),
         contains('idx_needs_season_id'),
       );
     });
@@ -1528,6 +1449,256 @@ void main() {
       // The memoized future is cleared on completion, so the fast path has to
       // be the _db field - not a permanently-retained future.
       expect(store.openCount, 1);
+    });
+  });
+
+  group('personalBestGamesFor tie-break', () {
+    test('a tied best game goes to the most recent match, matching the Dart '
+        'path, whatever order the rows were written in', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      // Identical stats; only the times differ. Written oldest-first for one
+      // player and newest-first for the other, so neither SQLite's rowid nor
+      // index order can decide the tie by accident.
+      await store.upsertAll('1', [match('1', 100), match('1', 5000)]);
+      await store.upsertAll('2', [match('2', 5000), match('2', 100)]);
+
+      for (final uid in ['1', '2']) {
+        final sql = await store.personalBestGamesFor(uid);
+        expect(sql.bestRpGame?.dedupKey, '${uid}_5000');
+        expect(sql.bestKillsGame?.dedupKey, '${uid}_5000');
+        expect(sql.bestDamageGame?.dedupKey, '${uid}_5000');
+
+        final dart = personalRecords(rankedOnly(await store.getAll(uid)));
+        expect(dart.bestRpGame?.dedupKey, sql.bestRpGame?.dedupKey);
+        expect(dart.bestKillsGame?.dedupKey, sql.bestKillsGame?.dedupKey);
+        expect(dart.bestDamageGame?.dedupKey, sql.bestDamageGame?.dedupKey);
+      }
+    });
+  });
+
+  group('NULL legend rows', () {
+    test('the Lifetime "Unknown" legend row drills down to every match it '
+        'counted', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      // Only reachable through a backup row missing the column; a sync always
+      // writes a legend.
+      await store.importRows([
+        {...match('1', 100).toStoredMap(), 'legend': null},
+      ]);
+
+      final unknown = (await store.legendBreakdownsFor('1')).single;
+      expect(unknown.legend, 'Unknown');
+      expect(unknown.games, 1);
+
+      final drillDown = await store.matchesForLegend('1', unknown.legend);
+      expect(drillDown.length, unknown.games);
+    });
+  });
+  group('restoring an older or partial backup row', () {
+    test('a value the backup lacks keeps the stored one instead of being '
+        'blanked', () async {
+      // An export from before kills/damage existed has no such keys; a
+      // hand-trimmed one may lack others. Neither means "clear this".
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100)]);
+
+      final oldExportRow = rowFor(match('1', 100), v2Columns)
+        ..['player_name'] = null;
+      final skipped = await store.importRows([oldExportRow]);
+
+      expect(skipped, 0);
+      final m = (await store.getAll('1')).single;
+      expect(m.kills, 3);
+      expect(m.damage, 1000);
+      expect(m.playerName, 'Tester');
+    });
+
+    test('a new row from an export without kills/damage derives them from '
+        'its trackers', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+
+      await store.importRows([rowFor(match('1', 100), v2Columns)]);
+
+      final m = (await store.getAll('1')).single;
+      expect(m.kills, 3);
+      expect(m.damage, 1000);
+    });
+
+    test('an explicit null for an unflagged stat still keeps the stored '
+        'value, but a flagged one is a deliberate correction', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100), match('1', 900)]);
+
+      await store.importRows([
+        {...match('1', 100).toStoredMap(), 'kills': null},
+        {
+          ...match('1', 900).toStoredMap(),
+          'kills': null,
+          'edited_fields': encodeEditedFields({'kills'}),
+        },
+      ]);
+
+      final byId = {for (final m in await store.getAll('1')) m.dedupKey: m};
+      expect(byId['1_100']!.kills, 3);
+      expect(byId['1_900']!.kills, isNull);
+      expect(byId['1_900']!.editedFields, {'kills'});
+    });
+
+    test('a sync still overwrites from upstream, NULLs included', () async {
+      // The restore-only rules above must not leak into the sync path.
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100)]);
+
+      await store.upsertAll('1', [untracked('1', 100)]);
+
+      final m = (await store.getAll('1')).single;
+      expect(m.kills, isNull);
+      expect(m.damage, isNull);
+    });
+  });
+
+  group('placeholder season ids', () {
+    test('a row filed under a placeholder id is re-classified by the '
+        'backfill', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.importRows([
+        {...match('1', 100).toStoredMap(), 'season_id': '__other__'},
+      ]);
+
+      await store.backfillSeasonIds({
+        's1': season('br_ranked_s1_s1', 0, 1000),
+      });
+
+      expect((await store.getAll('1')).single.seasonId, 'br_ranked_s1_s1');
+    });
+
+    test('a sync upgrades a placeholder id but never adopts one', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final real = {'s1': season('br_ranked_s1_s1', 0, 1000)};
+      final placeholder = {'x': season('__other__', 0, 1000)};
+
+      await store.upsertAll('1', [match('1', 100)], seasons: placeholder);
+      expect(
+        (await store.getAll('1')).single.seasonId,
+        '__other__',
+        reason: 'a fresh row stores whatever it was given...',
+      );
+      await store.upsertAll('1', [match('1', 100)], seasons: real);
+      expect(
+        (await store.getAll('1')).single.seasonId,
+        'br_ranked_s1_s1',
+        reason: '...but a placeholder never blocks the real split',
+      );
+      await store.upsertAll('1', [match('1', 100)], seasons: placeholder);
+      expect(
+        (await store.getAll('1')).single.seasonId,
+        'br_ranked_s1_s1',
+        reason: 'and never replaces it',
+      );
+    });
+
+    test('upgrading a v8 database rebuilds the backfill index for the wider '
+        'predicate', () async {
+      final dir = await Directory.systemTemp.createTemp('rhs_mig9');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = p.join(dir.path, 'ranked_history.db');
+
+      // A v8 database: the old, narrower partial index.
+      final v8 = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 8,
+          onCreate: (db, _) async {
+            await db.execute('''
+            CREATE TABLE ranked_matches (
+              id TEXT PRIMARY KEY, uid TEXT NOT NULL, player_name TEXT,
+              legend TEXT, game_mode TEXT, map_key TEXT, rp_change INTEGER,
+              cumulative_rp INTEGER, rank_img TEXT, length_secs INTEGER,
+              start_ms INTEGER, end_ms INTEGER, is_party_full INTEGER,
+              trackers TEXT, season_id TEXT, kills INTEGER, damage INTEGER,
+              edited_fields TEXT
+            )
+          ''');
+            await db.execute(
+              'CREATE INDEX idx_needs_season_id ON ranked_matches (id) '
+              "WHERE season_id IS NULL OR season_id = '$kUnknownSeasonId'",
+            );
+            await db.execute('''
+            CREATE TABLE stat_snapshots (
+              uid TEXT NOT NULL, ts_ms INTEGER NOT NULL, rp INTEGER NOT NULL,
+              season_id TEXT, PRIMARY KEY (uid, ts_ms)
+            )
+          ''');
+          },
+        ),
+      );
+      await v8.insert('ranked_matches', {
+        ...match('1', 100).toStoredMap(),
+        'season_id': '__other__',
+      });
+      await v8.close();
+
+      final store = RankedHistoryStore(overridePath: path);
+      await store.backfillSeasonIds({
+        's1': season('br_ranked_s1_s1', 0, 1000),
+      });
+      expect((await store.getAll('1')).single.seasonId, 'br_ranked_s1_s1');
+      await store.close();
+
+      final raw = await databaseFactory.openDatabase(path);
+      addTearDown(raw.close);
+      final index = await raw.rawQuery(
+        "SELECT sql FROM sqlite_master WHERE name = 'idx_needs_season_id'",
+      );
+      expect(index.single['sql'] as String, contains('NOT GLOB'));
+    });
+  });
+
+  group('writes from before a clear', () {
+    test('upsertAll with a stale epoch writes nothing', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final epoch = store.dataEpoch;
+
+      await store.deleteAll();
+      await store.upsertAll('1', [match('1', 100)], onlyIfEpoch: epoch);
+
+      expect(await store.count('1'), 0);
+    });
+
+    test('appendSnapshotFor with a stale epoch writes nothing', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final epoch = store.dataEpoch;
+
+      await store.deleteAll();
+      await store.appendSnapshotFor(
+        '1',
+        StatSnapshot(timestamp: DateTime(2026, 9, 1), rp: 1200),
+        onlyIfEpoch: epoch,
+      );
+
+      expect(await store.snapshotCount('1'), 0);
+    });
+
+    test('a current epoch writes normally', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.deleteAll();
+
+      await store.upsertAll('1', [
+        match('1', 100),
+      ], onlyIfEpoch: store.dataEpoch);
+
+      expect(await store.count('1'), 1);
     });
   });
 }

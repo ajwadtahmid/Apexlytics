@@ -435,7 +435,7 @@ void main() {
 /// touches a real database; safe to construct without sqflite FFI setup.
 class _CommitFailsAfterPrefsRestore extends RankedHistoryStore {
   @override
-  Future<void> importBackupData({
+  Future<int> importBackupData({
     required List<dynamic> matchRows,
     required List<dynamic> snapshotRows,
     Future<void> Function()? restorePrefs,

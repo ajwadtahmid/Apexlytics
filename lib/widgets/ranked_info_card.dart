@@ -82,6 +82,10 @@ class RankedInfoCard extends ConsumerWidget {
                 child: Image.asset(
                   rankAssetPathByTier(isPred, idx),
                   fit: BoxFit.contain,
+                  cacheWidth:
+                      (AppTheme.rankIconSize *
+                              MediaQuery.devicePixelRatioOf(context))
+                          .ceil(),
                   errorBuilder: (ctx, err, trace) => Center(
                     child: Text(
                       isPred ? 'PR' : (current.division ?? 'M'),

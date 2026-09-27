@@ -14,6 +14,7 @@ import '../../utils/theme.dart';
 import '../../widgets/error_card.dart';
 import '../../widgets/setting_row.dart';
 import 'widgets/map_mode_list.dart';
+import 'widgets/notification_health_banners.dart';
 
 void showMapAlertsSheet(BuildContext context) {
   showModalBottomSheet(
@@ -457,6 +458,19 @@ class _MapAlertsSheetContentState
             SettingsCard(
               child: Column(
                 children: [
+                  // Here too, not just the Settings card: this is where
+                  // alerts get switched on.
+                  NotificationHealthBanners(
+                    alertsActive:
+                        (notifyRanked && rankedMinutesBefore > 0) ||
+                        (notifyPubs && pubsMinutesBefore > 0) ||
+                        (notifyWildcard && wildcardMinutesBefore > 0) ||
+                        (notifyMixtape && mixtapeMinutesBefore > 0),
+                    separator: const Divider(
+                      color: AppTheme.surface2,
+                      height: 24,
+                    ),
+                  ),
                   // ── Ranked ─────────────────────────────────────────
                   MapModeTile(
                     icon: Icons.leaderboard_outlined,

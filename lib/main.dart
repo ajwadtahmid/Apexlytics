@@ -18,6 +18,7 @@ import 'services/api_service.dart';
 import 'services/background_service.dart';
 import 'services/notification_service.dart';
 import 'utils/app_logger.dart';
+import 'utils/crash_report_scrubber.dart';
 import 'utils/storage/api_cache_store.dart';
 import 'utils/theme.dart';
 
@@ -86,6 +87,12 @@ void main() async {
       options.maxBreadcrumbs = 50;
       // sentry_dio is not used, so Dio requests are not auto-instrumented —
       // no player names or UIDs can leak through HTTP breadcrumbs.
+      //
+      // Error text is the other way in: some exceptions quote the data they
+      // failed on (a JSON excerpt, SQL arguments). Scrubbed centrally here
+      // so it covers every error reported, not just known log sites.
+      options.beforeSend = scrubSentryEvent;
+      options.beforeBreadcrumb = scrubSentryBreadcrumb;
     },
     appRunner: () {
       // Chain our logger after Sentry sets its own FlutterError and

@@ -15,7 +15,9 @@ Map<String, SeasonMeta> _parseSeasons(String? raw) {
     final result = <String, SeasonMeta>{};
     for (final item in decoded.whereType<Map<String, dynamic>>()) {
       final meta = SeasonMeta.fromJson(item);
-      if (meta == null) continue;
+      // A placeholder id stored before [upsertSeason] started refusing them
+      // is dropped here too, so it stops classifying matches.
+      if (meta == null || !SeasonMeta.isSplitId(meta.id)) continue;
       result[meta.id] = meta;
     }
     return result;
@@ -35,7 +37,11 @@ Map<String, SeasonMeta> loadAllSeasonsSync(SharedPreferences prefs) =>
 /// Returns whether it actually wrote a new/changed entry, so callers can
 /// invalidate anything caching the season list (e.g. the ranked seasons
 /// provider).
+///
+/// A placeholder season (see [SeasonMeta.isSplitId]) is never stored: its
+/// window would compete with the real split's when matches are classified.
 Future<bool> upsertSeason(SeasonMeta season, SharedPreferences prefs) async {
+  if (!SeasonMeta.isSplitId(season.id)) return false;
   final existing = loadAllSeasonsSync(prefs);
   final prev = existing[season.id];
   if (prev != null && prev.start == season.start && prev.end == season.end) {

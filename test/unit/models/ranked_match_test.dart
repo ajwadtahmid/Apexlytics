@@ -162,6 +162,43 @@ void main() {
       expect(restored.legend, 'Axle'); // the rest of the row still hydrates
     });
 
+    test('a stored row writes its trackers blob back exactly as read', () {
+      // The blob is kept raw and only decoded if something reads trackers,
+      // so re-storing a hydrated row (e.g. after an edit) must not rewrite it.
+      final row = RankedMatch.fromJson(brMatch()).toStoredMap();
+      const blob = '[{"key":"kills","name":"BR Kills","value":3}]';
+      row['trackers'] = blob;
+
+      final restored = RankedMatch.fromStoredMap(row);
+      expect(restored.toStoredMap()['trackers'], blob);
+      expect(restored.withEdits({'kills': 5}).toStoredMap()['trackers'], blob);
+      expect(restored.withEditsCleared().toStoredMap()['trackers'], blob);
+    });
+
+    test('a stored row still decodes its trackers when they are read', () {
+      final restored = RankedMatch.fromStoredMap(
+        RankedMatch.fromJson(brMatch()).toStoredMap(),
+      );
+      expect(restored.trackerValue('Tactical: Nitro Gates Used'), isNotNull);
+      // Reading twice returns the same decoded list, not a fresh decode.
+      expect(identical(restored.trackers, restored.trackers), isTrue);
+      // And a copy made for an edit still carries them.
+      expect(
+        restored.withEdits({'kills': 5}).trackers.length,
+        restored.trackers.length,
+      );
+    });
+
+    test('a corrupt trackers blob is preserved rather than overwritten', () {
+      // Decoding degrades to no trackers, but writing the row back must not
+      // replace the original blob with "[]" — that would lose it for good.
+      final row = RankedMatch.fromJson(brMatch()).toStoredMap();
+      row['trackers'] = '{not valid json';
+      final restored = RankedMatch.fromStoredMap(row);
+      expect(restored.trackers, isEmpty);
+      expect(restored.toStoredMap()['trackers'], '{not valid json');
+    });
+
     test('an absent tracker round-trips as null, not zero', () {
       final json = brMatch()..['gameData'] = const [];
       final row = RankedMatch.fromJson(json).toStoredMap();

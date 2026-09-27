@@ -152,7 +152,11 @@ class _StatsViewState extends ConsumerState<_StatsView> {
       );
     }
 
-    ref.invalidate(rankedSyncProvider(uid));
+    // Inside the backoff window the sync just replays its last outcome, but
+    // invalidating it still re-runs and re-aggregates the whole split.
+    if (rankedSyncDue(ref.read(sharedPreferencesProvider), uid)) {
+      ref.invalidate(rankedSyncProvider(uid));
+    }
     futures.add(
       ref.read(rankedSyncProvider(uid).future).then((_) {}).catchError((
         Object e,
@@ -381,6 +385,21 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
     super.initState();
     _initSnapshots();
     _loadAndAppend();
+    snapshotCacheResets.addListener(_onSnapshotCacheReset);
+  }
+
+  @override
+  void dispose() {
+    snapshotCacheResets.removeListener(_onSnapshotCacheReset);
+    super.dispose();
+  }
+
+  /// The snapshot store changed wholesale (e.g. a backup import) with no
+  /// change to anything [didUpdateWidget] watches, so reload here instead —
+  /// keeps the old graph up until the new one is read, rather than flashing
+  /// empty on a re-init.
+  void _onSnapshotCacheReset() {
+    if (mounted) _loadAndAppend();
   }
 
   @override

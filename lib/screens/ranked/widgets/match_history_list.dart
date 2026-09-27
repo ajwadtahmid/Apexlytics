@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, timeAgo, formatDuration;
+    show calendarDaysBetween, formatNumber, timeAgo, formatDuration;
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
 import 'match_edit_sheet.dart';
@@ -168,9 +168,7 @@ class _MatchHistoryListState extends State<MatchHistoryList> {
 final _dayFmt = DateFormat('EEE, MMM d');
 
 String _dayLabel(DateTime day) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final diff = today.difference(day).inDays;
+  final diff = calendarDaysBetween(DateTime.now(), day);
   if (diff == 0) return 'Today';
   if (diff == 1) return 'Yesterday';
   return _dayFmt.format(day);

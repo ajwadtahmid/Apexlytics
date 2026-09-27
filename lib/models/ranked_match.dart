@@ -122,7 +122,22 @@ class RankedMatch {
   final DateTime startTime; // gameStartTimestamp (UTC)
   final DateTime endTime; // gameEndTimestamp (UTC)
   final bool isPartyFull;
-  final List<MatchTracker> trackers;
+
+  /// The match's `gameData` trackers. Only the detail sheet reads them, so a
+  /// stored row keeps the raw blob and decodes lazily instead of every row
+  /// paying `jsonDecode` up front.
+  List<MatchTracker> get trackers =>
+      _trackers ?? (_decodedTrackers[this] ??= _decodeTrackers(_trackersJson));
+
+  /// Parsed trackers (the API path), or null for a stored match — see
+  /// [_trackersJson].
+  final List<MatchTracker>? _trackers;
+
+  /// The `trackers` column exactly as stored, decoded lazily by [trackers].
+  final String? _trackersJson;
+
+  /// Memoizes [trackers] per stored match without giving up `const`.
+  static final _decodedTrackers = Expando<List<MatchTracker>>();
 
   /// Kills this match, or null when upstream reported no `"BR Kills"` tracker.
   /// Null means "not reported" and is excluded from kill averages; a real 0 is
@@ -156,12 +171,43 @@ class RankedMatch {
     required this.startTime,
     required this.endTime,
     required this.isPartyFull,
-    required this.trackers,
+    required List<MatchTracker> trackers,
     this.kills,
     this.damage,
     this.seasonId,
     this.editedFields = const {},
-  });
+    // The fields are private but `trackers:` must stay a public named
+    // parameter, which an initializing formal can't provide.
+    // ignore: prefer_initializing_formals
+  }) : _trackers = trackers,
+       _trackersJson = null;
+
+  /// Shared by [fromStoredMap] and the copy methods below, so copying a
+  /// stored match (e.g. to apply an edit) doesn't force its blob to decode.
+  const RankedMatch._({
+    required this.uid,
+    required this.playerName,
+    required this.legend,
+    required this.gameMode,
+    required this.mapKey,
+    required this.rpChange,
+    required this.cumulativeRp,
+    required this.rankImg,
+    required this.lengthSecs,
+    required this.startTime,
+    required this.endTime,
+    required this.isPartyFull,
+    required List<MatchTracker>? trackers,
+    required String? trackersJson,
+    this.kills,
+    this.damage,
+    this.seasonId,
+    this.editedFields = const {},
+    // Same reason as the public constructor.
+    // ignore: prefer_initializing_formals
+  }) : _trackers = trackers,
+       // ignore: prefer_initializing_formals
+       _trackersJson = trackersJson;
 
   /// Whether this is a Battle Royale match of any kind (ranked or pubs).
   bool get isBattleRoyale => gameMode == 'BATTLE_ROYALE';
@@ -197,7 +243,7 @@ class RankedMatch {
   /// like an `int`, since it only tolerates an already-null one. Unlike
   /// `kills`/`damage` below, neither field is nullable here, so a bad
   /// `changes` entry means "leave this field alone," not "clear it."
-  RankedMatch withEdits(Map<String, Object?> changes) => RankedMatch(
+  RankedMatch withEdits(Map<String, Object?> changes) => RankedMatch._(
     uid: uid,
     playerName: playerName,
     legend: changes.containsKey('legend') && changes['legend'] is String
@@ -216,7 +262,8 @@ class RankedMatch {
     startTime: startTime,
     endTime: endTime,
     isPartyFull: isPartyFull,
-    trackers: trackers,
+    trackers: _trackers,
+    trackersJson: _trackersJson,
     kills: changes.containsKey('kills') ? changes['kills'] as int? : kills,
     damage: changes.containsKey('damage') ? changes['damage'] as int? : damage,
     seasonId: seasonId,
@@ -234,7 +281,7 @@ class RankedMatch {
     } else {
       flags.remove(field);
     }
-    return RankedMatch(
+    return RankedMatch._(
       uid: uid,
       playerName: playerName,
       legend: legend,
@@ -247,7 +294,8 @@ class RankedMatch {
       startTime: startTime,
       endTime: endTime,
       isPartyFull: isPartyFull,
-      trackers: trackers,
+      trackers: _trackers,
+      trackersJson: _trackersJson,
       kills: kills,
       damage: damage,
       seasonId: seasonId,
@@ -270,7 +318,7 @@ class RankedMatch {
         ? d
         : null;
     if (validKills == k && validDamage == d) return this;
-    return RankedMatch(
+    return RankedMatch._(
       uid: uid,
       playerName: playerName,
       legend: legend,
@@ -283,7 +331,8 @@ class RankedMatch {
       startTime: startTime,
       endTime: endTime,
       isPartyFull: isPartyFull,
-      trackers: trackers,
+      trackers: _trackers,
+      trackersJson: _trackersJson,
       kills: validKills,
       damage: validDamage,
       seasonId: seasonId,
@@ -395,43 +444,42 @@ class RankedMatch {
     'start_ms': startTime.millisecondsSinceEpoch,
     'end_ms': endTime.millisecondsSinceEpoch,
     'is_party_full': isPartyFull ? 1 : 0,
-    'trackers': jsonEncode([
-      for (final t in trackers)
-        {'key': t.key, 'name': t.name, 'value': t.value},
-    ]),
+    // Written back exactly as read for a stored match — no re-encode.
+    'trackers':
+        _trackersJson ??
+        jsonEncode([
+          for (final t in trackers)
+            {'key': t.key, 'name': t.name, 'value': t.value},
+        ]),
     'kills': kills,
     'damage': damage,
     'edited_fields': encodeEditedFields(editedFields),
   };
 
-  factory RankedMatch.fromStoredMap(Map<String, Object?> m) {
+  /// Decodes a stored `trackers` blob. A malformed one (hand-edited or a
+  /// foreign backup) degrades to no trackers rather than throwing — caught
+  /// broadly since a wrongly-typed value (e.g. `"value": "5"`) throws a
+  /// TypeError, not a FormatException.
+  static List<MatchTracker> _decodeTrackers(String? raw) {
     final trackers = <MatchTracker>[];
-    final raw = m['trackers'];
-    if (raw is String && raw.isNotEmpty) {
-      // A malformed blob (e.g. a hand-edited or foreign backup imported
-      // verbatim) must not take down every read that hydrates this row — a bad
-      // trackers value degrades to no trackers, mirroring how listFromJson
-      // skips malformed rows rather than throwing.
-      //
-      // Catches broadly, not just FormatException: a structurally valid but
-      // wrongly-typed tracker (e.g. `"value": "5"` instead of a number) makes
-      // MatchTracker.fromJson's `as num?` cast throw a TypeError, not a
-      // FormatException — the same reasoning rp_snapshot_storage's
-      // _parseSnapshots documents for its own broad catch.
-      try {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          for (final e in decoded) {
-            if (e is Map<String, dynamic>) {
-              trackers.add(MatchTracker.fromJson(e));
-            }
+    if (raw == null || raw.isEmpty) return trackers;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        for (final e in decoded) {
+          if (e is Map<String, dynamic>) {
+            trackers.add(MatchTracker.fromJson(e));
           }
         }
-      } catch (_) {
-        // Leave trackers empty.
       }
+    } catch (_) {
+      return const [];
     }
-    return RankedMatch(
+    return trackers;
+  }
+
+  factory RankedMatch.fromStoredMap(Map<String, Object?> m) {
+    return RankedMatch._(
       uid: m['uid'] as String? ?? '',
       playerName: m['player_name'] as String? ?? '',
       legend: m['legend'] as String? ?? 'Unknown',
@@ -450,7 +498,8 @@ class RankedMatch {
         isUtc: true,
       ),
       isPartyFull: (m['is_party_full'] as num?)?.toInt() == 1,
-      trackers: trackers,
+      trackers: null,
+      trackersJson: m['trackers'] is String ? m['trackers'] as String : null,
       // The stored columns win over the trackers blob: they carry any hand
       // correction, and the blob stays as upstream sent it.
       kills: (m['kills'] as num?)?.toInt(),

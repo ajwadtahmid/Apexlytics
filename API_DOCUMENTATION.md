@@ -303,7 +303,7 @@ A thin Express proxy that keeps the API key server-side and adds caching, rate l
 | `/maprotation` | 30 seconds |
 | `/servers` | 5 minutes |
 | `/predator` | 15 minutes |
-| `/games` | 6 hours (`GAMES_COOLDOWN_MS`) — same value as the per-UID cooldown, so the cached body and the "we have a fresh answer" flag expire together |
+| `/games` | 3 hours (`GAMES_COOLDOWN_MS`) — same value as the per-UID cooldown, so the cached body and the "we have a fresh answer" flag expire together, and the app's own 3 h re-sync interval |
 
 ### Proxy Routes
 
@@ -333,7 +333,7 @@ Tracking is **client-driven**: upstream only accumulates match data for a player
 
 | Status | Meaning |
 | --- | --- |
-| `200` | Match array, exactly as upstream returns it. From upstream or the 6 h cache |
+| `200` | Match array, exactly as upstream returns it. From upstream or the 3 h cache |
 | `202` | No fresh data. Body is `{status, uid, position?, reason?, retryAfterSeconds, windowResetsAt}` with `status` of `queued` or `not_tracked`. `Retry-After` is also set as a header |
 | `400` | `uid` missing or not 10–20 digits, or an unknown `mode` |
 
@@ -365,7 +365,7 @@ All `/games` budget knobs are optional and defaulted — nothing breaks if they 
 | --- | --- | --- |
 | `GAMES_MAX_UNIQUE_PER_HOUR` | `5` | Raise only if the upstream cap is raised |
 | `PRIORITY_RESERVED_SLOTS` | `0` | Slots held back from public callers. `3` = strict (old app builds can never be queued), `0` = fully opportunistic |
-| `GAMES_COOLDOWN_MS` | `21600000` (6 h) | Unified per-UID cooldown and response cache |
+| `GAMES_COOLDOWN_MS` | `10800000` (3 h) | Unified per-UID cooldown and response cache. Keep equal to the app's `ApiConstants.gamesSyncCooldown` |
 | `GAMES_PRIORITY_COOLDOWN_MS` | `300000` (5 min) | The same, for priority UIDs. Short because a repeat fetch for a UID already counted in the hour costs nothing against the uniques cap |
 | `GAMES_ACTIVE_WINDOW_MS` | `600000` (10 min) | Only askers seen this recently compete for a slot |
 | `GAMES_RETRY_DEFAULT_S` | `300` | `Retry-After` hint when not queued on capacity |

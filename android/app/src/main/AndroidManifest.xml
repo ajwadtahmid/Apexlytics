@@ -8,11 +8,11 @@
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false">
         <!-- Explicitly off rather than left at the true default: Android Auto
-             Backup/device-transfer works at whole-SharedPreferences-file
-             granularity, so it can't honor the same per-key exclusions
-             (api_cache: entries) that backup_service.dart's manual export
-             already applies correctly. The app's own export/import feature
-             is the supported backup path. -->
+             Backup/device-transfer works at whole-file granularity, so it
+             can't honor the per-key allowlist backup_service.dart's manual
+             export applies (e.g. device-local first-run flags it leaves
+             out). The app's own export/import feature is the supported
+             backup path. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

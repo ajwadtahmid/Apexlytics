@@ -25,6 +25,16 @@ String timeAgo(DateTime timestamp) {
   return '${elapsed.inDays}d ago';
 }
 
+/// Whole calendar days from [earlier]'s date to [later]'s date, ignoring
+/// time of day. Compares as UTC dates rather than subtracting local
+/// midnights directly, which is off by one on a DST change (a 23-hour day
+/// truncates to 0).
+int calendarDaysBetween(DateTime later, DateTime earlier) => DateTime.utc(
+  later.year,
+  later.month,
+  later.day,
+).difference(DateTime.utc(earlier.year, earlier.month, earlier.day)).inDays;
+
 /// Capitalizes the first character of a string (e.g., 'apex' → 'Apex').
 String capitalize(String s) {
   if (s.isEmpty) return s;

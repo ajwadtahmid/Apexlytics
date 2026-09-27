@@ -30,14 +30,22 @@ class RankedHistoryStore {
   /// lifecycle, backup envelope and per-UID scoping.
   static const snapshotTable = 'stat_snapshots';
 
-  static const _version = 8;
+  static const _version = 9;
 
-  // Scope of the lazy season backfill — the rows it still has work to do on.
+  /// SQL `GLOB` shape of a real split id (`br_ranked_s29_s1`) — the SQL side
+  /// of [SeasonMeta.isSplitId]. NULL, [kUnknownSeasonId], and any placeholder
+  /// id upstream sends (e.g. `__other__`) all fail to match.
+  static const _splitIdGlob = '*s[0-9]*_s[0-9]*';
+
+  // Scope of the lazy season backfill: every row not yet under a real split,
+  // placeholder ids included, so one can still be re-classified once its
+  // real split's window is known.
+  //
   // Used verbatim by both a partial index and the backfill query, which must
   // stay byte-identical or SQLite won't apply the index and the backfill falls
   // back to a full-table scan. One constant, so the two can't drift.
   static const _needsSeasonId =
-      "season_id IS NULL OR season_id = '$kUnknownSeasonId'";
+      "season_id IS NULL OR season_id NOT GLOB '$_splitIdGlob'";
 
   final String? _overridePath;
   Database? _db;
@@ -177,6 +185,13 @@ class RankedHistoryStore {
         // via `migrateSnapshotsFromPrefs`, which needs SharedPreferences.
         if (oldVersion < 8) {
           await _createSnapshotTable(db);
+        }
+        // v8 → v9: _needsSeasonId widened to include placeholder ids, so a
+        // row filed under one gets re-classified. Its partial index must
+        // match byte for byte, so it's rebuilt; the next backfill does the rest.
+        if (oldVersion < 9) {
+          await db.execute('DROP INDEX IF EXISTS idx_needs_season_id');
+          await _createSeasonBackfillIndex(db);
         }
       },
     );
@@ -345,40 +360,53 @@ class RankedHistoryStore {
     return p.join(dir.path, _dbName);
   }
 
-  /// `col = CASE WHEN <col is flagged edited> THEN col ELSE excluded.col END`
-  /// for every user-editable column. The comma-delimited `edited_fields` form
-  /// lets membership be a plain `instr` test.
-  static String get _editAwareAssignments => [
-    for (final f in kEditableMatchFields)
-      "$f = CASE WHEN instr(COALESCE(edited_fields, ''), ',$f,') > 0 "
-          'THEN $f ELSE excluded.$f END',
-  ].join(',\n          ');
+  /// Columns a conflicting row takes from the incoming one, with no edit
+  /// protection to consult.
+  static const _overwrittenColumns = [
+    'uid',
+    'player_name',
+    'game_mode',
+    'cumulative_rp',
+    'rank_img',
+    'start_ms',
+    'end_ms',
+    'is_party_full',
+    'trackers',
+  ];
 
-  /// Shared `ON CONFLICT(id) DO UPDATE SET` body for [upsertAll] (a sync) and
-  /// [importRows] (a backup restore) — both must resolve a conflicting id the
-  /// same way, or a hand correction could survive one path and be silently
-  /// reverted by the other. Derived once so they can't drift, the same
-  /// reasoning [_editAwareAssignments]/[_needsSeasonId] already follow here.
-  static String get _conflictUpdateSet =>
-      '''
-          uid = excluded.uid,
-          player_name = excluded.player_name,
-          game_mode = excluded.game_mode,
-          cumulative_rp = excluded.cumulative_rp,
-          rank_img = excluded.rank_img,
-          start_ms = excluded.start_ms,
-          end_ms = excluded.end_ms,
-          is_party_full = excluded.is_party_full,
-          trackers = excluded.trackers,
-          $_editAwareAssignments,
-          season_id = CASE
-            WHEN excluded.season_id IS NOT NULL
-                 AND excluded.season_id != '$kUnknownSeasonId'
-                 AND (season_id IS NULL OR season_id = '$kUnknownSeasonId')
-            THEN excluded.season_id
-            ELSE season_id
-          END
-      ''';
+  /// Whether [column] is flagged in [editedFields] (`edited_fields` or
+  /// `excluded.edited_fields`). The comma-delimited form lets membership be a
+  /// plain `instr` test.
+  static String _flagged(String editedFields, String column) =>
+      "instr(COALESCE($editedFields, ''), ',$column,') > 0";
+
+  /// `ON CONFLICT(id) DO UPDATE SET` body for [upsertAll] (a sync, [restore]
+  /// false) and [importRows] (a backup restore, [restore] true) — built from
+  /// one column list and one edit rule so the two can only differ as follows.
+  ///
+  /// Shared: a hand-edited column keeps its value; `season_id` only upgrades
+  /// (adopts the incoming id once, if it's a real split, then never again).
+  ///
+  /// A sync overwrites everything else from upstream and never writes
+  /// `edited_fields`, so it can't clear the flags. A restore, since a backup
+  /// row can be older or less complete than the one it lands on: keeps the
+  /// stored value where the backup has NULL (missing, not "clear it"); takes
+  /// the backup's value, NULL included, for a column *it* flagged edited; and
+  /// writes `edited_fields` as the union [importRows] pre-computes.
+  static String _conflictUpdateSet({required bool restore}) {
+    String incoming(String col) =>
+        restore ? 'COALESCE(excluded.$col, $col)' : 'excluded.$col';
+    return [
+      for (final col in _overwrittenColumns) '$col = ${incoming(col)}',
+      for (final f in kEditableMatchFields)
+        '$f = CASE WHEN ${_flagged('edited_fields', f)} THEN $f '
+            '${restore ? 'WHEN ${_flagged('excluded.edited_fields', f)} THEN excluded.$f ' : ''}'
+            'ELSE ${incoming(f)} END',
+      "season_id = CASE WHEN excluded.season_id GLOB '$_splitIdGlob' "
+          'AND ($_needsSeasonId) THEN excluded.season_id ELSE season_id END',
+      if (restore) 'edited_fields = excluded.edited_fields',
+    ].join(',\n          ');
+  }
 
   /// Inserts/updates [matches] for [uid]. Idempotent via the primary key.
   ///
@@ -388,16 +416,21 @@ class RankedHistoryStore {
   /// - [kEditableMatchFields] keep a hand-corrected value and are otherwise
   ///   overwritten. `edited_fields` itself is omitted from the SET clause, so a
   ///   sync can never clear the flags that protect them.
-  /// - [season_id] only ever *upgrades* — a NULL or [kUnknownSeasonId] row
-  ///   adopts the freshly-derived id when [seasons] yields a real one, but a row
-  ///   already carrying a real season id is never touched again, even if this
-  ///   call's [seasons] is empty or incomplete. That is what lets
-  ///   [backfillSeasonIds] and this method re-run as often as needed without
-  ///   demoting a correct classification back to unknown.
+  /// - [season_id] only ever *upgrades* — a row not yet under a real split
+  ///   (NULL, [kUnknownSeasonId], or a placeholder id) adopts the
+  ///   freshly-derived id when [seasons] yields a real one, but a row already
+  ///   carrying a real split id is never touched again, even if this call's
+  ///   [seasons] is empty or incomplete. That is what lets [backfillSeasonIds]
+  ///   and this method re-run as often as needed without demoting a correct
+  ///   classification.
+  ///
+  /// [onlyIfEpoch], when given, drops the write if [deleteAll] has run since
+  /// that [dataEpoch] was read — see [dataEpoch].
   Future<void> upsertAll(
     String uid,
     List<RankedMatch> matches, {
     Map<String, SeasonMeta> seasons = const {},
+    int? onlyIfEpoch,
   }) async {
     if (matches.isEmpty) return;
     final db = await _open();
@@ -415,7 +448,7 @@ class RankedHistoryStore {
           is_party_full, trackers, season_id, kills, damage, edited_fields
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-        $_conflictUpdateSet
+        ${_conflictUpdateSet(restore: false)}
         ''',
         [
           row['id'],
@@ -439,6 +472,9 @@ class RankedHistoryStore {
         ],
       );
     }
+    // Checked right before the commit is queued: sqflite runs operations in
+    // order, so a deleteAll() after this check still clears what it wrote.
+    if (onlyIfEpoch != null && onlyIfEpoch != _dataEpoch) return;
     await batch.commit(noResult: true);
   }
 
@@ -1016,6 +1052,10 @@ class RankedHistoryStore {
   /// legends — `bloodhound`/`Bloodhound`) into one canonically-named row, so
   /// the drill-down from that row must return every match behind it, not
   /// just the ones under whichever raw casing happened to be more common.
+  ///
+  /// Folds a NULL `legend` into `'Unknown'` first, matching
+  /// [legendBreakdownsFor]'s grouping — plain equality never matches NULL,
+  /// so the "Unknown" row would otherwise drill down to too few matches.
   Future<List<RankedMatch>> matchesForLegend(
     String uid,
     String legend, {
@@ -1024,7 +1064,8 @@ class RankedHistoryStore {
     final db = await _open();
     final (where, args) = _rankedScope(uid, seasonId);
     final rows = await db.rawQuery(
-      'SELECT * FROM $table WHERE $where AND LOWER(legend) = LOWER(?) '
+      "SELECT * FROM $table WHERE $where AND "
+      "LOWER(COALESCE(legend, 'Unknown')) = LOWER(?) "
       'ORDER BY start_ms DESC',
       [...args, legend],
     );
@@ -1069,6 +1110,10 @@ class RankedHistoryStore {
   /// hydrating the whole history, so this stays cheap at Lifetime scope. RP
   /// excludes reset outliers, matching [RankedMatch.effectiveRpChange]; a
   /// null kills/damage game means no row in scope ever reported that tracker.
+  ///
+  /// Ties go to the most recently ended match (`end_ms DESC`), the same rule
+  /// [personalRecords] applies — equal kill counts are common, and without
+  /// an explicit tie-break SQLite may pick any of the tied rows.
   Future<PersonalBestGames> personalBestGamesFor(
     String uid, {
     String? seasonId,
@@ -1079,7 +1124,7 @@ class RankedHistoryStore {
     Future<RankedMatch?> top(String column, {String? extraWhere}) async {
       final rows = await db.rawQuery(
         'SELECT * FROM $table WHERE $where${extraWhere ?? ''} '
-        'ORDER BY $column DESC LIMIT 1',
+        'ORDER BY $column DESC, end_ms DESC LIMIT 1',
         args,
       );
       return rows.isEmpty ? null : RankedMatch.fromStoredMap(rows.first);
@@ -1099,80 +1144,6 @@ class RankedHistoryStore {
         extraWhere: ' AND damage IS NOT NULL',
       ),
     );
-  }
-
-  /// Net ranked RP for [uid] from matches ending in `[start, end)`, or null when
-  /// local history demonstrably can't cover that window.
-  ///
-  /// A rank reset reaches the client as a silent `cumulative_rp` cliff with
-  /// `rp_change == 0` on every match across it, so summing per-match RP cannot
-  /// see a reset at all.
-  ///
-  /// `/games` serves a rolling 100-match window, so a player who outplays it
-  /// between app opens leaves a hole. Three conditions gate the answer, all
-  /// necessary:
-  ///
-  /// 1. Some row predates [start] — the window isn't merely where recording
-  ///    happened to begin.
-  /// 2. `cumulative_rp` chains unbroken: each row's running total equals the
-  ///    previous plus its own `rp_change`. Catches a hole in the middle.
-  /// 3. The newest row's `cumulative_rp` equals [currentRp]. Catches a hole at
-  ///    the end, which leaves the chain intact but the endpoint stale.
-  ///
-  /// The reset itself is the one tolerated break; the accumulator restarts
-  /// there, which is what makes this "RP earned since the reset".
-  Future<int?> netRpInWindow(
-    String uid,
-    DateTime start,
-    DateTime end, {
-    required int currentRp,
-  }) async {
-    final db = await _open();
-    final startMs = start.millisecondsSinceEpoch;
-
-    // Condition 1; also seeds the chain as prevCum below.
-    final anchor = await db.rawQuery(
-      'SELECT cumulative_rp FROM $table WHERE uid = ? AND end_ms < ? '
-      'ORDER BY end_ms DESC LIMIT 1',
-      [uid, startMs],
-    );
-    if (anchor.isEmpty) return null;
-
-    // Pubs included — they carry a cumulative_rp too, so skipping them would
-    // punch artificial holes in the chain.
-    final rows = await db.rawQuery(
-      'SELECT rp_change, cumulative_rp FROM $table '
-      "WHERE uid = ? AND game_mode = 'BATTLE_ROYALE' "
-      'AND end_ms >= ? AND end_ms < ? ORDER BY end_ms ASC',
-      [uid, startMs, end.millisecondsSinceEpoch],
-    );
-    // No matches in the window is a provable zero, not "can't determine": the
-    // anchor above already establishes that local history predates [start], so
-    // there is no hole to hide a game in. Returning null here sent a week the
-    // player genuinely sat out to the less accurate snapshot estimate.
-    if (rows.isEmpty) {
-      final anchorCum = (anchor.first['cumulative_rp'] as num?)?.toInt() ?? 0;
-      return anchorCum == currentRp ? 0 : null;
-    }
-
-    var prevCum = (anchor.first['cumulative_rp'] as num?)?.toInt() ?? 0;
-    var net = 0;
-    for (final r in rows) {
-      final change = (r['rp_change'] as num?)?.toInt() ?? 0;
-      final cum = (r['cumulative_rp'] as num?)?.toInt() ?? 0;
-      if (cum == prevCum + change) {
-        // Matches the neutralisation in [RankedMatch.effectiveRpChange], via
-        // the shared predicate - this is the weekly RP figure on My Stats, so
-        // it has to agree with the breakdown the user compares it against.
-        net += effectiveRpOf(change);
-      } else if (change == 0 && cum < prevCum) {
-        net = 0; // the reset — start counting from the new floor
-      } else {
-        return null; // a hole in the chain
-      }
-      prevCum = cum;
-    }
-    return prevCum == currentRp ? net : null;
   }
 
   Future<int> count(String uid) async {
@@ -1221,8 +1192,15 @@ class RankedHistoryStore {
   /// Appends one reading for [uid]. O(1) - the whole point of the table.
   /// Replaces on conflict so a repeated write at the same instant can't
   /// duplicate the row.
-  Future<void> appendSnapshotFor(String uid, StatSnapshot snapshot) async {
+  ///
+  /// [onlyIfEpoch] — see [upsertAll].
+  Future<void> appendSnapshotFor(
+    String uid,
+    StatSnapshot snapshot, {
+    int? onlyIfEpoch,
+  }) async {
     final db = await _open();
+    if (onlyIfEpoch != null && onlyIfEpoch != _dataEpoch) return;
     await db.insert(snapshotTable, {
       'uid': uid,
       'ts_ms': snapshot.timestamp.millisecondsSinceEpoch,
@@ -1251,6 +1229,9 @@ class RankedHistoryStore {
     await batch.commit(noResult: true);
   }
 
+  /// Snapshot rows stored for [uid]. Test-only — production reads go through
+  /// [snapshotsFor], which the RP graph needs the rows from anyway.
+  @visibleForTesting
   Future<int> snapshotCount(String uid) async {
     final db = await _open();
     final rows = await db.rawQuery(
@@ -1267,33 +1248,43 @@ class RankedHistoryStore {
     return db.query(snapshotTable, orderBy: 'uid ASC, ts_ms ASC');
   }
 
-  /// Restores snapshot rows from an export. Idempotent.
+  /// Restores snapshot rows from an export. Idempotent. Returns how many
+  /// rows were skipped as unusable.
   ///
   /// [executor] lets [importBackupData] run this against a [Transaction]
   /// instead of opening its own connection, so it can commit atomically
   /// alongside [importRows]. Defaults to the store's own database for
   /// standalone callers.
-  Future<void> importSnapshotRows(
+  Future<int> importSnapshotRows(
     List<dynamic> rows, {
     DatabaseExecutor? executor,
   }) async {
     final db = executor ?? await _open();
     final batch = db.batch();
+    var skipped = 0;
     for (final r in rows) {
-      if (r is! Map) continue;
-      final uid = r['uid'];
-      final tsMs = r['ts_ms'];
-      // Both are NOT NULL and form the primary key - a row missing either is
-      // unusable, and letting it through would fail the whole batch.
-      if (uid is! String || tsMs is! num) continue;
+      final uid = r is Map ? r['uid'] : null;
+      final tsMs = r is Map ? r['ts_ms'] : null;
+      final rp = r is Map ? r['rp'] : null;
+      final seasonId = r is Map ? r['season_id'] : null;
+      // uid/ts_ms are NOT NULL primary-key columns, and a wrong type can't be
+      // bound at all — any of these would fail the whole batch.
+      if (uid is! String ||
+          tsMs is! num ||
+          (rp != null && rp is! num) ||
+          (seasonId != null && seasonId is! String)) {
+        skipped++;
+        continue;
+      }
       batch.insert(snapshotTable, {
         'uid': uid,
         'ts_ms': tsMs.toInt(),
-        'rp': (r['rp'] as num?)?.toInt() ?? 0,
-        'season_id': r['season_id'] as String?,
+        'rp': (rp as num?)?.toInt() ?? 0,
+        'season_id': seasonId as String?,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
+    return skipped;
   }
 
   // ── Export / import ────────────────────────────────────────────────────────
@@ -1327,37 +1318,62 @@ class RankedHistoryStore {
     'edited_fields',
   };
 
-  /// Restores rows from an export (single JSON file). Idempotent.
+  /// Restores rows from an export (single JSON file). Idempotent. Returns
+  /// how many rows were skipped as unusable.
   ///
-  /// Each row is filtered to [_importableColumns] and skipped unless it carries
-  /// a non-empty `id`. Both matter for a file the user picked off disk:
-  /// an unknown key would reach SQLite as a column name and fail the entire
-  /// batch, and SQLite permits NULL in a non-`INTEGER PRIMARY KEY`, so
-  /// id-less rows would insert as duplicates instead of deduping.
+  /// The file comes from the user, so a bad row is skipped and counted
+  /// rather than failing the whole batch. A row is skipped unless: it's
+  /// filtered to [_importableColumns] (an unknown key would reach SQLite as
+  /// a column name); it has a non-empty `id` and `uid`, and numeric
+  /// `start_ms`/`end_ms`; and every value is bindable (null, number, or
+  /// string — a JSON boolean is coerced to 1/0).
   ///
-  /// A conflicting id is resolved through [_conflictUpdateSet] — the same
-  /// edit-aware, season-upgrade-only rule [upsertAll] applies. This used to
-  /// be a plain `INSERT OR REPLACE`, which is a delete-then-insert: any
-  /// column absent from the incoming row (or predating it, e.g. a v2 export
-  /// with no `season_id` column) went back to NULL, silently demoting a
-  /// locally-learned season classification and reverting a hand correction
-  /// (`edited_fields` included) the moment an older backup was restored over
-  /// a newer one.
+  /// A conflicting id goes through [_conflictUpdateSet]'s restore form: like
+  /// [upsertAll]'s edit-aware, season-upgrade-only rule, except a value the
+  /// backup lacks keeps the stored one instead of going back to NULL (the
+  /// bug with the old plain `INSERT OR REPLACE`, and later with reusing the
+  /// sync form here). For the same reason, a row with no `kills`/`damage`
+  /// key at all has them derived from its `trackers` blob, as a sync would.
+  ///
+  /// Unlike a sync, a restore also carries its own edit flags, merged into
+  /// the stored row's rather than dropped — otherwise restoring a backup onto
+  /// a device that already synced the same matches (the usual phone
+  /// migration) applied the correction but not its flag, and the next sync
+  /// silently reverted it. A column flagged only by the backup takes the
+  /// backup's value; one flagged by both keeps the local value.
   ///
   /// [executor] — see [importSnapshotRows]'s doc for why this exists.
-  Future<void> importRows(
+  Future<int> importRows(
     List<dynamic> rows, {
     DatabaseExecutor? executor,
   }) async {
     final db = executor ?? await _open();
+    // Flags already on this device, keyed by id — a small set regardless of
+    // history size. Updated as rows are queued, so a backup listing the same
+    // id twice still keeps both rows' flags.
+    final flagsById = <String, Set<String>>{
+      for (final r in await db.query(
+        table,
+        columns: ['id', 'edited_fields'],
+        where: 'edited_fields IS NOT NULL',
+      ))
+        r['id'] as String: decodeEditedFields(r['edited_fields']),
+    };
     final batch = db.batch();
+    var skipped = 0;
     for (final r in rows) {
-      if (r is! Map) continue;
-      final id = r['id'];
-      if (id is! String || id.isEmpty) continue;
-      final row = <String, Object?>{
-        for (final col in _importableColumns) col: r[col],
+      final row = r is Map ? _importableRow(r) : null;
+      if (row == null) {
+        skipped++;
+        continue;
+      }
+      final id = row['id'] as String;
+      final flags = {
+        ...?flagsById[id],
+        ...decodeEditedFields(row['edited_fields']),
       };
+      flagsById[id] = flags;
+      row['edited_fields'] = encodeEditedFields(flags);
       batch.rawInsert(
         '''
         INSERT INTO $table (
@@ -1366,7 +1382,7 @@ class RankedHistoryStore {
           is_party_full, trackers, season_id, kills, damage, edited_fields
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-        $_conflictUpdateSet
+        ${_conflictUpdateSet(restore: true)}
         ''',
         [
           row['id'],
@@ -1391,6 +1407,52 @@ class RankedHistoryStore {
       );
     }
     await batch.commit(noResult: true);
+    return skipped;
+  }
+
+  /// [r] as a row [importRows] can queue, or null when it isn't usable —
+  /// see [importRows] for the rules.
+  static Map<String, Object?>? _importableRow(Map<dynamic, dynamic> r) {
+    final id = r['id'];
+    final uid = r['uid'];
+    if (id is! String || id.isEmpty) return null;
+    if (uid is! String || uid.isEmpty) return null;
+    if (r['start_ms'] is! num || r['end_ms'] is! num) return null;
+
+    final row = <String, Object?>{};
+    for (final col in _importableColumns) {
+      final v = r[col];
+      if (v == null || v is num || v is String) {
+        row[col] = v;
+      } else if (v is bool) {
+        row[col] = v ? 1 : 0;
+      } else {
+        return null;
+      }
+    }
+
+    final missingKills = !r.containsKey('kills');
+    final missingDamage = !r.containsKey('damage');
+    if (missingKills || missingDamage) {
+      final trackers = RankedMatch.fromStoredMap({
+        'trackers': row['trackers'],
+      }).trackers;
+      int? plausible(int? v, int max) =>
+          v != null && v >= 0 && v <= max ? v : null;
+      if (missingKills) {
+        row['kills'] = plausible(
+          RankedMatch.killsFrom(trackers),
+          kMaxPlausibleKills,
+        );
+      }
+      if (missingDamage) {
+        row['damage'] = plausible(
+          RankedMatch.damageFrom(trackers),
+          kMaxPlausibleDamage,
+        );
+      }
+    }
+    return row;
   }
 
   /// Restores ranked-match rows and RP-snapshot rows from a backup together,
@@ -1403,23 +1465,37 @@ class RankedHistoryStore {
   /// if it throws, sqflite rolls back the row imports too. That's what makes
   /// `commitBackupImport`'s combined restore atomic despite
   /// `SharedPreferences` having no transaction primitive of its own.
-  Future<void> importBackupData({
+  ///
+  /// Returns how many rows, across both tables, were skipped as unusable.
+  Future<int> importBackupData({
     required List<dynamic> matchRows,
     required List<dynamic> snapshotRows,
     Future<void> Function()? restorePrefs,
   }) async {
     final db = await _open();
-    await db.transaction((txn) async {
-      await importRows(matchRows, executor: txn);
-      await importSnapshotRows(snapshotRows, executor: txn);
+    return db.transaction((txn) async {
+      final skipped =
+          await importRows(matchRows, executor: txn) +
+          await importSnapshotRows(snapshotRows, executor: txn);
       if (restorePrefs != null) await restorePrefs();
+      return skipped;
     });
   }
+
+  /// Bumped by [deleteAll]. A writer in flight when the user clears
+  /// everything (a `/games` sync, an RP snapshot) reads this beforehand and
+  /// passes it back as `onlyIfEpoch`, so its write drops instead of
+  /// resurrecting deleted data.
+  int get dataEpoch => _dataEpoch;
+  int _dataEpoch = 0;
 
   /// Drops both tables. Backs "Clear all data", which promises *everything* -
   /// RP snapshots included, since they are the app's other record of the
   /// player's history.
   Future<void> deleteAll() async {
+    // Bumped before the first await, so a writer that checks after this
+    // point already sees the clear.
+    _dataEpoch++;
     final db = await _open();
     await db.delete(table);
     await db.delete(snapshotTable);

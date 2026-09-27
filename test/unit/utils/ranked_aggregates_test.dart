@@ -448,6 +448,31 @@ void main() {
   });
 
   group('personalRecords', () {
+    test('a tied best-game stat goes to the most recent match, in any '
+        'input order', () {
+      RankedMatch game(int startOffset) => match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 25,
+        cumulativeRp: 100,
+        kills: 6,
+        damage: 1500,
+        startOffset: startOffset,
+      );
+      final older = game(0);
+      final newer = game(3600);
+
+      for (final input in [
+        [older, newer],
+        [newer, older],
+      ]) {
+        final r = personalRecords(input);
+        expect(r.bestRpGame, same(newer));
+        expect(r.bestKillsGame, same(newer));
+        expect(r.bestDamageGame, same(newer));
+      }
+    });
+
     test('picks the single best RP/kills/damage game', () {
       final r = personalRecords(ranked);
       expect(r.bestRpGame?.legend, 'Bangalore'); // +60, the highest

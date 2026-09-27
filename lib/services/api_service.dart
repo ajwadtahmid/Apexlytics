@@ -25,10 +25,16 @@ class ApiService {
   /// [TimeoutConstants.overallRequestDeadline].
   final Duration _overallDeadline;
 
-  ApiService(ApiCacheStore cacheStore, {Duration? overallDeadline})
-    : _overallDeadline =
-          overallDeadline ?? TimeoutConstants.overallRequestDeadline {
+  /// [httpClientAdapter] is a test seam: it replaces the transport only, so
+  /// requests still run through the real interceptors and error handling.
+  ApiService(
+    ApiCacheStore cacheStore, {
+    Duration? overallDeadline,
+    @visibleForTesting HttpClientAdapter? httpClientAdapter,
+  }) : _overallDeadline =
+           overallDeadline ?? TimeoutConstants.overallRequestDeadline {
     _dio = Dio(buildApiBaseOptions());
+    if (httpClientAdapter != null) _dio.httpClientAdapter = httpClientAdapter;
     if (kDebugMode) {
       _dio.interceptors.add(
         LogInterceptor(
@@ -158,8 +164,25 @@ class ApiService {
       }
       return (status: response.statusCode ?? 0, data: data);
     } on DioException catch (e) {
-      throw AppException(friendlyError(e));
+      // Dio turns every non-2xx into a DioException, so its status has to be
+      // carried over here or a rejected request (a wrong client token, say)
+      // looks the same as being offline.
+      final response = e.response;
+      throw AppException(
+        friendlyError(e),
+        status: response?.statusCode,
+        retryAfter: _retryAfter(response),
+      );
     }
+  }
+
+  /// A `Retry-After` given in seconds, or null. (The HTTP-date form isn't
+  /// used by the proxy.)
+  static Duration? _retryAfter(Response<dynamic>? response) {
+    final seconds = int.tryParse(
+      response?.headers.value('retry-after')?.trim() ?? '',
+    );
+    return seconds == null || seconds < 0 ? null : Duration(seconds: seconds);
   }
 
   // Shared fetch-cache-fallback logic used by both [get] and [getList].

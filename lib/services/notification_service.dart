@@ -40,6 +40,23 @@ class NotificationService {
   // re-armed on every fetch and cancelled wholesale, mirroring [cancelAll].
   static final List<Timer> _desktopTimers = [];
 
+  /// Tail of the chain every [scheduleAll]/[cancelAll] runs on. Several
+  /// callers fire these independently (Home's listeners, the Map Alerts
+  /// sheet), and each is a cancel plus a series of dispatches — interleaved,
+  /// a later cancel could land mid-dispatch and leave alerts armed after the
+  /// user turned them off, or double-fire an alert on desktop. Running them
+  /// one at a time makes the last call's settings the ones that stick.
+  static Future<void> _pending = Future.value();
+
+  /// Runs [op] after every previously queued operation has finished. A
+  /// failure is still returned to [op]'s own caller but doesn't stop the
+  /// operations queued behind it.
+  static Future<void> _serialized(Future<void> Function() op) {
+    final result = _pending.then((_) => op());
+    _pending = result.catchError((_) {});
+    return result;
+  }
+
   static const String _channelId = 'map_rotation_v2';
 
   static const _androidChannel = AndroidNotificationDetails(
@@ -251,6 +268,8 @@ class NotificationService {
   ///
   /// Each mode has its own [minutesBefore] timing.
   /// [favoriteRankedMapNames] / [favoritePubsMapNames] filter alerts by map.
+  ///
+  /// Queued behind any in-flight [scheduleAll]/[cancelAll] — see [_pending].
   static Future<void> scheduleAll(
     MapRotation rotation, {
     bool notifyRanked = false,
@@ -265,6 +284,38 @@ class NotificationService {
     List<String> favoritePubsMapNames = const [],
     List<String> rankedSequence = const [],
     List<String> pubsSequence = const [],
+  }) => _serialized(
+    () => _scheduleAllNow(
+      rotation,
+      notifyRanked: notifyRanked,
+      rankedMinutesBefore: rankedMinutesBefore,
+      notifyPubs: notifyPubs,
+      pubsMinutesBefore: pubsMinutesBefore,
+      notifyMixtape: notifyMixtape,
+      mixtapeMinutesBefore: mixtapeMinutesBefore,
+      notifyWildcard: notifyWildcard,
+      wildcardMinutesBefore: wildcardMinutesBefore,
+      favoriteRankedMapNames: favoriteRankedMapNames,
+      favoritePubsMapNames: favoritePubsMapNames,
+      rankedSequence: rankedSequence,
+      pubsSequence: pubsSequence,
+    ),
+  );
+
+  static Future<void> _scheduleAllNow(
+    MapRotation rotation, {
+    required bool notifyRanked,
+    required int rankedMinutesBefore,
+    required bool notifyPubs,
+    required int pubsMinutesBefore,
+    required bool notifyMixtape,
+    required int mixtapeMinutesBefore,
+    required bool notifyWildcard,
+    required int wildcardMinutesBefore,
+    required List<String> favoriteRankedMapNames,
+    required List<String> favoritePubsMapNames,
+    required List<String> rankedSequence,
+    required List<String> pubsSequence,
   }) async {
     if (!_supported || !_initialized) return;
 
@@ -488,7 +539,10 @@ class NotificationService {
   /// successfully-initialised session must still be cancellable. Previously
   /// guarded on [_initialized], leaving "turn off alerts" and "Clear all
   /// data" unable to cancel anything already scheduled at the OS level.
-  static Future<void> cancelAll() => _cancelAllInternal();
+  ///
+  /// Queued like [scheduleAll], so it can't be overtaken by the tail of a
+  /// schedule that started before it.
+  static Future<void> cancelAll() => _serialized(_cancelAllInternal);
 
   static Future<void> _cancelAllInternal() async {
     for (final t in _desktopTimers) {

@@ -222,8 +222,10 @@ All requests must include the `x-client-token` header with your `CLIENT_TOKEN` v
 ## Data & Privacy
 
 - **No login, no account.** All data is public (player stats are visible on apexlegendsstatus.com).
-- **No analytics or tracking.** The app does not collect or send any user data.
-- **Local-only storage.** Cached responses and snapshots are stored on-device only.
+- **No analytics or tracking.** There's no analytics SDK and no advertising ID.
+- **Lookups go through the app's server.** Player names, UIDs and platforms you look up are sent to the app's proxy server, which forwards them to apexlegendsstatus.com — that's how stats are fetched without shipping an API key in the app.
+- **Crash reports (Android and iOS only).** When the app crashes or hits an error, a report is sent to [Sentry](https://sentry.io) so it can be fixed: the error, the app version and the device model/OS. No IP address or device identifier is attached, and player IDs and the data excerpts some errors carry are stripped before the report leaves the device.
+- **Local-only storage.** Your profiles, favorites, match history, RP history and cached responses are stored on-device only, and only leave it if you export a backup.
 
 Data is sourced from [apexlegendsstatus.com](https://apexlegendsstatus.com) and [apexlegendsapi.com](https://apexlegendsapi.com).
 

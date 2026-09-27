@@ -276,6 +276,9 @@ class _RankSubtitle extends StatelessWidget {
           child: Image.asset(
             rankAsset,
             fit: BoxFit.contain,
+            // Decoded at display size, as every other rank badge is — one
+            // of these renders per favourite.
+            cacheWidth: (12 * MediaQuery.devicePixelRatioOf(context)).ceil(),
             errorBuilder: (ctx, err, trace) => const SizedBox.shrink(),
           ),
         ),

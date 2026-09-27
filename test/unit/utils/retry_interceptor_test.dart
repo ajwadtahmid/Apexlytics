@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:apexlytics/constants/timeout_constants.dart';
 import 'package:apexlytics/utils/retry_interceptor.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -99,9 +100,11 @@ void main() {
     expect(calledBaseUrls, [primary, primary, backup]);
   });
 
-  test('a connection timeout retries and fails over to the backup', () async {
+  test('a primary timeout fails straight over to the backup', () async {
     // A spun-down free-tier host produces connectionTimeout, not
     // connectionError - treating it as non-retryable skipped the failover.
+    // And no same-host retry first: a second full timeout there used up the
+    // overall deadline before the backup was ever tried.
     final calledBaseUrls = <String>[];
     final dio = buildDio(
       maxRetries: 1,
@@ -119,12 +122,117 @@ void main() {
     final response = await dio.get('/player');
 
     expect(response.statusCode, 200);
-    expect(calledBaseUrls, [primary, primary, backup]);
+    expect(calledBaseUrls, [primary, backup]);
+  });
+
+  test('every timeout type skips the same-host retry when a backup is '
+      'available', () async {
+    for (final type in const [
+      DioExceptionType.connectionTimeout,
+      DioExceptionType.receiveTimeout,
+      DioExceptionType.sendTimeout,
+    ]) {
+      final calledBaseUrls = <String>[];
+      final dio = buildDio(
+        maxRetries: 1,
+        backupBaseUrl: backup,
+        onFetch: (o) async {
+          calledBaseUrls.add(o.baseUrl);
+          if (o.baseUrl == backup) return _status(200);
+          throw DioException(type: type, requestOptions: o);
+        },
+      );
+
+      await dio.get('/player');
+      expect(calledBaseUrls, [primary, backup], reason: '$type');
+    }
+  });
+
+  test('a backup that times out still gets its retry, since there is no '
+      'host left after it', () async {
+    // The retry is what catches a sleeping backup once it has woken up.
+    final calledBaseUrls = <String>[];
+    var backupCalls = 0;
+    final dio = buildDio(
+      maxRetries: 1,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        if (o.baseUrl == backup && ++backupCalls > 1) return _status(200);
+        throw DioException.receiveTimeout(
+          timeout: const Duration(seconds: 15),
+          requestOptions: o,
+        );
+      },
+    );
+
+    final response = await dio.get('/player');
+
+    expect(response.statusCode, 200);
+    expect(calledBaseUrls, [primary, backup, backup]);
+  });
+
+  test('a preferred backup that times out falls back to the primary, which '
+      'then keeps its own retry instead of bouncing back', () async {
+    final calledBaseUrls = <String>[];
+    var armed = false;
+    final dio = buildDio(
+      maxRetries: 1,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        if (!armed) {
+          // First request: primary down, backup serves - arms the window.
+          if (o.baseUrl == backup) return _status(200);
+          return _status(503);
+        }
+        throw DioException.connectionTimeout(
+          timeout: const Duration(seconds: 15),
+          requestOptions: o,
+        );
+      },
+    );
+
+    await dio.get('/first');
+    armed = true;
+    calledBaseUrls.clear();
+
+    await expectLater(dio.get('/second'), throwsA(isA<DioException>()));
+    // Backup (preferred) once, then the primary with its retry — never a
+    // second trip to the backup that already failed this request.
+    expect(calledBaseUrls, [backup, primary, primary]);
+  });
+
+  test('the overall deadline covers the longest failover chain', () {
+    // One timed-out primary attempt, then the backup's full ladder. A
+    // shorter deadline cancels the request before the backup gets its
+    // chance, which is how failover used to be cut off.
+    final attempt = TimeoutConstants.apiConnect > TimeoutConstants.apiReceive
+        ? TimeoutConstants.apiConnect
+        : TimeoutConstants.apiReceive;
+    final backupLadder =
+        attempt * (TimeoutConstants.retriesPerHost + 1) +
+        TimeoutConstants.retryDelay * TimeoutConstants.retriesPerHost;
+    expect(
+      TimeoutConstants.overallRequestDeadline,
+      greaterThanOrEqualTo(attempt + backupLadder),
+    );
+  });
+
+  test('the background fetch deadline fits inside the OS task budget', () {
+    // iOS gives a background fetch ~30 s in all; a task it kills never
+    // records its result, so the request must give up well before that.
+    expect(
+      TimeoutConstants.backgroundFetchDeadline,
+      lessThan(const Duration(seconds: 30)),
+    );
   });
 
   test('every transport failure type is retryable', () async {
     // Enumerated, not spot-checked - a new type silently missing this list
-    // is exactly how the connectionTimeout gap went unnoticed before.
+    // is exactly how the connectionTimeout gap went unnoticed before. No
+    // backup here, so timeouts keep their same-host retries: the primary is
+    // the only host there is.
     for (final type in const [
       DioExceptionType.connectionTimeout,
       DioExceptionType.connectionError,

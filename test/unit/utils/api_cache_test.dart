@@ -190,4 +190,65 @@ void main() {
       expect(cache.load('/player/uid150'), isNotNull);
     });
   });
+
+  group('ApiCache.primeFromDisk racing live saves', () {
+    // Priming is unawaited at startup, so a request can save while it's still
+    // reading. What it read is older than that save and must not win.
+    test('does not replace an entry saved while priming', () async {
+      final store = freshStore();
+      final anHourAgo = DateTime.now().subtract(const Duration(hours: 1));
+      await store.upsert(
+        '/maps',
+        jsonEncode({'v': 'old'}),
+        anHourAgo.millisecondsSinceEpoch,
+      );
+      final cache = ApiCache(store);
+
+      final priming = cache.primeFromDisk();
+      await cache.save('/maps', {'v': 'fresh'});
+      await priming;
+
+      expect((cache.load('/maps')!.data as Map)['v'], 'fresh');
+      // And the fresh row is what's on disk for the next launch.
+      final reprimed = ApiCache(store);
+      await reprimed.primeFromDisk();
+      expect((reprimed.load('/maps')!.data as Map)['v'], 'fresh');
+    });
+
+    test('does not delete a corrupt key that was saved again meanwhile', () async {
+      final store = freshStore();
+      await store.upsert(
+        '/maps',
+        'bad-json',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      final cache = ApiCache(store);
+
+      final priming = cache.primeFromDisk();
+      await cache.save('/maps', {'v': 'fresh'});
+      await priming;
+      // The corrupt-row cleanup is fire-and-forget; let it run.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final reprimed = ApiCache(store);
+      await reprimed.primeFromDisk();
+      expect((reprimed.load('/maps')!.data as Map)['v'], 'fresh');
+    });
+
+    test('does not repopulate memory after a clear', () async {
+      final store = freshStore();
+      await store.upsert(
+        '/maps',
+        jsonEncode({'v': 'old'}),
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      final cache = ApiCache(store);
+
+      final priming = cache.primeFromDisk();
+      await cache.clear();
+      await priming;
+
+      expect(cache.load('/maps'), isNull);
+    });
+  });
 }

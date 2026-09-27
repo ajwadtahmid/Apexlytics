@@ -13,7 +13,9 @@ import '../env/env.dart';
 import '../models/background_fetch_settings.dart';
 import '../models/map_rotation.dart';
 import '../models/seasonal_maps.dart';
+import '../constants/timeout_constants.dart';
 import '../utils/api_base_options.dart';
+import '../utils/api_deadline.dart';
 import '../utils/app_logger.dart';
 import '../utils/retry_interceptor.dart';
 import 'notification_service.dart';
@@ -46,12 +48,38 @@ SeasonalMaps? _cachedSeasonalMaps(SharedPreferences prefs) {
   }
 }
 
+/// Writes [kLastFetchResultKey]. Timestamp only — a failure reason used to be
+/// appended here, which put an exception string into a pref a support
+/// screenshot could carry off the device. Never throws.
+Future<void> _recordFetchResult({
+  required bool ok,
+  SharedPreferences? prefs,
+}) async {
+  try {
+    prefs ??= await SharedPreferences.getInstance();
+    await prefs.setString(
+      kLastFetchResultKey,
+      '${ok ? 'ok' : 'error'}:${DateTime.now().toIso8601String()}',
+    );
+  } catch (e) {
+    _debugLog('Failed to persist fetch result: $e');
+  }
+}
+
+/// The OS killed the task for running too long. Recorded as a failure so
+/// Settings' "Last background refresh" doesn't keep showing an older
+/// success as if it were current.
+Future<void> _onTaskTimeout(String taskId) async {
+  _debugLog('Task timed out: $taskId');
+  await _recordFetchResult(ok: false);
+  BackgroundFetch.finish(taskId);
+}
+
 // Runs when the app is fully terminated (headless). Must be top-level.
 @pragma('vm:entry-point')
 void backgroundFetchHeadlessTask(HeadlessEvent event) async {
   if (event.timeout) {
-    _debugLog('Task timed out: ${event.taskId}');
-    BackgroundFetch.finish(event.taskId);
+    await _onTaskTimeout(event.taskId);
     return;
   }
   try {
@@ -80,10 +108,7 @@ Future<void> _backgroundFetchAndSchedule() async {
       // Without this, Settings' "Last background refresh" row kept showing
       // a stale result from an earlier, mode-enabled run instead of
       // reflecting that background fetch is alive and working.
-      await prefs.setString(
-        kLastFetchResultKey,
-        'ok:${DateTime.now().toIso8601String()}',
-      );
+      await _recordFetchResult(ok: true, prefs: prefs);
       return;
     }
 
@@ -95,9 +120,16 @@ Future<void> _backgroundFetchAndSchedule() async {
       RetryInterceptor(dio: dio, backupBaseUrl: Env.proxyUrlBackup),
     );
 
-    final response = await dio.get(
-      ApiConstants.mapRotationPath,
-      queryParameters: {'version': ApiConstants.mapRotationVersion},
+    // Bounded like the foreground ApiService: the retry/failover ladder
+    // alone can outlast the ~30 s the OS gives this task, and a killed task
+    // never gets to record its result.
+    final response = await withOverallDeadline(
+      TimeoutConstants.backgroundFetchDeadline,
+      (token) => dio.get(
+        ApiConstants.mapRotationPath,
+        queryParameters: {'version': ApiConstants.mapRotationVersion},
+        cancelToken: token,
+      ),
     );
 
     final rotation = MapRotation.fromJson(
@@ -132,26 +164,12 @@ Future<void> _backgroundFetchAndSchedule() async {
       throw StateError('Notification service failed to initialise');
     }
     _debugLog('Notifications scheduled successfully');
-    await prefs.setString(
-      kLastFetchResultKey,
-      'ok:${DateTime.now().toIso8601String()}',
-    );
+    await _recordFetchResult(ok: true, prefs: prefs);
   } catch (e) {
     // Detail only in debug: this string can carry a host name or an upstream
     // message, and debugPrint is not stripped from release builds.
     _debugLog('Fetch failed: $e');
-    try {
-      prefs ??= await SharedPreferences.getInstance();
-      // Timestamp only. The reason used to be appended here, which put an
-      // exception string into a pref that a support screenshot could carry
-      // off the device.
-      await prefs.setString(
-        kLastFetchResultKey,
-        'error:${DateTime.now().toIso8601String()}',
-      );
-    } catch (e2) {
-      _debugLog('Failed to persist error flag: $e2');
-    }
+    await _recordFetchResult(ok: false, prefs: prefs);
   }
 }
 
@@ -178,7 +196,7 @@ class BackgroundService {
       }
     },
     // Timeout handler — invoked if the task doesn't finish within the deadline.
-    (String taskId) => BackgroundFetch.finish(taskId),
+    _onTaskTimeout,
   );
 
   static Future<void> init() async {

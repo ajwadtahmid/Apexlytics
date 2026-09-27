@@ -4,13 +4,17 @@ import 'app_logger.dart';
 class AppException implements Exception {
   final String message;
 
-  /// The HTTP status this exception represents, when known — set only by
-  /// [ApiService.getWithStatus] for a response whose body carried an
-  /// `error` key, so a caller can tell a real 4xx/5xx apart from a
-  /// transport failure with no status at all. Null everywhere else.
+  /// The HTTP status this exception represents, when known — set by
+  /// [ApiService.getWithStatus] for any response the server actually sent, so
+  /// a caller can tell a real 4xx/5xx apart from a transport failure with no
+  /// status at all. Null everywhere else.
   final int? status;
 
-  const AppException(this.message, {this.status});
+  /// The server's `Retry-After` in seconds, when it sent one (typically a
+  /// 429 from the proxy's rate limits). Null otherwise.
+  final Duration? retryAfter;
+
+  const AppException(this.message, {this.status, this.retryAfter});
 
   @override
   String toString() => message;

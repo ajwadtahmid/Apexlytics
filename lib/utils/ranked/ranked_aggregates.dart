@@ -769,9 +769,24 @@ class PersonalRecords {
 /// (see [legendBreakdowns]'s wins/losses). Only a loss (effective RP < 0)
 /// breaks a streak — an RP-neutral game (0, e.g. a reset outlier) is neither
 /// a win nor a loss, so it leaves the streak exactly where it was.
+///
+/// A tie on a best-game stat goes to the most recently ended match — the same
+/// `end_ms DESC` tie-break `RankedHistoryStore.personalBestGamesFor` uses, so
+/// the split view and Lifetime name the same match for the same record.
 PersonalRecords personalRecords(List<RankedMatch> matches) {
   if (matches.isEmpty) {
     return const PersonalRecords(currentWinStreak: 0, bestWinStreak: 0);
+  }
+
+  // Whether [m] displaces [best] on [value]: higher wins, newer breaks a tie.
+  bool beats(
+    RankedMatch m,
+    RankedMatch? best,
+    int Function(RankedMatch) value,
+  ) {
+    if (best == null) return true;
+    final a = value(m), b = value(best);
+    return a > b || (a == b && m.endTime.isAfter(best.endTime));
   }
 
   RankedMatch? bestRp, bestKills, bestDamage;
@@ -781,15 +796,13 @@ PersonalRecords personalRecords(List<RankedMatch> matches) {
     // (`personalBestGamesFor`) — otherwise its effectiveRpChange (0) could
     // beat an ordinary loss and win "best game". kills/damage aren't gated
     // the same way: only the outlier's RP value is suspect.
-    if (!m.isRankedOutlier &&
-        (bestRp == null || m.effectiveRpChange > bestRp.effectiveRpChange)) {
+    if (!m.isRankedOutlier && beats(m, bestRp, (x) => x.effectiveRpChange)) {
       bestRp = m;
     }
-    if (m.kills != null && (bestKills == null || m.kills! > bestKills.kills!)) {
+    if (m.kills != null && beats(m, bestKills, (x) => x.kills!)) {
       bestKills = m;
     }
-    if (m.damage != null &&
-        (bestDamage == null || m.damage! > bestDamage.damage!)) {
+    if (m.damage != null && beats(m, bestDamage, (x) => x.damage!)) {
       bestDamage = m;
     }
   }
