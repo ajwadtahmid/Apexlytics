@@ -49,6 +49,12 @@ class _AppShellState extends ConsumerState<_AppShell>
     with WidgetsBindingObserver {
   static const _kPhase2Delay = Duration(milliseconds: 150);
 
+  // Past this many misses, the process's AssetManager state is broken, not
+  // slow — stop retrying on every resume (some OEM ROMs crash on repeated
+  // native lookups here) until the app restarts.
+  static const _kMaxNotificationInitRetries = 3;
+  int _notificationInitAttempts = 0;
+
   @override
   void initState() {
     super.initState();
@@ -123,10 +129,12 @@ class _AppShellState extends ConsumerState<_AppShell>
     }
   }
 
-  /// Retries a failed [NotificationService.init] (icon lookup miss), which
-  /// otherwise leaves alerts off for the whole process.
+  /// Retries a failed [NotificationService.init] (icon lookup miss), capped
+  /// at [_kMaxNotificationInitRetries] — see that constant for why.
   Future<void> _retryNotificationInit() async {
     if (NotificationService.isInitialized) return;
+    if (_notificationInitAttempts >= _kMaxNotificationInitRetries) return;
+    _notificationInitAttempts++;
     await NotificationService.init();
     if (NotificationService.isInitialized && mounted) {
       ref.invalidate(notificationsEnabledProvider);
