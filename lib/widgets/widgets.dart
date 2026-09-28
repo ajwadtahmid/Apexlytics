@@ -24,5 +24,6 @@ export 'summary_card.dart';
 export 'surface_card.dart';
 export 'tracker_info_sheet.dart';
 export 'uid_search_toggle.dart';
+export 'update_available_banner.dart';
 export 'weapon_stats_section.dart';
 export 'win_loss_stat.dart';

@@ -59,6 +59,7 @@ dependencies:
   flutter_native_splash: ^2.4.8
   wakelock_plus: ^1.7.0
   freezed_annotation: ^3.1.0
+  upgrader: ^13.7.0
 
 dev_dependencies:
   flutter_test:

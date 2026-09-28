@@ -207,6 +207,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             children: [
               // ── Header ──────────────────────────────────────────
               _Header(playerName: playerName),
+              const UpdateAvailableBanner(),
               const SizedBox(height: AppTheme.xl),
 
               // ── Map rotation ─────────────────────────────────────
