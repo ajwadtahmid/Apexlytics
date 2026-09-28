@@ -112,6 +112,12 @@ class _CardTile extends StatelessWidget {
                   height: AppTheme.newsImageHeight,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  // memCacheHeight only — memCacheWidth would resize to an
+                  // exact box before BoxFit.cover, distorting the source.
+                  memCacheHeight:
+                      (AppTheme.newsImageHeight *
+                              MediaQuery.devicePixelRatioOf(context))
+                          .ceil(),
                   placeholder: (ctx, url) => Container(
                     height: AppTheme.newsImageHeight,
                     color: AppTheme.surface2,
