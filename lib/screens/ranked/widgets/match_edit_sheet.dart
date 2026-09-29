@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../constants/legend_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../utils/app_logger.dart';
@@ -82,6 +83,15 @@ String? _rpChangeRange(int value) {
   return null;
 }
 
+/// The canonical `kBattleRoyaleMaps` key for [rawKey] (stripping a
+/// `_rotation` suffix and any other known spelling variant), or [rawKey]
+/// itself when it isn't a recognized map.
+String _canonicalMapOptionKey(String rawKey) {
+  final info = battleRoyaleMapInfo(rawKey);
+  if (info == null) return rawKey;
+  return kBattleRoyaleMaps.entries.firstWhere((e) => e.value == info).key;
+}
+
 const _numericFields = [
   _NumericField(
     'kills',
@@ -104,12 +114,13 @@ String? _killsRange(int value) => _inRange('Kills', value, kMaxPlausibleKills);
 String? _damageRange(int value) =>
     _inRange('Damage', value, kMaxPlausibleDamage);
 
-/// Correction form for a single match: kills, damage, RP change, and legend.
+/// Correction form for a single match: kills, damage, RP change, legend, and map.
 ///
 /// A blank Kills/Damage field saves as NULL, which reads as "not reported" and
 /// drops the match out of that stat's averages instead of counting it as zero.
-/// Legend is picked from a fixed list rather than typed, so a correction can't
-/// introduce a name that never appears anywhere else in the breakdown.
+/// Legend and map are picked from a fixed list rather than typed, so a
+/// correction can't introduce a name that never appears anywhere else in the
+/// breakdown.
 class MatchEditSheet extends ConsumerStatefulWidget {
   final RankedMatch match;
 
@@ -124,6 +135,8 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
   late final Set<String> _edited;
   late final List<String> _legendOptions;
   late String _legend;
+  late final List<String> _mapOptions;
+  late String _mapKey;
   bool _saving = false;
   String? _error;
 
@@ -141,6 +154,14 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
     // 'Unknown' fallback for a malformed API row) — keep it selectable rather
     // than silently swapping the dropdown to some other legend.
     _legendOptions = names.contains(_legend) ? names : [_legend, ...names];
+
+    _mapKey = _canonicalMapOptionKey(widget.match.mapKey);
+    final mapKeys = kBattleRoyaleMaps.keys.toList()
+      ..sort(
+        (a, b) => kBattleRoyaleMaps[a]!.name.compareTo(kBattleRoyaleMaps[b]!.name),
+      );
+    // Same fallback as legend: keep an unrecognized stored key selectable.
+    _mapOptions = mapKeys.contains(_mapKey) ? mapKeys : [_mapKey, ...mapKeys];
   }
 
   String _initialText(String column) {
@@ -174,6 +195,9 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
     }
 
     if (_legend != widget.match.legend) out['legend'] = _legend;
+    if (_mapKey != _canonicalMapOptionKey(widget.match.mapKey)) {
+      out['map_key'] = _mapKey;
+    }
 
     return out;
   }
@@ -316,6 +340,13 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
                 onChanged: (v) => setState(() => _legend = v),
               ),
               const SizedBox(height: AppTheme.sm),
+              _MapRow(
+                options: _mapOptions,
+                value: _mapKey,
+                edited: _edited.contains('map_key'),
+                onChanged: (v) => setState(() => _mapKey = v),
+              ),
+              const SizedBox(height: AppTheme.sm),
               for (final f in _numericFields) ...[
                 _NumericFieldRow(
                   field: f,
@@ -445,6 +476,48 @@ class _LegendRow extends StatelessWidget {
                       Text(name),
                     ],
                   ),
+                ),
+            ],
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MapRow extends StatelessWidget {
+  final List<String> options;
+  final String value;
+  final bool edited;
+  final ValueChanged<String> onChanged;
+
+  const _MapRow({
+    required this.options,
+    required this.value,
+    required this.edited,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _FieldLabel(label: 'Map', edited: edited),
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: value,
+            isExpanded: true,
+            dropdownColor: AppTheme.surface,
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+            decoration: const InputDecoration(isDense: true),
+            items: [
+              for (final key in options)
+                DropdownMenuItem(
+                  value: key,
+                  child: Text(kBattleRoyaleMaps[key]?.name ?? key),
                 ),
             ],
             onChanged: (v) {
