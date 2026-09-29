@@ -158,6 +158,14 @@ class RankedMatch {
   /// API match; populated when reading a persisted row.
   final Set<String> editedFields;
 
+  /// Whether the user has hand-excluded this match from every ranked
+  /// calculation (summary, legends, maps, sessions, trends). Independent of
+  /// [editedFields]/[kEditableMatchFields] — this isn't a value correction
+  /// sync could ever contest, so it's a separate flag with its own store
+  /// method rather than routed through `editMatch`. Still shows in the match
+  /// History list (greyed out) so it can be found and un-excluded.
+  final bool excluded;
+
   const RankedMatch({
     required this.uid,
     required this.playerName,
@@ -176,6 +184,7 @@ class RankedMatch {
     this.damage,
     this.seasonId,
     this.editedFields = const {},
+    this.excluded = false,
     // The fields are private but `trackers:` must stay a public named
     // parameter, which an initializing formal can't provide.
     // ignore: prefer_initializing_formals
@@ -203,6 +212,7 @@ class RankedMatch {
     this.damage,
     this.seasonId,
     this.editedFields = const {},
+    this.excluded = false,
     // Same reason as the public constructor.
     // ignore: prefer_initializing_formals
   }) : _trackers = trackers,
@@ -224,10 +234,13 @@ class RankedMatch {
   /// The game itself still counts (kills, damage, etc.).
   bool get isRankedOutlier => isRanked && isImplausibleRpChange(rpChange);
 
-  /// [rpChange] with reset artifacts zeroed out. Used in every RP aggregate
-  /// (Overview, Legends, Maps, Sessions, Time of Day). The raw [rpChange] is
-  /// only shown in the History tab and the RP progression graph.
-  int get effectiveRpChange => isRankedOutlier ? 0 : rpChange;
+  /// [rpChange] with reset artifacts and hand-excluded matches zeroed out.
+  /// Used in every RP aggregate (Overview, Legends, Maps, Sessions, Time of
+  /// Day) and in the History tab's day/group RP rollups — the latter still
+  /// lists an excluded match's row (see [excluded]), just not its RP. The raw
+  /// [rpChange] is only shown on the match's own row and the RP progression
+  /// graph.
+  int get effectiveRpChange => (isRankedOutlier || excluded) ? 0 : rpChange;
 
   /// Whether any column on this match has been hand-corrected.
   bool get isEdited => editedFields.isNotEmpty;
@@ -268,6 +281,31 @@ class RankedMatch {
     damage: changes.containsKey('damage') ? changes['damage'] as int? : damage,
     seasonId: seasonId,
     editedFields: {...editedFields, ...changes.keys},
+    excluded: excluded,
+  );
+
+  /// Returns a copy with [excluded] set. Kept separate from [withEdits] since
+  /// exclusion isn't tracked in [editedFields] — see [excluded].
+  RankedMatch withExcluded(bool excluded) => RankedMatch._(
+    uid: uid,
+    playerName: playerName,
+    legend: legend,
+    gameMode: gameMode,
+    mapKey: mapKey,
+    rpChange: rpChange,
+    cumulativeRp: cumulativeRp,
+    rankImg: rankImg,
+    lengthSecs: lengthSecs,
+    startTime: startTime,
+    endTime: endTime,
+    isPartyFull: isPartyFull,
+    trackers: _trackers,
+    trackersJson: _trackersJson,
+    kills: kills,
+    damage: damage,
+    seasonId: seasonId,
+    editedFields: editedFields,
+    excluded: excluded,
   );
 
   /// Returns a copy with [field] (or every field, if null) cleared from
@@ -300,6 +338,7 @@ class RankedMatch {
       damage: damage,
       seasonId: seasonId,
       editedFields: flags,
+      excluded: excluded,
     );
   }
 
@@ -337,6 +376,7 @@ class RankedMatch {
       damage: validDamage,
       seasonId: seasonId,
       editedFields: editedFields,
+      excluded: excluded,
     );
   }
 
@@ -454,6 +494,7 @@ class RankedMatch {
     'kills': kills,
     'damage': damage,
     'edited_fields': encodeEditedFields(editedFields),
+    'excluded': excluded ? 1 : 0,
   };
 
   /// Decodes a stored `trackers` blob. A malformed one (hand-edited or a
@@ -506,6 +547,7 @@ class RankedMatch {
       damage: (m['damage'] as num?)?.toInt(),
       seasonId: m['season_id'] as String?,
       editedFields: decodeEditedFields(m['edited_fields']),
+      excluded: (m['excluded'] as num?)?.toInt() == 1,
     );
   }
 }

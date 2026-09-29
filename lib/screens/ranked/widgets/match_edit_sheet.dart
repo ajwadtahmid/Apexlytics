@@ -114,13 +114,15 @@ String? _killsRange(int value) => _inRange('Kills', value, kMaxPlausibleKills);
 String? _damageRange(int value) =>
     _inRange('Damage', value, kMaxPlausibleDamage);
 
-/// Correction form for a single match: kills, damage, RP change, legend, and map.
+/// Correction form for a single match: kills, damage, RP change, legend, map,
+/// and an exclude toggle.
 ///
 /// A blank Kills/Damage field saves as NULL, which reads as "not reported" and
 /// drops the match out of that stat's averages instead of counting it as zero.
 /// Legend and map are picked from a fixed list rather than typed, so a
 /// correction can't introduce a name that never appears anywhere else in the
-/// breakdown.
+/// breakdown. Exclude is a separate flag from the numeric/legend/map
+/// corrections above — see [RankedMatch.excluded].
 class MatchEditSheet extends ConsumerStatefulWidget {
   final RankedMatch match;
 
@@ -137,6 +139,7 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
   late String _legend;
   late final List<String> _mapOptions;
   late String _mapKey;
+  late bool _excluded;
   bool _saving = false;
   String? _error;
 
@@ -162,6 +165,8 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
       );
     // Same fallback as legend: keep an unrecognized stored key selectable.
     _mapOptions = mapKeys.contains(_mapKey) ? mapKeys : [_mapKey, ...mapKeys];
+
+    _excluded = widget.match.excluded;
   }
 
   String _initialText(String column) {
@@ -245,7 +250,8 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
       setState(() => _error = 'Check the highlighted values and try again.');
       return;
     }
-    if (changes.isEmpty) {
+    final excludedChanged = _excluded != widget.match.excluded;
+    if (changes.isEmpty && !excludedChanged) {
       Navigator.pop(context);
       return;
     }
@@ -258,23 +264,42 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
       _error = null;
     });
     try {
-      final saved = await ref
-          .read(rankedHistoryStoreProvider)
-          .editMatch(widget.match.dedupKey, changes);
-      if (!saved) {
-        // No row matched this match's id - report the failure instead of
-        // applying the edit to the in-memory copy the caller would otherwise
-        // treat as persisted.
-        if (mounted) {
-          setState(() {
-            _error = 'That match is no longer in your history.';
-            _saving = false;
-          });
+      if (changes.isNotEmpty) {
+        final saved = await ref
+            .read(rankedHistoryStoreProvider)
+            .editMatch(widget.match.dedupKey, changes);
+        if (!saved) {
+          // No row matched this match's id - report the failure instead of
+          // applying the edit to the in-memory copy the caller would
+          // otherwise treat as persisted.
+          if (mounted) {
+            setState(() {
+              _error = 'That match is no longer in your history.';
+              _saving = false;
+            });
+          }
+          return;
         }
-        return;
+      }
+      if (excludedChanged) {
+        final saved = await ref
+            .read(rankedHistoryStoreProvider)
+            .setExcluded(widget.match.dedupKey, _excluded);
+        if (!saved) {
+          if (mounted) {
+            setState(() {
+              _error = 'That match is no longer in your history.';
+              _saving = false;
+            });
+          }
+          return;
+        }
       }
       _refreshBreakdown();
-      if (mounted) Navigator.pop(context, widget.match.withEdits(changes));
+      var updated = widget.match;
+      if (changes.isNotEmpty) updated = updated.withEdits(changes);
+      if (excludedChanged) updated = updated.withExcluded(_excluded);
+      if (mounted) Navigator.pop(context, updated);
     } catch (e, st) {
       log.w('Match edit failed', error: e, stackTrace: st);
       if (mounted) {
@@ -355,6 +380,11 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
                 ),
                 const SizedBox(height: AppTheme.sm),
               ],
+              const Divider(color: AppTheme.surface2),
+              _ExcludeRow(
+                value: _excluded,
+                onChanged: (v) => setState(() => _excluded = v),
+              ),
               if (_error != null) ...[
                 const SizedBox(height: AppTheme.xs),
                 Text(
@@ -524,6 +554,45 @@ class _MapRow extends StatelessWidget {
               if (v != null) onChanged(v);
             },
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Toggle for [RankedMatch.excluded]. Saved immediately alongside any other
+/// change via the normal Save button, not on flip, so it can still be
+/// cancelled.
+class _ExcludeRow extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _ExcludeRow({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Exclude this match',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+              ),
+              Text(
+                'Removed from every stat, breakdown, and trend. Still shows '
+                'here in History.',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          value: value,
+          activeThumbColor: AppTheme.accent,
+          onChanged: onChanged,
         ),
       ],
     );

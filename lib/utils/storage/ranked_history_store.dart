@@ -30,7 +30,7 @@ class RankedHistoryStore {
   /// lifecycle, backup envelope and per-UID scoping.
   static const snapshotTable = 'stat_snapshots';
 
-  static const _version = 9;
+  static const _version = 10;
 
   /// SQL `GLOB` shape of a real split id (`br_ranked_s29_s1`) — the SQL side
   /// of [SeasonMeta.isSplitId]. NULL, [kUnknownSeasonId], and any placeholder
@@ -107,7 +107,8 @@ class RankedHistoryStore {
             season_id TEXT,
             kills INTEGER,
             damage INTEGER,
-            edited_fields TEXT
+            edited_fields TEXT,
+            excluded INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute(
@@ -192,6 +193,15 @@ class RankedHistoryStore {
         if (oldVersion < 9) {
           await db.execute('DROP INDEX IF EXISTS idx_needs_season_id');
           await _createSeasonBackfillIndex(db);
+        }
+        // v9 → v10: hand-exclude a match from every ranked calculation
+        // (separate from edited_fields — see [RankedMatch.excluded]).
+        // Existing rows default to 0 (included), matching a freshly synced
+        // match.
+        if (oldVersion < 10) {
+          await db.execute(
+            'ALTER TABLE $table ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0',
+          );
         }
       },
     );
@@ -615,6 +625,25 @@ class RankedHistoryStore {
     );
   }
 
+  /// Sets [RankedMatch.excluded] on the match [id]. Deliberately separate
+  /// from [editMatch]: exclusion isn't a value correction subject to
+  /// [kEditableMatchFields]/`edited_fields` sync-protection — it's never
+  /// written or cleared by a sync either way (omitted from both
+  /// [upsertAll]'s and [importRows]'s column lists), so it survives on its
+  /// own with no CASE logic needed.
+  ///
+  /// Returns `false` when no row matches [id], same as [editMatch].
+  Future<bool> setExcluded(String id, bool excluded) async {
+    final db = await _open();
+    final count = await db.update(
+      table,
+      {'excluded': excluded ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return count > 0;
+  }
+
   /// Match count per season id for [uid] (unclassified NULL rows omitted),
   /// including non-ranked games. Test-only — [rankedSeasonCounts] below is
   /// what actually drives the split picker in production; it additionally
@@ -697,7 +726,8 @@ class RankedHistoryStore {
   /// split — the lifetime scope). Folds Unknown/NULL together like [getBySeason].
   (String, List<Object?>) _rankedScope(String uid, String? seasonId) {
     final buf = StringBuffer(
-      "uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0",
+      "uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0 "
+      'AND excluded = 0',
     );
     final args = <Object?>[uid];
     if (seasonId == kUnknownSeasonId) {

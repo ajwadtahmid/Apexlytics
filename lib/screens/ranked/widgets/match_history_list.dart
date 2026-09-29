@@ -359,88 +359,97 @@ class _MatchRow extends StatelessWidget {
     return InkWell(
       onTap: () => _showDetail(context, match),
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-              child: SizedBox(
-                width: 36,
-                height: 36,
-                child: LegendAssetImage(
-                  imageKey: _legendImageKey(match.legend),
-                  displayName: match.legend,
-                  fallbackFontSize: 16,
+      child: Opacity(
+        opacity: match.excluded ? 0.45 : 1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: LegendAssetImage(
+                    imageKey: _legendImageKey(match.legend),
+                    displayName: match.legend,
+                    fallbackFontSize: 16,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: AppTheme.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    match.legend,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      match.legend,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
+                    Text(
+                      '${battleRoyaleMapName(match.mapKey)} · ${timeAgo(match.endTime)}',
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (ranked)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (match.excluded) ...[
+                          const _ExcludedTag(),
+                          const SizedBox(width: 4),
+                        ] else if (match.isRankedOutlier) ...[
+                          const _OutlierTag(),
+                          const SizedBox(width: 4),
+                        ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: rpColor.withAlpha(30),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusSm,
+                            ),
+                          ),
+                          child: Text(
+                            '${up ? '+' : ''}${match.rpChange} RP',
+                            style: TextStyle(
+                              color: rpColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    const _CasualTag(),
+                  const SizedBox(height: 2),
                   Text(
-                    '${battleRoyaleMapName(match.mapKey)} · ${timeAgo(match.endTime)}',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    // An em dash marks a stat upstream never reported, which is
+                    // not the same as a scoreless game.
+                    '${match.kills ?? '—'} K · '
+                    '${match.damage == null ? '—' : formatNumber(match.damage!)} dmg',
+                    style: const TextStyle(color: AppTheme.muted, fontSize: 11),
                   ),
                 ],
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (ranked)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (match.isRankedOutlier) ...[
-                        const _OutlierTag(),
-                        const SizedBox(width: 4),
-                      ],
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: rpColor.withAlpha(30),
-                          borderRadius: BorderRadius.circular(
-                            AppTheme.radiusSm,
-                          ),
-                        ),
-                        child: Text(
-                          '${up ? '+' : ''}${match.rpChange} RP',
-                          style: TextStyle(
-                            color: rpColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  const _CasualTag(),
-                const SizedBox(height: 2),
-                Text(
-                  // An em dash marks a stat upstream never reported, which is
-                  // not the same as a scoreless game.
-                  '${match.kills ?? '—'} K · '
-                  '${match.damage == null ? '—' : formatNumber(match.damage!)} dmg',
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -510,6 +519,31 @@ class _OutlierTag extends StatelessWidget {
   }
 }
 
+/// Muted pill flagging a hand-excluded match — its row still shows (greyed,
+/// via [_MatchRow]'s [Opacity]) but every stat/breakdown/trend skips it.
+class _ExcludedTag extends StatelessWidget {
+  const _ExcludedTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: const Text(
+        'Excluded',
+        style: TextStyle(
+          color: AppTheme.muted,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
 /// Marks a match carrying at least one hand-corrected stat.
 class _EditedChip extends StatelessWidget {
   const _EditedChip();
@@ -567,6 +601,10 @@ class _MatchDetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: AppTheme.sm),
                 _ModeChip(ranked: ranked),
+                if (match.excluded) ...[
+                  const SizedBox(width: AppTheme.xs),
+                  const _ExcludedTag(),
+                ],
                 if (match.isEdited) ...[
                   const SizedBox(width: AppTheme.xs),
                   const _EditedChip(),

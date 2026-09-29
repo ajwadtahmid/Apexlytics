@@ -458,7 +458,11 @@ void main() {
           },
         ),
       );
-      await v7.insert('ranked_matches', match('1', 100).toStoredMap());
+      await v7.insert(
+        'ranked_matches',
+        Map<String, Object?>.from(match('1', 100).toStoredMap())
+          ..remove('excluded'),
+      );
       await v7.close();
 
       final store = RankedHistoryStore(overridePath: path);
@@ -916,6 +920,61 @@ void main() {
       final m = match('1', 100);
       final store = await storeWithMatch(m);
       expect(await store.editMatch(m.dedupKey, {'kills': 9}), true);
+    });
+  });
+
+  group('excluded matches', () {
+    Future<RankedHistoryStore> storeWithMatch(RankedMatch m) async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll(m.uid, [m]);
+      return store;
+    }
+
+    test('setExcluded flags the row and reports success', () async {
+      final m = match('1', 100);
+      final store = await storeWithMatch(m);
+
+      expect(await store.setExcluded(m.dedupKey, true), true);
+      expect((await store.getAll('1')).single.excluded, isTrue);
+    });
+
+    test('setExcluded on an unknown match is a no-op and reports failure', () async {
+      final store = await storeWithMatch(match('1', 100));
+      expect(await store.setExcluded('nope', true), false);
+    });
+
+    test('an excluded match is dropped from summaryFor', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100, rp: 20), match('1', 200)]);
+      await store.setExcluded('1_100', true);
+
+      final summary = await store.summaryFor('1');
+      expect(summary.games, 1);
+      expect(summary.netRp, 10);
+    });
+
+    test('a later sync never clears an exclusion', () async {
+      final m = match('1', 100);
+      final store = await storeWithMatch(m);
+
+      await store.setExcluded(m.dedupKey, true);
+      await store.upsertAll('1', [m]); // same match served again
+
+      expect((await store.getAll('1')).single.excluded, isTrue);
+    });
+
+    test('un-excluding restores the match to aggregates', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final m = match('1', 100);
+      await store.upsertAll('1', [m]);
+      await store.setExcluded(m.dedupKey, true);
+      await store.setExcluded(m.dedupKey, false);
+
+      final summary = await store.summaryFor('1');
+      expect(summary.games, 1);
     });
   });
 
@@ -1641,7 +1700,7 @@ void main() {
         ),
       );
       await v8.insert('ranked_matches', {
-        ...match('1', 100).toStoredMap(),
+        ...match('1', 100).toStoredMap()..remove('excluded'),
         'season_id': '__other__',
       });
       await v8.close();

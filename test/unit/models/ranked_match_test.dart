@@ -296,4 +296,30 @@ void main() {
       },
     );
   });
+
+  group('excluded', () {
+    test('a freshly parsed API match is never excluded', () {
+      expect(RankedMatch.fromJson(brMatch()).excluded, isFalse);
+    });
+
+    test('withExcluded flips the flag without touching editedFields', () {
+      final m = RankedMatch.fromJson(brMatch()).withEdits({'kills': 5});
+      final excluded = m.withExcluded(true);
+
+      expect(excluded.excluded, isTrue);
+      expect(excluded.editedFields, m.editedFields);
+    });
+
+    test('excluded round-trips through toStoredMap/fromStoredMap', () {
+      final m = RankedMatch.fromJson(brMatch()).withExcluded(true);
+      final restored = RankedMatch.fromStoredMap(m.toStoredMap());
+      expect(restored.excluded, isTrue);
+    });
+
+    test('effectiveRpChange is zeroed for an excluded match', () {
+      final m = RankedMatch.fromJson(brMatch()).withExcluded(true);
+      expect(m.rpChange, isNot(0));
+      expect(m.effectiveRpChange, 0);
+    });
+  });
 }

@@ -111,6 +111,23 @@ void main() {
     expect(r.every((m) => m.isRanked), true);
   });
 
+  test('rankedOnly drops a hand-excluded match', () {
+    final withExcluded = rankedOnly([
+      ...data,
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 50,
+        cumulativeRp: 1140,
+        kills: 3,
+        damage: 900,
+        startOffset: 21600,
+      ).withExcluded(true),
+    ]);
+    expect(withExcluded.length, 4); // the excluded 5th match is dropped
+    expect(withExcluded.every((m) => !m.excluded), true);
+  });
+
   test('summarize aggregates the window', () {
     final s = summarize(ranked);
     expect(s.games, 4);

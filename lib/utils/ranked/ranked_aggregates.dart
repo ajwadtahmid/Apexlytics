@@ -17,9 +17,9 @@ const Duration kSessionGap = Duration(hours: 2);
 /// single lucky game doesn't crown a legend.
 const int kMinGamesForInsight = 3;
 
-/// Returns only ranked (Battle Royale) matches, newest first.
+/// Returns only ranked (Battle Royale), non-excluded matches, newest first.
 List<RankedMatch> rankedOnly(List<RankedMatch> all) {
-  final list = all.where((m) => m.isRanked).toList()
+  final list = all.where((m) => m.isRanked && !m.excluded).toList()
     ..sort((a, b) => b.endTime.compareTo(a.endTime));
   return list;
 }
