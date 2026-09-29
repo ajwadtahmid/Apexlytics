@@ -19,19 +19,24 @@ class WinLossStat extends StatelessWidget {
   /// Drops the trailing `33W 65L` record, leaving just the rate.
   final bool showRecord;
 
+  /// Shrinks to [StatDisplay]'s compact sizing, for a chip row with more than
+  /// one line of chips.
+  final bool compact;
+
   const WinLossStat({
     super.key,
     required this.wins,
     required this.losses,
     this.onImage = false,
     this.showRecord = true,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final decided = wins + losses;
     final rateText = decided == 0 ? '—' : '${(wins / decided * 100).round()}%';
-    final valueSize = onImage ? 14.0 : 15.0;
+    final valueSize = compact ? 12.0 : (onImage ? 14.0 : 15.0);
 
     final value = Text.rich(
       TextSpan(
@@ -78,7 +83,7 @@ class WinLossStat extends StatelessWidget {
           onImage ? 'WIN RATE' : 'Win Rate',
           style: TextStyle(
             color: onImage ? Colors.white60 : AppTheme.muted,
-            fontSize: onImage ? 9 : 10,
+            fontSize: compact ? 9 : (onImage ? 9 : 10),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -90,7 +95,9 @@ class WinLossStat extends StatelessWidget {
     if (onImage) return content;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: compact
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
+          : const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: AppTheme.surface2,
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),

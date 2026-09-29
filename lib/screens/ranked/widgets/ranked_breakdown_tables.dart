@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
-import '../../../utils/formatting/format.dart'
-    show formatNumber, formatDuration;
+import '../../../utils/formatting/format.dart' show formatNumber;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -161,7 +160,7 @@ class _LegendCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 96),
+              padding: const EdgeInsets.only(left: 96, right: AppTheme.lg),
               child: Padding(
                 padding: const EdgeInsets.all(AppTheme.md),
                 child: Column(
@@ -192,35 +191,48 @@ class _LegendCard extends StatelessWidget {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.only(right: AppTheme.sm),
-                            child: _AvgRpChip(avgRp: row.avgRpPerGame),
+                          _AvgRpChip(avgRp: row.avgRpPerGame, compact: true),
+                          const SizedBox(width: AppTheme.sm),
+                          _chip(
+                            'Avg Dmg',
+                            formatNumber(row.avgDamage.round()),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(right: AppTheme.sm),
-                            child: WinLossStat(
-                              wins: row.wins,
-                              losses: row.losses,
-                              showRecord: false,
-                            ),
-                          ),
-                          _chip('Total Kills', formatNumber(row.totalKills)),
-                          _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
+                          const SizedBox(width: AppTheme.sm),
                           _chip('Total Dmg', formatNumber(row.totalDamage)),
-                          _chip('Avg Dmg', formatNumber(row.avgDamage.round())),
-                          _chip(
-                            'Total Time',
-                            formatDuration(row.totalLengthSecs),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.sm),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          WinLossStat(
+                            wins: row.wins,
+                            losses: row.losses,
+                            showRecord: false,
+                            compact: true,
                           ),
-                          _chip(
-                            'Avg Time',
-                            formatDuration(row.avgLengthSecs.round()),
-                          ),
-                          _chip('Games', '${row.games}'),
+                          const SizedBox(width: AppTheme.sm),
+                          _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
+                          const SizedBox(width: AppTheme.sm),
+                          _chip('Total Kills', formatNumber(row.totalKills)),
                         ],
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+            const Positioned(
+              right: AppTheme.sm,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: AppTheme.muted,
                 ),
               ),
             ),
@@ -230,23 +242,24 @@ class _LegendCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, String value, {bool highlight = false}) => Padding(
-    padding: const EdgeInsets.only(right: AppTheme.sm),
-    child: StatDisplay(label: label, value: value, highlight: highlight),
-  );
+  Widget _chip(String label, String value, {bool highlight = false}) =>
+      StatDisplay(label: label, value: value, highlight: highlight, compact: true);
 }
 
 /// Avg RP chip in the same neutral box as the other stat chips — only the
 /// value itself is coloured green/red (positive/negative), not the whole box.
 class _AvgRpChip extends StatelessWidget {
   final double avgRp;
-  const _AvgRpChip({required this.avgRp});
+  final bool compact;
+  const _AvgRpChip({required this.avgRp, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     final color = avgRp >= 0 ? AppTheme.green : AppTheme.red;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      padding: compact
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
+          : const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: AppTheme.surface2,
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
@@ -255,11 +268,11 @@ class _AvgRpChip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'Avg RP',
             style: TextStyle(
               color: AppTheme.muted,
-              fontSize: 10,
+              fontSize: compact ? 9 : 10,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -268,7 +281,7 @@ class _AvgRpChip extends StatelessWidget {
             _signedAvg(avgRp),
             style: TextStyle(
               color: color,
-              fontSize: 15,
+              fontSize: compact ? 12 : 15,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -365,7 +378,7 @@ class _MapCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       clip: Clip.antiAlias,
       onTap: onTap,
-      child: SizedBox(height: 132, child: _mapArt(context, asset, rpColor)),
+      child: SizedBox(height: 152, child: _mapArt(context, asset, rpColor)),
     );
   }
 
@@ -391,22 +404,22 @@ class _MapCard extends StatelessWidget {
             ),
           ),
         ),
-        Positioned(
-          top: AppTheme.sm,
-          right: AppTheme.sm,
-          child: MapRpBadge(totalRp: row.totalRp, color: rpColor),
-        ),
         Padding(
-          padding: const EdgeInsets.all(AppTheme.md),
+          padding: const EdgeInsets.fromLTRB(
+            AppTheme.md,
+            AppTheme.md,
+            AppTheme.lg,
+            AppTheme.md,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
                   _RankBadge(rank: rank, onImage: true),
                   const SizedBox(width: AppTheme.sm),
-                  Flexible(
+                  Expanded(
                     child: Text(
                       row.displayName,
                       style: const TextStyle(
@@ -417,56 +430,67 @@ class _MapCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: AppTheme.sm),
+                  MapRpBadge(totalRp: row.totalRp, color: rpColor),
                 ],
               ),
-              const SizedBox(height: 4),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _MapStat(
-                      label: 'Avg RP',
-                      value: _signedAvg(row.avgRpPerGame),
-                      color: rpColor,
+                    Row(
+                      children: [
+                        _MapStat(
+                          label: 'Avg RP',
+                          value: _signedAvg(row.avgRpPerGame),
+                          color: rpColor,
+                        ),
+                        const SizedBox(width: AppTheme.md),
+                        _MapStat(
+                          label: 'Avg Dmg',
+                          value: formatNumber(row.avgDamage.round()),
+                        ),
+                        const SizedBox(width: AppTheme.md),
+                        _MapStat(
+                          label: 'Total Dmg',
+                          value: formatNumber(row.totalDamage),
+                        ),
+                      ],
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: AppTheme.md),
-                      child: WinLossStat(
-                        wins: row.wins,
-                        losses: row.losses,
-                        onImage: true,
-                        showRecord: false,
-                      ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        WinLossStat(
+                          wins: row.wins,
+                          losses: row.losses,
+                          onImage: true,
+                          showRecord: false,
+                        ),
+                        const SizedBox(width: AppTheme.md),
+                        _MapStat(
+                          label: 'Avg Kills',
+                          value: row.avgKills.toStringAsFixed(1),
+                        ),
+                        const SizedBox(width: AppTheme.md),
+                        _MapStat(
+                          label: 'Total Kills',
+                          value: formatNumber(row.totalKills),
+                        ),
+                      ],
                     ),
-                    _MapStat(
-                      label: 'Total Kills',
-                      value: formatNumber(row.totalKills),
-                    ),
-                    _MapStat(
-                      label: 'Avg Kills',
-                      value: row.avgKills.toStringAsFixed(1),
-                    ),
-                    _MapStat(
-                      label: 'Total Dmg',
-                      value: formatNumber(row.totalDamage),
-                    ),
-                    _MapStat(
-                      label: 'Avg Dmg',
-                      value: formatNumber(row.avgDamage.round()),
-                    ),
-                    _MapStat(
-                      label: 'Total Time',
-                      value: formatDuration(row.totalLengthSecs),
-                    ),
-                    _MapStat(
-                      label: 'Avg Time',
-                      value: formatDuration(row.avgLengthSecs.round()),
-                    ),
-                    _MapStat(label: 'Games', value: '${row.games}'),
                   ],
                 ),
               ),
             ],
+          ),
+        ),
+        const Positioned(
+          right: AppTheme.sm,
+          top: 0,
+          bottom: 0,
+          child: Center(
+            child: Icon(Icons.chevron_right, size: 18, color: Colors.white60),
           ),
         ),
       ],
@@ -482,31 +506,28 @@ class _MapStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: AppTheme.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            color: Colors.white60,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(height: 1),
-          Text(
-            value,
-            style: TextStyle(
-              color: color ?? Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          value,
+          style: TextStyle(
+            color: color ?? Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
