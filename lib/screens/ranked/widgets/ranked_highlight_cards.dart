@@ -5,6 +5,7 @@ import '../../../utils/formatting/format.dart' show formatNumber, formatSigned;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
+import '../../../widgets/rp_pill.dart';
 import '../../../widgets/surface_card.dart';
 import 'map_rp_badge.dart';
 import 'ranked_legend_detail_sheet.dart';
@@ -151,62 +152,100 @@ class _CompactLegend extends StatelessWidget {
     required this.onRefresh,
   });
 
+  // Sized to the portrait's own aspect ratio so it shows uncropped.
+  static const _portraitHeight = 56.0;
+
   @override
   Widget build(BuildContext context) {
     final positive = breakdown.avgRpPerGame >= 0;
     final rpColor = positive ? AppTheme.green : AppTheme.red;
+    final portraitWidth = _portraitHeight * kLegendPortraitAspectRatio;
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.sm + 2),
       onTap: () =>
           showLegendDetailSheet(context, breakdown, matchesFor, onRefresh),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: LegendAssetImage(
-                imageKey: legendImageKey(breakdown.legend),
-                displayName: breakdown.legend,
-                fallbackFontSize: 18,
+      // Needed for `stretch` below: this card has no fixed height to stretch against otherwise.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+              child: SizedBox(
+                width: portraitWidth,
+                height: _portraitHeight,
+                child: LegendAssetImage(
+                  imageKey: legendImageKey(breakdown.legend),
+                  displayName: breakdown.legend,
+                  fallbackFontSize: 20,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: AppTheme.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+            const SizedBox(width: AppTheme.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    breakdown.legend,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      children: [
+                        _HighlightStat(
+                          label: 'Avg RP',
+                          value: formatSigned(breakdown.avgRpPerGame),
+                          color: rpColor,
+                          compact: true,
+                        ),
+                        _HighlightStat(
+                          label: 'Kills',
+                          value: breakdown.avgKills.toStringAsFixed(1),
+                          compact: true,
+                        ),
+                        _HighlightStat(
+                          label: 'Dmg',
+                          value: formatNumber(breakdown.avgDamage.round()),
+                          compact: true,
+                        ),
+                        _HighlightStat(
+                          label: 'Games',
+                          value: '${breakdown.games}',
+                          compact: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppTheme.sm),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  breakdown.legend,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  '${formatSigned(breakdown.avgRpPerGame)} RP/game',
-                  style: TextStyle(
-                    color: rpColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  '${breakdown.games}g · ${breakdown.avgKills.toStringAsFixed(1)}K · ${formatNumber(breakdown.avgDamage.round())} dmg',
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 10),
-                  overflow: TextOverflow.ellipsis,
+                RpPill(totalRp: breakdown.totalRp),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: AppTheme.muted,
                 ),
               ],
             ),
-          ),
-          const Icon(Icons.chevron_right, size: 18, color: AppTheme.muted),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -300,20 +339,27 @@ class _MapHighlight extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: Row(
                       children: [
-                        _MapStat(
+                        _HighlightStat(
                           label: 'Avg RP',
                           value: formatSigned(map.avgRpPerGame),
                           color: accent,
+                          onImage: true,
                         ),
-                        _MapStat(
+                        _HighlightStat(
                           label: 'Kills',
                           value: map.avgKills.toStringAsFixed(1),
+                          onImage: true,
                         ),
-                        _MapStat(
+                        _HighlightStat(
                           label: 'Dmg',
                           value: formatNumber(map.avgDamage.round()),
+                          onImage: true,
                         ),
-                        _MapStat(label: 'Games', value: '${map.games}'),
+                        _HighlightStat(
+                          label: 'Games',
+                          value: '${map.games}',
+                          onImage: true,
+                        ),
                       ],
                     ),
                   ),
@@ -327,25 +373,37 @@ class _MapHighlight extends StatelessWidget {
   }
 }
 
-class _MapStat extends StatelessWidget {
+/// Small label/value stat pair for the highlight cards' stat row.
+class _HighlightStat extends StatelessWidget {
   final String label;
   final String value;
   final Color? color;
-  const _MapStat({required this.label, required this.value, this.color});
+  final bool onImage; // white text over map art vs. themed text on a plain card
+  final bool compact; // smaller text for the legend row vs. the map banner
+
+  const _HighlightStat({
+    required this.label,
+    required this.value,
+    this.color,
+    this.onImage = false,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final labelColor = onImage ? Colors.white60 : AppTheme.muted;
+    final valueColor = color ?? (onImage ? Colors.white : AppTheme.textPrimary);
     return Padding(
-      padding: const EdgeInsets.only(right: AppTheme.md),
+      padding: EdgeInsets.only(right: compact ? AppTheme.sm : AppTheme.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white60,
-              fontSize: 9,
+            style: TextStyle(
+              color: labelColor,
+              fontSize: compact ? 8 : 9,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -353,8 +411,8 @@ class _MapStat extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              color: color ?? Colors.white,
-              fontSize: 14,
+              color: valueColor,
+              fontSize: compact ? 11 : 14,
               fontWeight: FontWeight.bold,
             ),
           ),

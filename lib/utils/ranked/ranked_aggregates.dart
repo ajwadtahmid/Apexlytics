@@ -873,7 +873,7 @@ SessionTrend? sessionTrend(
 
 /// Recent-games window [entityTrends] compares against the rest of an
 /// entity's history.
-const int kTrendRecentGames = 10;
+const int kTrendRecentGames = 5;
 
 /// [current] is the entity's overall average (matches e.g.
 /// [LegendBreakdown.avgRpPerGame]); [older] is what it was before that, so a
@@ -934,27 +934,3 @@ EntityTrends entityTrends(List<RankedMatch> matches) => (
   kills: _trendChange(matches, valueOf: (m) => m.kills),
   damage: _trendChange(matches, valueOf: (m) => m.damage),
 );
-
-/// [entityTrends] for every legend in [matches] at once, keyed by canonical
-/// legend name (matches [LegendBreakdown.legend]). One grouping pass over
-/// [matches] rather than filtering the whole list once per legend — the
-/// per-rebuild cost that motivated computing this alongside the other
-/// split-scoped aggregates instead of in the widget layer.
-Map<String, EntityTrends> legendTrendsByEntity(List<RankedMatch> matches) {
-  final byLegend = <String, List<RankedMatch>>{};
-  for (final m in matches) {
-    byLegend.putIfAbsent(canonicalLegendName(m.legend), () => []).add(m);
-  }
-  return {for (final e in byLegend.entries) e.key: entityTrends(e.value)};
-}
-
-/// [entityTrends] for every map in [matches] at once, keyed by canonical map
-/// key (look up with `canonicalMapKey(mapBreakdown.mapKey)`). Same reasoning
-/// as [legendTrendsByEntity].
-Map<String, EntityTrends> mapTrendsByEntity(List<RankedMatch> matches) {
-  final byMap = <String, List<RankedMatch>>{};
-  for (final m in matches) {
-    byMap.putIfAbsent(canonicalMapKey(m.mapKey), () => []).add(m);
-  }
-  return {for (final e in byMap.entries) e.key: entityTrends(e.value)};
-}

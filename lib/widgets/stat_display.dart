@@ -64,3 +64,39 @@ class StatDisplay extends StatelessWidget {
     );
   }
 }
+
+/// Stat chips split into [groups] (e.g. RP/record, combat, playtime) by a
+/// thin divider — no section labels needed since the chip labels say enough.
+class GroupedStatChips extends StatelessWidget {
+  final List<List<Widget>> groups;
+  final WrapAlignment alignment;
+  const GroupedStatChips({
+    super.key,
+    required this.groups,
+    this.alignment = WrapAlignment.start,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < groups.length; i++) ...[
+          if (i > 0)
+            const Divider(color: AppTheme.surface2, height: AppTheme.lg),
+          // Forces full width so a single-line Wrap has room to center in,
+          // rather than shrinking to its content and pinning left.
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: alignment,
+              spacing: AppTheme.sm,
+              runSpacing: AppTheme.sm,
+              children: groups[i],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}

@@ -6,6 +6,7 @@ import '../../../utils/formatting/format.dart'
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/stat_display.dart';
+import '../../../widgets/trend_lines.dart';
 import '../../../widgets/win_loss_stat.dart';
 import '../ranked_entity_history_screen.dart';
 import 'match_history_items.dart' show MatchGrouping;
@@ -109,49 +110,70 @@ class _MapDetailSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppTheme.md),
-            Wrap(
-              spacing: AppTheme.sm,
-              runSpacing: AppTheme.sm,
-              children: [
-                StatDisplay(
-                  label: 'Avg RP',
-                  value: formatSigned(map.avgRpPerGame),
-                  valueColor: map.avgRpPerGame >= 0
-                      ? AppTheme.green
-                      : AppTheme.red,
-                ),
-                StatDisplay(
-                  label: 'Total RP',
-                  value: formatSigned(map.totalRp.toDouble()),
-                  valueColor: map.totalRp >= 0 ? AppTheme.green : AppTheme.red,
-                ),
-                WinLossStat(wins: map.wins, losses: map.losses),
-                StatDisplay(
-                  label: 'Total Kills',
-                  value: formatNumber(map.totalKills),
-                ),
-                StatDisplay(
-                  label: 'Avg Kills',
-                  value: map.avgKills.toStringAsFixed(1),
-                ),
-                StatDisplay(
-                  label: 'Total Dmg',
-                  value: formatNumber(map.totalDamage),
-                ),
-                StatDisplay(
-                  label: 'Avg Dmg',
-                  value: formatNumber(map.avgDamage.round()),
-                ),
-                StatDisplay(
-                  label: 'Total Time',
-                  value: formatDuration(map.totalLengthSecs),
-                ),
-                StatDisplay(
-                  label: 'Avg Time',
-                  value: formatDuration(map.avgLengthSecs.round()),
-                ),
-                StatDisplay(label: 'Games', value: '${map.games}'),
+            GroupedStatChips(
+              groups: [
+                [
+                  StatDisplay(
+                    label: 'Avg RP',
+                    value: formatSigned(map.avgRpPerGame),
+                    valueColor: map.avgRpPerGame >= 0
+                        ? AppTheme.green
+                        : AppTheme.red,
+                  ),
+                  StatDisplay(
+                    label: 'Total RP',
+                    value: formatSigned(map.totalRp.toDouble()),
+                    valueColor: map.totalRp >= 0
+                        ? AppTheme.green
+                        : AppTheme.red,
+                  ),
+                  WinLossStat(wins: map.wins, losses: map.losses),
+                  StatDisplay(label: 'Games', value: '${map.games}'),
+                ],
+                [
+                  StatDisplay(
+                    label: 'Avg Kills',
+                    value: map.avgKills.toStringAsFixed(1),
+                  ),
+                  StatDisplay(
+                    label: 'Total Kills',
+                    value: formatNumber(map.totalKills),
+                  ),
+                  StatDisplay(
+                    label: 'Avg Dmg',
+                    value: formatNumber(map.avgDamage.round()),
+                  ),
+                  StatDisplay(
+                    label: 'Total Dmg',
+                    value: formatNumber(map.totalDamage),
+                  ),
+                ],
+                [
+                  StatDisplay(
+                    label: 'Avg Time',
+                    value: formatDuration(map.avgLengthSecs.round()),
+                  ),
+                  StatDisplay(
+                    label: 'Total Time',
+                    value: formatDuration(map.totalLengthSecs),
+                  ),
+                ],
               ],
+            ),
+            FutureBuilder<List<RankedMatch>>(
+              future: matchesFor(map.mapKey),
+              builder: (context, snapshot) {
+                final matches = snapshot.data;
+                if (matches == null) return const SizedBox.shrink();
+                final trends = entityTrends(matches);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TrendLines(trends: trends),
+                    const TrendFootnote(),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: AppTheme.md),
             SizedBox(

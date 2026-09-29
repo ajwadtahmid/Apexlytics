@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatDuration, formatSigned;
+    show formatNumber, formatDuration;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
+import '../../../widgets/rp_pill.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
 import '../../../widgets/win_loss_stat.dart';
@@ -71,16 +72,12 @@ class RankedLegendBreakdown extends StatefulWidget {
   // Lifetime tab can query one legend on tap instead of holding all history.
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
-  // Keyed by legend name. Empty at Lifetime scope, where rows come from a
-  // SQL aggregate with no matches hydrated to build trends from.
-  final Map<String, EntityTrends> trends;
 
   const RankedLegendBreakdown({
     super.key,
     required this.rows,
     required this.matchesFor,
     required this.onRefresh,
-    this.trends = const {},
   });
 
   @override
@@ -118,7 +115,6 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
               child: _LegendCard(
                 rank: i + 1,
                 row: rows[i],
-                trends: widget.trends[rows[i].legend],
                 onTap: () => showLegendDetailSheet(
                   context,
                   rows[i],
@@ -127,7 +123,6 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
                 ),
               ),
             ),
-          if (widget.trends.isNotEmpty) const _TrendFootnote(),
         ],
       ),
     );
@@ -137,14 +132,8 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
 class _LegendCard extends StatelessWidget {
   final int rank;
   final LegendBreakdown row;
-  final EntityTrends? trends;
   final VoidCallback onTap;
-  const _LegendCard({
-    required this.rank,
-    required this.row,
-    required this.onTap,
-    this.trends,
-  });
+  const _LegendCard({required this.rank, required this.row, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -195,7 +184,7 @@ class _LegendCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: AppTheme.sm),
-                        _RpPill(totalRp: row.totalRp),
+                        RpPill(totalRp: row.totalRp),
                       ],
                     ),
                     const SizedBox(height: AppTheme.sm),
@@ -212,6 +201,7 @@ class _LegendCard extends StatelessWidget {
                             child: WinLossStat(
                               wins: row.wins,
                               losses: row.losses,
+                              showRecord: false,
                             ),
                           ),
                           _chip('Total Kills', formatNumber(row.totalKills)),
@@ -230,7 +220,6 @@ class _LegendCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (trends != null) _TrendLines(trends: trends!),
                   ],
                 ),
               ),
@@ -289,139 +278,8 @@ class _AvgRpChip extends StatelessWidget {
   }
 }
 
-class _RpPill extends StatelessWidget {
-  final int totalRp;
-  const _RpPill({required this.totalRp});
-
-  @override
-  Widget build(BuildContext context) {
-    final positive = totalRp >= 0;
-    final color = positive ? AppTheme.green : AppTheme.red;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: Text(
-        '${positive ? '+' : ''}${formatNumber(totalRp)} RP',
-        style: TextStyle(
-          color: color,
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
 /// Up to 3 short lines (RP/Kills/Damage) under a legend/map card's chip row,
 /// leading with the size of the move rather than restating the current
-/// average already shown above it - "down 5, was 50". A metric whose
-/// displayed magnitude rounds to zero shows as a muted "▶ unchanged" instead
-/// of a misleading colored "down 0.0". Dropped individually when
-/// [entityTrends] returned null (not enough games played yet); the whole
-/// widget collapses to nothing if all three are.
-class _TrendLines extends StatelessWidget {
-  final EntityTrends trends;
-  const _TrendLines({required this.trends});
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = [
-      _line(
-        'Avg RP',
-        trends.rp,
-        magnitudeFmt: (v) => v.toStringAsFixed(1),
-        olderFmt: formatSigned,
-        roundsToZero: (d) => d.abs() < 0.05,
-      ),
-      _line(
-        'Avg Kills',
-        trends.kills,
-        magnitudeFmt: (v) => v.toStringAsFixed(1),
-        olderFmt: (v) => v.toStringAsFixed(1),
-        roundsToZero: (d) => d.abs() < 0.05,
-      ),
-      _line(
-        'Avg Damage',
-        trends.damage,
-        magnitudeFmt: (v) => formatNumber(v.round()),
-        olderFmt: (v) => formatNumber(v.round()),
-        roundsToZero: (d) => d.abs() < 0.5,
-      ),
-    ].whereType<Widget>().toList();
-    if (lines.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: AppTheme.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final line in lines)
-            Padding(padding: const EdgeInsets.only(top: 2), child: line),
-        ],
-      ),
-    );
-  }
-
-  Widget? _line(
-    String label,
-    TrendChange? trend, {
-    required String Function(double) magnitudeFmt,
-    required String Function(double) olderFmt,
-    required bool Function(double) roundsToZero,
-  }) {
-    if (trend == null) return null;
-    if (roundsToZero(trend.delta)) {
-      return Text.rich(
-        TextSpan(
-          style: const TextStyle(fontSize: 11, color: AppTheme.muted),
-          children: [
-            const TextSpan(text: '▶ '),
-            TextSpan(text: '$label unchanged'),
-          ],
-        ),
-      );
-    }
-    final up = trend.delta > 0;
-    final color = up ? AppTheme.green : AppTheme.red;
-    return Text.rich(
-      TextSpan(
-        style: TextStyle(fontSize: 11, color: color),
-        children: [
-          TextSpan(text: up ? '▲ ' : '▼ '),
-          TextSpan(
-            text:
-                '$label ${up ? 'up' : 'down'} ${magnitudeFmt(trend.delta.abs())}, '
-                'was ${olderFmt(trend.older)}',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One-line explainer for the [_TrendLines] shown on each card above -
-/// avoids repeating the methodology per-card, and keeps it out of the info
-/// sheet so it doesn't cost a tap to see.
-class _TrendFootnote extends StatelessWidget {
-  const _TrendFootnote();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: AppTheme.sm),
-      child: Text(
-        'Trends show your average now vs. before your last '
-        '$kTrendRecentGames games.',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 11, color: AppTheme.muted),
-      ),
-    );
-  }
-}
-
 // ── Maps tab ────────────────────────────────────────────────────────────────
 
 class RankedMapBreakdown extends StatefulWidget {
@@ -430,16 +288,12 @@ class RankedMapBreakdown extends StatefulWidget {
   // Lifetime tab can query one map on tap instead of holding all history.
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
-  // Keyed by MapBreakdown.mapKey. Empty at Lifetime scope, where rows come
-  // from a SQL aggregate with no matches hydrated to build trends from.
-  final Map<String, EntityTrends> trends;
 
   const RankedMapBreakdown({
     super.key,
     required this.rows,
     required this.matchesFor,
     required this.onRefresh,
-    this.trends = const {},
   });
 
   @override
@@ -481,7 +335,6 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
               child: _MapCard(
                 rank: i + 1,
                 row: rows[i],
-                trends: widget.trends[rows[i].mapKey],
                 onTap: () => showMapDetailSheet(
                   context,
                   rows[i],
@@ -490,7 +343,6 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
                 ),
               ),
             ),
-          if (widget.trends.isNotEmpty) const _TrendFootnote(),
         ],
       ),
     );
@@ -500,14 +352,8 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
 class _MapCard extends StatelessWidget {
   final int rank;
   final MapBreakdown row;
-  final EntityTrends? trends;
   final VoidCallback onTap;
-  const _MapCard({
-    required this.rank,
-    required this.row,
-    required this.onTap,
-    this.trends,
-  });
+  const _MapCard({required this.rank, required this.row, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -519,22 +365,7 @@ class _MapCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       clip: Clip.antiAlias,
       onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: 132, child: _mapArt(context, asset, rpColor)),
-          if (trends != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppTheme.md,
-                AppTheme.sm,
-                AppTheme.md,
-                AppTheme.sm,
-              ),
-              child: _TrendLines(trends: trends!),
-            ),
-        ],
-      ),
+      child: SizedBox(height: 132, child: _mapArt(context, asset, rpColor)),
     );
   }
 
@@ -604,6 +435,7 @@ class _MapCard extends StatelessWidget {
                         wins: row.wins,
                         losses: row.losses,
                         onImage: true,
+                        showRecord: false,
                       ),
                     ),
                     _MapStat(

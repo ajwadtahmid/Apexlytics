@@ -426,22 +426,6 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     Future<List<RankedMatch>> mapMatches(String mapKey) async =>
         mapFiltered(mapKey);
 
-    // Trend lines need real matches, so they only exist for a split, not
-    // Lifetime, where legend/map rows come from a lightweight SQL aggregate
-    // with no matches hydrated. Computed once in rankedSplitViewProvider
-    // (keyed by canonical legend/map key) rather than per legend/map here on
-    // every rebuild — legendTrends already matches LegendBreakdown.legend's
-    // key space, but MapBreakdown.mapKey is the raw representative key, so
-    // mapTrends needs a small (O(maps), not O(matches)) remap to it.
-    final legendTrends = data.legendTrends;
-    // `maps` and `data.mapTrends` are both grouped from the same `filtered`
-    // list by canonicalMapKey (see rankedSplitViewProvider), so every mapKey
-    // here is guaranteed an entry there.
-    final mapTrends = {
-      for (final mb in maps)
-        mb.mapKey: data.mapTrends[canonicalMapKey(mb.mapKey)]!,
-    };
-
     return _tabShell(
       'split',
       const ['Overview', 'Legends', 'Maps', 'History'],
@@ -462,14 +446,8 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           rows: legends,
           matchesFor: legendMatches,
           onRefresh: _refresh,
-          trends: legendTrends,
         ),
-        RankedMapBreakdown(
-          rows: maps,
-          matchesFor: mapMatches,
-          onRefresh: _refresh,
-          trends: mapTrends,
-        ),
+        RankedMapBreakdown(rows: maps, matchesFor: mapMatches, onRefresh: _refresh),
         // History keeps everything (pubs included), not just the ranked matches.
         RankedMatchList(matches: view.history, onRefresh: _refresh),
       ],

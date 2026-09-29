@@ -14,6 +14,7 @@ import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/legend_detail_page.dart';
 import '../../../widgets/role_badge.dart';
 import '../../../widgets/stat_display.dart';
+import '../../../widgets/trend_lines.dart';
 import '../../../widgets/win_loss_stat.dart';
 import '../ranked_entity_history_screen.dart';
 import 'match_history_items.dart' show MatchGrouping;
@@ -153,51 +154,70 @@ class _LegendDetailSheet extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: AppTheme.md),
-            Wrap(
-              spacing: AppTheme.sm,
-              runSpacing: AppTheme.sm,
-              children: [
-                StatDisplay(
-                  label: 'Avg RP',
-                  value: formatSigned(breakdown.avgRpPerGame),
-                  valueColor: breakdown.avgRpPerGame >= 0
-                      ? AppTheme.green
-                      : AppTheme.red,
-                ),
-                StatDisplay(
-                  label: 'Total RP',
-                  value: formatSigned(breakdown.totalRp.toDouble()),
-                  valueColor: breakdown.totalRp >= 0
-                      ? AppTheme.green
-                      : AppTheme.red,
-                ),
-                WinLossStat(wins: breakdown.wins, losses: breakdown.losses),
-                StatDisplay(
-                  label: 'Total Kills',
-                  value: formatNumber(breakdown.totalKills),
-                ),
-                StatDisplay(
-                  label: 'Avg Kills',
-                  value: breakdown.avgKills.toStringAsFixed(1),
-                ),
-                StatDisplay(
-                  label: 'Total Dmg',
-                  value: formatNumber(breakdown.totalDamage),
-                ),
-                StatDisplay(
-                  label: 'Avg Dmg',
-                  value: formatNumber(breakdown.avgDamage.round()),
-                ),
-                StatDisplay(
-                  label: 'Total Time',
-                  value: formatDuration(breakdown.totalLengthSecs),
-                ),
-                StatDisplay(
-                  label: 'Avg Time',
-                  value: formatDuration(breakdown.avgLengthSecs.round()),
-                ),
-                StatDisplay(label: 'Games', value: '${breakdown.games}'),
+            GroupedStatChips(
+              groups: [
+                [
+                  StatDisplay(
+                    label: 'Avg RP',
+                    value: formatSigned(breakdown.avgRpPerGame),
+                    valueColor: breakdown.avgRpPerGame >= 0
+                        ? AppTheme.green
+                        : AppTheme.red,
+                  ),
+                  StatDisplay(
+                    label: 'Total RP',
+                    value: formatSigned(breakdown.totalRp.toDouble()),
+                    valueColor: breakdown.totalRp >= 0
+                        ? AppTheme.green
+                        : AppTheme.red,
+                  ),
+                  WinLossStat(wins: breakdown.wins, losses: breakdown.losses),
+                  StatDisplay(label: 'Games', value: '${breakdown.games}'),
+                ],
+                [
+                  StatDisplay(
+                    label: 'Avg Kills',
+                    value: breakdown.avgKills.toStringAsFixed(1),
+                  ),
+                  StatDisplay(
+                    label: 'Total Kills',
+                    value: formatNumber(breakdown.totalKills),
+                  ),
+                  StatDisplay(
+                    label: 'Avg Dmg',
+                    value: formatNumber(breakdown.avgDamage.round()),
+                  ),
+                  StatDisplay(
+                    label: 'Total Dmg',
+                    value: formatNumber(breakdown.totalDamage),
+                  ),
+                ],
+                [
+                  StatDisplay(
+                    label: 'Avg Time',
+                    value: formatDuration(breakdown.avgLengthSecs.round()),
+                  ),
+                  StatDisplay(
+                    label: 'Total Time',
+                    value: formatDuration(breakdown.totalLengthSecs),
+                  ),
+                ],
               ],
+            ),
+            FutureBuilder<List<RankedMatch>>(
+              future: matchesFor(breakdown.legend),
+              builder: (context, snapshot) {
+                final matches = snapshot.data;
+                if (matches == null) return const SizedBox.shrink();
+                final trends = entityTrends(matches);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TrendLines(trends: trends),
+                    const TrendFootnote(),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: AppTheme.md),
             Row(

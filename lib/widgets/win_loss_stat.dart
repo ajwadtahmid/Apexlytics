@@ -16,11 +16,15 @@ class WinLossStat extends StatelessWidget {
   final int losses;
   final bool onImage;
 
+  /// Drops the trailing `33W 65L` record, leaving just the rate.
+  final bool showRecord;
+
   const WinLossStat({
     super.key,
     required this.wins,
     required this.losses,
     this.onImage = false,
+    this.showRecord = true,
   });
 
   @override
@@ -42,24 +46,26 @@ class WinLossStat extends StatelessWidget {
           ),
           // Record trails the rate at a smaller size so the line height stays
           // driven by the rate — same two-line height as the plain chips.
-          const TextSpan(text: '  '),
-          TextSpan(
-            text: '${wins}W',
-            style: const TextStyle(
-              color: AppTheme.green,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
+          if (showRecord) ...[
+            const TextSpan(text: '  '),
+            TextSpan(
+              text: '${wins}W',
+              style: const TextStyle(
+                color: AppTheme.green,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          const TextSpan(text: ' '),
-          TextSpan(
-            text: '${losses}L',
-            style: const TextStyle(
-              color: AppTheme.red,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
+            const TextSpan(text: ' '),
+            TextSpan(
+              text: '${losses}L',
+              style: const TextStyle(
+                color: AppTheme.red,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

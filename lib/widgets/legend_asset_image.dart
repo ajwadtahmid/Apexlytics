@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../utils/theme.dart';
 
+/// Source portrait aspect ratio, for sizing a box to match it exactly.
+const kLegendPortraitAspectRatio = 1680 / 1878;
+
 /// Maps a legend display name to its portrait asset key under `assets/legends/`
 /// — lowercased with spaces as underscores. The synthetic "Global" career
 /// aggregate has no legend portrait, so it maps to the `career` image.

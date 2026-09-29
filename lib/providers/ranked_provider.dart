@@ -292,10 +292,6 @@ typedef RankedSplitView = ({
   // RankedSquadSessionsEntry used to each call sessionize() on every
   // rebuild of the always-visible Overview tab.
   List<RankedSession> sessions,
-  // Per-legend/per-map trend lines, keyed by canonical legend name / map key.
-  // Computed once here rather than per rebuild in the widget layer.
-  Map<String, EntityTrends> legendTrends,
-  Map<String, EntityTrends> mapTrends,
 });
 
 final rankedSplitViewProvider = FutureProvider.autoDispose
@@ -322,8 +318,6 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
         fullSquad: summarize(filtered.where((m) => m.isPartyFull).toList()),
         partialSquad: summarize(filtered.where((m) => !m.isPartyFull).toList()),
         sessions: sessionize(filtered),
-        legendTrends: legendTrendsByEntity(filtered),
-        mapTrends: mapTrendsByEntity(filtered),
       );
     });
 
