@@ -307,17 +307,68 @@ void main() {
         );
       });
 
-      test('stored profiles beyond the cap are truncated on read', () async {
+      test('profiles saved under the old cap of 5 are all kept', () async {
+        final container = await makeContainer({
+          'player_profiles': profileJson(5),
+        });
+        addTearDown(container.dispose);
+
+        expect(container.read(playerSettingsProvider).profiles.length, 5);
+      });
+
+      test('a grandfathered install past the cap cannot add more', () async {
+        final container = await makeContainer({
+          'player_profiles': profileJson(5),
+        });
+        addTearDown(container.dispose);
+
+        await container
+            .read(playerSettingsProvider.notifier)
+            .addProfile('extra', '1999999999999', 'PC');
+
+        expect(container.read(playerSettingsProvider).profiles.length, 5);
+      });
+
+      test('an install under the cap can still add up to it', () async {
+        final container = await makeContainer({
+          'player_profiles': profileJson(2),
+        });
+        addTearDown(container.dispose);
+
+        await container
+            .read(playerSettingsProvider.notifier)
+            .addProfile('third', '1999999999999', 'PC');
+
+        expect(container.read(playerSettingsProvider).profiles.length, 3);
+      });
+
+      test('the owner flag raises the add limit to the owner cap', () async {
+        final container = await makeContainer({PrefsKeys.ownerUnlocked: true});
+        addTearDown(container.dispose);
+        final notifier = container.read(playerSettingsProvider.notifier);
+
+        for (var i = 0; i < PlayerSettingsNotifier.ownerMaxProfileCount; i++) {
+          await notifier.addProfile('P$i', '100000000000$i', 'PC');
+        }
+        await notifier.addProfile('overflow', '1999999999999', 'PC');
+
+        expect(
+          container.read(playerSettingsProvider).profiles.length,
+          PlayerSettingsNotifier.ownerMaxProfileCount,
+        );
+      });
+
+      test('stored profiles beyond the owner cap are truncated', () async {
         final container = await makeContainer({
           'player_profiles': profileJson(
-            PlayerSettingsNotifier.maxProfileCount + 3,
+            PlayerSettingsNotifier.ownerMaxProfileCount + 3,
           ),
         });
         addTearDown(container.dispose);
 
         expect(
           container.read(playerSettingsProvider).profiles.length,
-          PlayerSettingsNotifier.maxProfileCount,
+          PlayerSettingsNotifier.ownerMaxProfileCount,
         );
       });
 

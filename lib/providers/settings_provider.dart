@@ -48,9 +48,8 @@ int clampStatsRefreshMinutes(int minutes) {
 
 // ── Player profile ────────────────────────────────────────────────────────────
 
-/// A single saved player account (name + UID + platform). Up to
-/// [PlayerSettingsNotifier.maxProfileCount] profiles are stored under one app
-/// installation.
+/// A single saved player account (name + UID + platform). A regular install
+/// can add up to [PlayerSettingsNotifier.maxProfileCount] profiles.
 class PlayerProfile {
   final String name;
   final String uid;
@@ -106,7 +105,7 @@ abstract class PlayerSettings with _$PlayerSettings {
   const PlayerSettings._();
 
   const factory PlayerSettings({
-    @Default([]) List<PlayerProfile> profiles, // capped at maxProfileCount
+    @Default([]) List<PlayerProfile> profiles, // add limit: maxProfileCount
     @Default(0) int activeProfileIndex,
     @Default(kDefaultStatsRefreshMinutes)
     int statsRefreshMinutes, // 0 = manual only
@@ -138,7 +137,15 @@ abstract class PlayerSettings with _$PlayerSettings {
 }
 
 class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
-  static const int maxProfileCount = 5;
+  /// How many profiles a regular install can add. Only gates *adding*: anyone
+  /// already past it (the cap used to be 5) keeps every profile they have.
+  static const int maxProfileCount = 3;
+  static const int ownerMaxProfileCount = 10;
+
+  static int limitFor({required bool owner}) =>
+      owner ? ownerMaxProfileCount : maxProfileCount;
+
+  bool get _isOwner => _prefs.getBool(PrefsKeys.ownerUnlocked) ?? false;
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
@@ -152,7 +159,10 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       return decoded
           .whereType<Map<String, dynamic>>()
           .map(PlayerProfile.fromJson)
-          .take(maxProfileCount)
+          // A sanity ceiling, not the add limit: truncating at the regular
+          // limit would silently delete profiles from installs (and backups)
+          // made under the old cap of 5.
+          .take(ownerMaxProfileCount)
           .toList();
     } catch (e) {
       // Well-formed-but-wrong-shape JSON (e.g. `{"a":1}`) throws TypeError on
@@ -323,7 +333,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   /// Appends a new profile and switches to it. Throws if [uid] is already
   /// saved — see [_assertUidNotTaken].
   Future<void> addProfile(String name, String uid, String platform) async {
-    if (state.profiles.length >= maxProfileCount) return;
+    if (state.profiles.length >= limitFor(owner: _isOwner)) return;
     _assertUidNotTaken(uid);
     final profiles = [
       ...state.profiles,

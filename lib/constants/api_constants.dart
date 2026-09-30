@@ -32,6 +32,8 @@ class ApiConstants {
   static const String gamesPath = '/games';
   static const String gamesEligibilityPath = '/games/eligibility';
   static const String gamesCapacityPath = '/games/capacity';
+  static const String ownerVerifyPath = '/owner/verify';
+  static const String ownerTokenHeader = 'x-owner-token';
 
   /// Rolling match-history window the `/games` endpoint serves per UID.
   ///

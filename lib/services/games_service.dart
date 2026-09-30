@@ -62,9 +62,16 @@ typedef GamesCapacity = ({
 /// does — history is therefore forward-only.
 class GamesService {
   final ApiService _api;
-  GamesService(this._api);
+
+  /// Supplies the owner token, when this device has one. Only `/games` sends
+  /// it: the server lifts the per-client quota and grants priority on a match,
+  /// and ignores anything else.
+  final Future<String?> Function()? ownerToken;
+
+  GamesService(this._api, {this.ownerToken});
 
   Future<GamesResult> getMatches(String uid) async {
+    final token = await ownerToken?.call();
     // Live match history — always ask; the backend owns the caching and the
     // per-UID cooldown, so there is nothing useful for the HTTP cache to do.
     final response = await _api.getWithStatus(
@@ -74,6 +81,7 @@ class GamesService {
       // possibly-served request there can spend a second slot or report
       // "not tracked". A failure just shows stored history until the retry.
       failover: false,
+      headers: token == null ? null : {ApiConstants.ownerTokenHeader: token},
     );
 
     if (response.status == 200) {

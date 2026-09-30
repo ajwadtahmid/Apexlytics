@@ -2,6 +2,10 @@ class PrefsKeys {
   static const profiles = 'player_profiles';
   static const activeProfileIndex = 'active_profile_index';
 
+  // Device-local owner flag (the token itself lives in secure storage). Kept
+  // out of backups on purpose — see backup_service's allowlist.
+  static const ownerUnlocked = 'owner_unlocked';
+
   // Legacy single-player keys — kept for migration only
   static const playerName = 'player_name';
   static const playerUid = 'player_uid';

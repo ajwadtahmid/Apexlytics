@@ -73,6 +73,30 @@ void main() {
       service = GamesService(mockApi);
     });
 
+    test('sends the owner token header only when a token is stored', () async {
+      when(
+        () => mockApi.getWithStatus(
+          ApiConstants.gamesPath,
+          params: any(named: 'params'),
+          failover: false,
+          headers: {ApiConstants.ownerTokenHeader: 'secret'},
+        ),
+      ).thenAnswer((_) async => (status: 200, data: <dynamic>[]));
+
+      final owner = GamesService(mockApi, ownerToken: () async => 'secret');
+      final result = await owner.getMatches('uid123');
+
+      expect(result, isA<GamesMatches>());
+      verify(
+        () => mockApi.getWithStatus(
+          ApiConstants.gamesPath,
+          params: any(named: 'params'),
+          failover: false,
+          headers: {ApiConstants.ownerTokenHeader: 'secret'},
+        ),
+      ).called(1);
+    });
+
     test('a 200 carrying a list parses into matches', () async {
       stubResponse(status: 200, data: <dynamic>[]);
 

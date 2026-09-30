@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../constants/api_constants.dart';
 import '../../providers/api_provider.dart';
+import '../../providers/owner_provider.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart' show SettingsCard;
@@ -17,11 +18,48 @@ import '../../widgets/widgets.dart' show SettingsCard;
 /// Reads as a plain, static info list (no per-row leading icons, unlike the
 /// rest of Settings) — links keep only the trailing open-in-new glyph that
 /// marks them as outgoing, same as `_SupportRow`.
-class AboutScreen extends ConsumerWidget {
+class AboutScreen extends ConsumerStatefulWidget {
   const AboutScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends ConsumerState<AboutScreen> {
+  static const _ownerTapCount = 7;
+  static const _tapWindow = Duration(seconds: 3);
+
+  int _taps = 0;
+  DateTime? _lastTap;
+
+  void _onVersionTap(String version) {
+    final now = DateTime.now();
+    final last = _lastTap;
+    _taps = last != null && now.difference(last) <= _tapWindow ? _taps + 1 : 1;
+    _lastTap = now;
+
+    if (_taps >= _ownerTapCount) {
+      _taps = 0;
+      unawaited(
+        showDialog<void>(
+          context: context,
+          builder: (_) => const _OwnerDialog(),
+        ),
+      );
+      return;
+    }
+    // Copy only on the first tap so the unlock sequence doesn't spam toasts.
+    if (_taps == 1) {
+      Clipboard.setData(ClipboardData(text: version));
+      context.showMessage(
+        'Version copied',
+        duration: const Duration(seconds: 2),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final info = ref
         .watch(packageInfoProvider)
         .whenOrNull(data: (info) => info);
@@ -39,13 +77,7 @@ class AboutScreen extends ConsumerWidget {
               children: [
                 InkWell(
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: version));
-                    context.showMessage(
-                      'Version copied',
-                      duration: const Duration(seconds: 2),
-                    );
-                  },
+                  onTap: () => _onVersionTap(version),
                   child: Row(
                     children: [
                       const Expanded(
@@ -135,6 +167,95 @@ class AboutScreen extends ConsumerWidget {
           const SizedBox(height: AppTheme.xl),
         ],
       ),
+    );
+  }
+}
+
+/// Reached by tapping the version row [_AboutScreenState._ownerTapCount]
+/// times. Unlocks owner mode with a token, or removes it if already unlocked.
+class _OwnerDialog extends ConsumerStatefulWidget {
+  const _OwnerDialog();
+
+  @override
+  ConsumerState<_OwnerDialog> createState() => _OwnerDialogState();
+}
+
+class _OwnerDialogState extends ConsumerState<_OwnerDialog> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _unlock() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    String? error;
+    try {
+      final ok = await ref
+          .read(ownerUnlockedProvider.notifier)
+          .unlock(_controller.text);
+      if (!ok) error = 'Token not accepted.';
+    } catch (_) {
+      error = 'Couldn\'t reach the server. Try again.';
+    }
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+      context.showMessage('Owner mode on');
+    } else {
+      setState(() {
+        _busy = false;
+        _error = error;
+      });
+    }
+  }
+
+  Future<void> _lock() async {
+    await ref.read(ownerUnlockedProvider.notifier).lock();
+    if (!mounted) return;
+    Navigator.pop(context);
+    context.showMessage('Owner mode off');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unlocked = ref.watch(ownerUnlockedProvider);
+    return AlertDialog(
+      title: const Text('Owner mode'),
+      content: unlocked
+          ? const Text('This device is unlocked.')
+          : TextField(
+              controller: _controller,
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              enabled: !_busy,
+              decoration: InputDecoration(
+                labelText: 'Token',
+                errorText: _error,
+              ),
+              onSubmitted: (_) => _unlock(),
+            ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        if (unlocked)
+          TextButton(onPressed: _lock, child: const Text('Remove'))
+        else
+          TextButton(
+            onPressed: _busy ? null : _unlock,
+            child: const Text('Unlock'),
+          ),
+      ],
     );
   }
 }

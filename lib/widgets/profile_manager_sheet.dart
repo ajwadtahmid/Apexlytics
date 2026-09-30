@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/api_constants.dart';
+import '../providers/owner_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/theme.dart';
 import 'player_lookup_form.dart';
@@ -116,7 +117,10 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
           ),
           const SizedBox(height: AppTheme.sm),
         ],
-        if (profiles.length < PlayerSettingsNotifier.maxProfileCount)
+        if (profiles.length <
+            PlayerSettingsNotifier.limitFor(
+              owner: ref.watch(ownerUnlockedProvider),
+            ))
           InkWell(
             onTap: _startAdd,
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),

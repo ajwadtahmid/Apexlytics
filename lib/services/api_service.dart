@@ -149,6 +149,7 @@ class ApiService {
     String endpoint, {
     Map<String, dynamic>? params,
     bool failover = true,
+    Map<String, String>? headers,
   }) async {
     try {
       final response = await withOverallDeadline(
@@ -157,7 +158,12 @@ class ApiService {
           endpoint,
           queryParameters: params,
           cancelToken: token,
-          options: failover ? null : Options(extra: {kNoFailoverKey: true}),
+          options: failover && headers == null
+              ? null
+              : Options(
+                  headers: headers,
+                  extra: failover ? null : {kNoFailoverKey: true},
+                ),
         ),
       );
       final data = response.data;
