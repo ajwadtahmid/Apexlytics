@@ -508,6 +508,79 @@ void main() {
       expect(await store.count('1'), 0);
     });
 
+    test('a restore carries the excluded flag, and never clears a local one',
+        () async {
+      final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      await source.upsertAll('1', [match('1', 100), match('1', 200)]);
+      await source.setExcluded('1_100', true);
+      final rows = await source.exportRows();
+      await source.close();
+
+      final restored = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(restored.close);
+      // 1_200 is excluded locally; the backup has it included.
+      await restored.upsertAll('1', [match('1', 200)]);
+      await restored.setExcluded('1_200', true);
+      await restored.importRows(rows);
+
+      final byId = {for (final m in await restored.getAll('1')) m.id: m};
+      expect(byId['1_100']!.excluded, isTrue);
+      expect(byId['1_200']!.excluded, isTrue);
+    });
+
+    test('a row with text in a numeric column is skipped, not stored',
+        () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final bad = Map<String, Object?>.from(match('1', 100).toStoredMap())
+        ..['kills'] = 'n/a';
+      final good = match('1', 200).toStoredMap();
+
+      final skipped = await store.importRows([bad, good]);
+
+      expect(skipped, 1);
+      expect((await store.getAll('1')).map((m) => m.id), ['1_200']);
+    });
+
+    test('an implausible imported kills value is dropped, like a sync', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final row = Map<String, Object?>.from(match('1', 100).toStoredMap())
+        ..['kills'] = 5000;
+
+      await store.importRows([row]);
+
+      expect((await store.getAll('1')).single.kills, isNull);
+    });
+
+    test('a stored id that differs from the dedup key is what edits use',
+        () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final row = Map<String, Object?>.from(match('1', 100).toStoredMap())
+        ..['id'] = 'custom-id';
+      await store.importRows([row]);
+
+      final m = (await store.getAll('1')).single;
+      expect(m.id, 'custom-id');
+      expect(await store.editMatch(m.id, {'kills': 4}), isTrue);
+      expect((await store.getAll('1')).single.kills, 4);
+    });
+
+    test('editMatch applies a value edit and an exclusion together, and '
+        'reports a missing row without writing either', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100)]);
+
+      expect(await store.editMatch('nope', {'kills': 4}, excluded: true), false);
+      expect(await store.editMatch('1_100', {'kills': 4}, excluded: true), true);
+
+      final m = (await store.getAll('1')).single;
+      expect(m.kills, 4);
+      expect(m.excluded, isTrue);
+    });
+
     test('a valid export still round-trips intact', () async {
       final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
       await source.upsertAll('1', [match('1', 100, legend: 'Wraith')]);
@@ -1223,13 +1296,13 @@ void main() {
     );
 
     test(
-      'timeOfDayBucketsFor (lifetime and per-split) matches the Dart path',
+      'timeBucketsFor hours (lifetime and per-split) matches the Dart path',
       () async {
         final store = await seeded();
         addTearDown(store.close);
 
         final allRanked = rankedOnly(await store.getAll('1'));
-        final sqlLifetime = await store.timeOfDayBucketsFor('1');
+        final sqlLifetime = (await store.timeBucketsFor('1')).hours;
         final dartLifetime = timeOfDayBuckets(allRanked);
         expect(
           sqlLifetime.map((b) => (b.hourLocal, b.games, b.netRp)).toList(),
@@ -1239,10 +1312,10 @@ void main() {
         final s1Ranked = rankedOnly(
           await store.getBySeason('1', 'br_ranked_s1_s1'),
         );
-        final sqlSplit = await store.timeOfDayBucketsFor(
+        final sqlSplit = (await store.timeBucketsFor(
           '1',
           seasonId: 'br_ranked_s1_s1',
-        );
+        )).hours;
         final dartSplit = timeOfDayBuckets(s1Ranked);
         expect(
           sqlSplit.map((b) => (b.hourLocal, b.games, b.netRp)).toList(),
@@ -1252,13 +1325,13 @@ void main() {
     );
 
     test(
-      'dayOfWeekBucketsFor (lifetime and per-split) matches the Dart path',
+      'timeBucketsFor weekdays (lifetime and per-split) matches the Dart path',
       () async {
         final store = await seeded();
         addTearDown(store.close);
 
         final allRanked = rankedOnly(await store.getAll('1'));
-        final sqlLifetime = await store.dayOfWeekBucketsFor('1');
+        final sqlLifetime = (await store.timeBucketsFor('1')).weekdays;
         final dartLifetime = dayOfWeekBuckets(allRanked);
         expect(
           sqlLifetime.map((b) => (b.weekday, b.games, b.netRp)).toList(),
@@ -1268,10 +1341,10 @@ void main() {
         final s1Ranked = rankedOnly(
           await store.getBySeason('1', 'br_ranked_s1_s1'),
         );
-        final sqlSplit = await store.dayOfWeekBucketsFor(
+        final sqlSplit = (await store.timeBucketsFor(
           '1',
           seasonId: 'br_ranked_s1_s1',
-        );
+        )).weekdays;
         final dartSplit = dayOfWeekBuckets(s1Ranked);
         expect(
           sqlSplit.map((b) => (b.weekday, b.games, b.netRp)).toList(),

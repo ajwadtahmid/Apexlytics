@@ -33,10 +33,16 @@ class _FakeStore extends RankedHistoryStore {
       getAll(uid);
 
   @override
-  Future<bool> editMatch(String id, Map<String, Object?> values) async {
+  Future<bool> editMatch(
+    String id,
+    Map<String, Object?> values, {
+    bool? excluded,
+  }) async {
     final existing = rows[id];
     if (existing == null) return false;
-    rows[id] = existing.withEdits(values);
+    var updated = values.isEmpty ? existing : existing.withEdits(values);
+    if (excluded != null) updated = updated.withExcluded(excluded);
+    rows[id] = updated;
     return true;
   }
 

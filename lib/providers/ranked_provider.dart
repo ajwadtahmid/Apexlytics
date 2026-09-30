@@ -201,7 +201,7 @@ final rankedSyncProvider = FutureProvider.autoDispose
       await store.backfillSeasonIds(latestSeasons);
       // Committed only after backfillSeasonIds succeeds, so a write failure
       // there can't get recorded as a successful sync and lock the user out
-      // of retrying for 6 h.
+      // of retrying for the whole cooldown.
       return remember(RankedSyncOutcome.synced, ApiConstants.gamesSyncCooldown);
     });
 
@@ -310,7 +310,11 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
       final filtered = view.filtered;
       return (
         view: view,
-        summary: summarize(filtered),
+        // Excluded games still moved the player's running RP.
+        summary: summarize(
+          filtered,
+          currentRpFrom: view.history.where((m) => m.isRanked),
+        ),
         legends: legendBreakdowns(filtered),
         maps: mapBreakdowns(filtered),
         timeOfDay: timeOfDayBuckets(filtered),
@@ -339,12 +343,13 @@ final rankedLifetimeAggregatesProvider = FutureProvider.autoDispose
     .family<RankedLifetimeAggregates, String>((ref, uid) async {
       await ref.watch(rankedSyncProvider(uid).future);
       final store = ref.watch(rankedHistoryStoreProvider);
+      final time = await store.timeBucketsFor(uid);
       return (
         summary: await store.summaryFor(uid),
         legends: await store.legendBreakdownsFor(uid),
         maps: await store.mapBreakdownsFor(uid),
-        timeOfDay: await store.timeOfDayBucketsFor(uid),
-        dayOfWeek: await store.dayOfWeekBucketsFor(uid),
+        timeOfDay: time.hours,
+        dayOfWeek: time.weekdays,
       );
     });
 
@@ -379,6 +384,7 @@ final rankedSplitDetailProvider = FutureProvider.autoDispose
     ) async {
       await ref.watch(rankedSyncProvider(arg.uid).future);
       final store = ref.watch(rankedHistoryStoreProvider);
+      final time = await store.timeBucketsFor(arg.uid, seasonId: arg.splitId);
       return (
         summary: await store.summaryFor(arg.uid, seasonId: arg.splitId),
         legends: await store.legendBreakdownsFor(
@@ -394,14 +400,8 @@ final rankedSplitDetailProvider = FutureProvider.autoDispose
           arg.uid,
           seasonId: arg.splitId,
         ),
-        timeOfDay: await store.timeOfDayBucketsFor(
-          arg.uid,
-          seasonId: arg.splitId,
-        ),
-        dayOfWeek: await store.dayOfWeekBucketsFor(
-          arg.uid,
-          seasonId: arg.splitId,
-        ),
+        timeOfDay: time.hours,
+        dayOfWeek: time.weekdays,
       );
     });
 
@@ -441,14 +441,15 @@ void invalidatePlayerDerivedProviders(WidgetRef ref) {
 
 /// Every provider whose value is derived from stored *match rows* — the set
 /// a hand correction (see `match_edit_sheet.dart`) can change. Deliberately
-/// excludes [rankedSyncProvider] and [rankedSplitsProvider], so saving an
-/// edit never spends a `/games` request or touches the split picker (edited
-/// fields don't change which split a match belongs to).
+/// excludes [rankedSyncProvider], so saving an
+/// edit never spends a `/games` request.
 ///
 /// Defined here, next to the providers it names, for the same reason
 /// [invalidatePlayerDerivedProviders] is — a list maintained at the call
 /// site rots the moment a new store-derived provider is added.
 void invalidateMatchDerivedProviders(WidgetRef ref) {
+  // Split counts skip excluded games, so an exclusion can empty a split.
+  ref.invalidate(rankedSplitsProvider);
   ref.invalidate(rankedSplitMatchesProvider);
   ref.invalidate(rankedSplitViewProvider);
   ref.invalidate(rankedLifetimeAggregatesProvider);

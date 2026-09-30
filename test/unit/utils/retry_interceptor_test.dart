@@ -364,4 +364,65 @@ void main() {
       expect(calledBaseUrls, [backup, primary]);
     },
   );
+
+  group('no-failover requests', () {
+    test('a timeout is not retried and never reaches the backup', () async {
+      final hosts = <String>[];
+      final dio = buildDio(
+        backupBaseUrl: backup,
+        onFetch: (o) async {
+          hosts.add(o.uri.host);
+          throw DioException(
+            requestOptions: o,
+            type: DioExceptionType.receiveTimeout,
+          );
+        },
+      );
+
+      await expectLater(
+        dio.get('/games', options: Options(extra: {kNoFailoverKey: true})),
+        throwsA(isA<DioException>()),
+      );
+      expect(hosts, ['primary.test']);
+    });
+
+    test('a 5xx is never sent to the backup', () async {
+      final hosts = <String>[];
+      final dio = buildDio(
+        maxRetries: 0,
+        backupBaseUrl: backup,
+        onFetch: (o) async {
+          hosts.add(o.uri.host);
+          return _status(503);
+        },
+      );
+
+      await expectLater(
+        dio.get('/games', options: Options(extra: {kNoFailoverKey: true})),
+        throwsA(isA<DioException>()),
+      );
+      expect(hosts, ['primary.test']);
+    });
+
+    test('stays on the primary even while the sticky backup window is open',
+        () async {
+      final hosts = <String>[];
+      final dio = buildDio(
+        maxRetries: 0,
+        backupBaseUrl: backup,
+        onFetch: (o) async {
+          hosts.add(o.uri.host);
+          return o.uri.host == 'primary.test' && o.path == '/other'
+              ? _status(503)
+              : _status(200);
+        },
+      );
+      // An ordinary request fails over, opening the sticky window.
+      await dio.get('/other');
+      hosts.clear();
+
+      await dio.get('/games', options: Options(extra: {kNoFailoverKey: true}));
+      expect(hosts, ['primary.test']);
+    });
+  });
 }

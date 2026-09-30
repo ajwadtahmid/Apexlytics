@@ -141,17 +141,16 @@ class ApiCache {
 
   /// Loads cached data by [key]. Returns null if not found or expired past
   /// the endpoint's TTL.
+  ///
+  /// An expired entry is kept: [loadStale] is the offline fallback and needs
+  /// it. The entry cap bounds growth.
   CachedEntry? load(String key) {
     final entry = _cache[key];
     if (entry == null) return null;
     final ttl = _ttlForKey(key);
     // Millisecond epoch comparison: timezone-safe because both sides use the same
     // internal clock reference regardless of local time zone.
-    if (DateTime.now().difference(entry.savedAt).inMinutes > ttl) {
-      _cache.remove(key);
-      unawaited(_store.remove(key));
-      return null;
-    }
+    if (DateTime.now().difference(entry.savedAt).inMinutes > ttl) return null;
     return entry;
   }
 

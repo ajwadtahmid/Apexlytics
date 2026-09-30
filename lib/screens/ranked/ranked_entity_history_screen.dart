@@ -59,7 +59,7 @@ class _RankedEntityHistoryScreenState extends State<RankedEntityHistoryScreen> {
     setState(() {
       _matches = [
         for (final m in _matches)
-          if (m.dedupKey == updated.dedupKey) updated else m,
+          if (m.id == updated.id) updated else m,
       ];
     });
   }

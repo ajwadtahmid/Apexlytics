@@ -144,7 +144,8 @@ void main() {
     });
 
     test(
-      'load() prunes an expired entry so it stops counting toward the cap',
+      'load() reports an expired entry as missing but keeps it as the offline '
+      'fallback',
       () async {
         final store = freshStore();
         final ts = DateTime.now()
@@ -154,9 +155,8 @@ void main() {
         final cache = ApiCache(store);
         await cache.primeFromDisk();
         expect(cache.load('/player'), isNull);
-        await Future<void>.delayed(Duration.zero);
-        final remaining = await store.loadAll();
-        expect(remaining.containsKey('/player'), isFalse);
+        expect(cache.loadStale('/player'), isNotNull);
+        expect((await store.loadAll()).containsKey('/player'), isTrue);
       },
     );
   });

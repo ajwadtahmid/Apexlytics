@@ -24,6 +24,120 @@ List<RankedMatch> rankedOnly(List<RankedMatch> all) {
   return list;
 }
 
+// ── Shared accumulator ──────────────────────────────────────────────────────
+
+/// One definition of a ranked group's totals. The Dart path feeds it matches
+/// ([add]), the SQL path feeds it aggregate rows ([addRow]), and both build
+/// their view models from it so the two paths can't drift.
+class RankedAgg {
+  int games = 0;
+  int rp = 0;
+  int kills = 0;
+  int damage = 0;
+
+  /// Games whose kills/damage upstream reported — the averages' divisors.
+  int killsGames = 0;
+  int damageGames = 0;
+
+  int length = 0;
+  int wins = 0;
+  int losses = 0;
+
+  void add(RankedMatch m) {
+    games++;
+    final effective = m.effectiveRpChange;
+    rp += effective;
+    final k = m.kills;
+    if (k != null) {
+      kills += k;
+      killsGames++;
+    }
+    final d = m.damage;
+    if (d != null) {
+      damage += d;
+      damageGames++;
+    }
+    length += m.lengthSecs;
+    if (effective > 0) {
+      wins++;
+    } else if (effective < 0) {
+      losses++;
+    }
+  }
+
+  void addAll(Iterable<RankedMatch> matches) => matches.forEach(add);
+
+  /// Adds one SQL aggregate row (`games`, `kills`, `damage`, `kills_games`,
+  /// `damage_games`, `length_secs`, `net_rp`, `wins`, `losses`).
+  void addRow(Map<String, Object?> r) {
+    int n(String key) => (r[key] as num).toInt();
+    games += n('games');
+    rp += n('net_rp');
+    kills += n('kills');
+    damage += n('damage');
+    killsGames += n('kills_games');
+    damageGames += n('damage_games');
+    length += n('length_secs');
+    wins += n('wins');
+    losses += n('losses');
+  }
+
+  void addAllRows(Iterable<Map<String, Object?>> rows) => rows.forEach(addRow);
+
+  RankedSummary toSummary({int currentRp = 0, String latestRankImg = ''}) =>
+      games == 0
+      ? RankedSummary.empty
+      : RankedSummary(
+          games: games,
+          netRp: rp,
+          currentRp: currentRp,
+          latestRankImg: latestRankImg,
+          totalKills: kills,
+          totalDamage: damage,
+          killsGames: killsGames,
+          damageGames: damageGames,
+          totalLengthSecs: length,
+          wins: wins,
+          losses: losses,
+        );
+
+  LegendBreakdown toLegend(String legend) => LegendBreakdown(
+    legend: legend,
+    games: games,
+    totalRp: rp,
+    totalKills: kills,
+    totalDamage: damage,
+    killsGames: killsGames,
+    damageGames: damageGames,
+    totalLengthSecs: length,
+    wins: wins,
+    losses: losses,
+  );
+
+  MapBreakdown toMap(String mapKey, String displayName) => MapBreakdown(
+    mapKey: mapKey,
+    displayName: displayName,
+    games: games,
+    totalRp: rp,
+    totalKills: kills,
+    totalDamage: damage,
+    killsGames: killsGames,
+    damageGames: damageGames,
+    totalLengthSecs: length,
+    wins: wins,
+    losses: losses,
+  );
+
+  LegendMapCell toCell(String legend, String mapName) => LegendMapCell(
+    legend: legend,
+    mapName: mapName,
+    games: games,
+    totalRp: rp,
+    wins: wins,
+    losses: losses,
+  );
+}
+
 // ── Window summary (drives the Overview stat row) ───────────────────────────
 
 class RankedSummary {
@@ -91,45 +205,29 @@ class RankedSummary {
 
 /// Assumes [matches] is already ranked-only filtered (the caller owns that via
 /// [rankedOnly]/`matchesInSplit`) — re-filtering on every call was pure waste.
-RankedSummary summarize(List<RankedMatch> matches) {
+///
+/// [currentRpFrom] supplies the newest match for `currentRp`/`latestRankImg`
+/// when it should include matches [matches] leaves out (excluded ones still
+/// moved the player's running RP).
+RankedSummary summarize(
+  List<RankedMatch> matches, {
+  Iterable<RankedMatch>? currentRpFrom,
+}) {
   if (matches.isEmpty) return RankedSummary.empty;
 
   // Find the newest match for currentRp/rankImg without a full sort.
   var newest = matches.first;
-  var netRp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;
-  var killsGames = 0, damageGames = 0;
-  for (final m in matches) {
-    netRp += m.effectiveRpChange;
-    final k = m.kills;
-    if (k != null) {
-      kills += k;
-      killsGames++;
-    }
-    final d = m.damage;
-    if (d != null) {
-      damage += d;
-      damageGames++;
-    }
-    length += m.lengthSecs;
-    if (m.effectiveRpChange > 0) {
-      wins++;
-    } else if (m.effectiveRpChange < 0) {
-      losses++;
-    }
+  for (final m in currentRpFrom ?? const <RankedMatch>[]) {
     if (m.endTime.isAfter(newest.endTime)) newest = m;
   }
-  return RankedSummary(
-    games: matches.length,
-    netRp: netRp,
+  final agg = RankedAgg();
+  for (final m in matches) {
+    agg.add(m);
+    if (m.endTime.isAfter(newest.endTime)) newest = m;
+  }
+  return agg.toSummary(
     currentRp: newest.cumulativeRp,
     latestRankImg: newest.rankImg,
-    totalKills: kills,
-    totalDamage: damage,
-    killsGames: killsGames,
-    damageGames: damageGames,
-    totalLengthSecs: length,
-    wins: wins,
-    losses: losses,
   );
 }
 
@@ -190,42 +288,9 @@ List<LegendBreakdown> legendBreakdowns(List<RankedMatch> matches) {
   for (final m in matches) {
     byLegend.putIfAbsent(canonicalLegendName(m.legend), () => []).add(m);
   }
-  final out = byLegend.entries.map((e) {
-    var rp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;
-    var killsGames = 0, damageGames = 0;
-    for (final m in e.value) {
-      rp += m.effectiveRpChange;
-      final k = m.kills;
-      if (k != null) {
-        kills += k;
-        killsGames++;
-      }
-      final d = m.damage;
-      if (d != null) {
-        damage += d;
-        damageGames++;
-      }
-      length += m.lengthSecs;
-      if (m.effectiveRpChange > 0) {
-        wins++;
-      } else if (m.effectiveRpChange < 0) {
-        losses++;
-      }
-    }
-    return LegendBreakdown(
-      legend: e.key,
-      games: e.value.length,
-      totalRp: rp,
-      totalKills: kills,
-      totalDamage: damage,
-      killsGames: killsGames,
-      damageGames: damageGames,
-      totalLengthSecs: length,
-      wins: wins,
-      losses: losses,
-    );
-  }).toList()..sort(byTotalRpThenName);
-  return out;
+  return [
+    for (final e in byLegend.entries) (RankedAgg()..addAll(e.value)).toLegend(e.key),
+  ]..sort(byTotalRpThenName);
 }
 
 /// Deterministic tie-break for an exact [LegendBreakdown.totalRp] tie:
@@ -299,44 +364,13 @@ List<MapBreakdown> mapBreakdowns(List<RankedMatch> matches) {
     byMap.putIfAbsent(canonical, () => []).add(m);
     representativeKey.putIfAbsent(canonical, () => m.mapKey);
   }
-  final out = byMap.entries.map((e) {
-    var rp = 0, kills = 0, damage = 0, length = 0, wins = 0, losses = 0;
-    var killsGames = 0, damageGames = 0;
-    for (final m in e.value) {
-      rp += m.effectiveRpChange;
-      final k = m.kills;
-      if (k != null) {
-        kills += k;
-        killsGames++;
-      }
-      final d = m.damage;
-      if (d != null) {
-        damage += d;
-        damageGames++;
-      }
-      length += m.lengthSecs;
-      if (m.effectiveRpChange > 0) {
-        wins++;
-      } else if (m.effectiveRpChange < 0) {
-        losses++;
-      }
-    }
-    final rawKey = representativeKey[e.key]!;
-    return MapBreakdown(
-      mapKey: rawKey,
-      displayName: battleRoyaleMapName(rawKey),
-      games: e.value.length,
-      totalRp: rp,
-      totalKills: kills,
-      totalDamage: damage,
-      killsGames: killsGames,
-      damageGames: damageGames,
-      totalLengthSecs: length,
-      wins: wins,
-      losses: losses,
-    );
-  }).toList()..sort(byGamesThenName);
-  return out;
+  return [
+    for (final e in byMap.entries)
+      (RankedAgg()..addAll(e.value)).toMap(
+        representativeKey[e.key]!,
+        battleRoyaleMapName(representativeKey[e.key]!),
+      ),
+  ]..sort(byGamesThenName);
 }
 
 /// Deterministic tie-break for an exact [MapBreakdown.games] tie: alphabetical
@@ -391,14 +425,7 @@ List<LegendMapCell> legendMapBreakdowns(List<RankedMatch> matches) {
 
   return [
     for (final entry in byPair.entries)
-      LegendMapCell(
-        legend: entry.key.$1,
-        mapName: entry.key.$2,
-        games: entry.value.length,
-        totalRp: entry.value.fold(0, (sum, m) => sum + m.effectiveRpChange),
-        wins: entry.value.where((m) => m.effectiveRpChange > 0).length,
-        losses: entry.value.where((m) => m.effectiveRpChange < 0).length,
-      ),
+      (RankedAgg()..addAll(entry.value)).toCell(entry.key.$1, entry.key.$2),
   ];
 }
 
@@ -435,8 +462,9 @@ class RankedSession {
     final rp = <String, int>{};
     final count = <String, int>{};
     for (final m in matches) {
-      rp[m.legend] = (rp[m.legend] ?? 0) + m.effectiveRpChange;
-      count[m.legend] = (count[m.legend] ?? 0) + 1;
+      final legend = canonicalLegendName(m.legend);
+      rp[legend] = (rp[legend] ?? 0) + m.effectiveRpChange;
+      count[legend] = (count[legend] ?? 0) + 1;
     }
     final keys = rp.keys.toList()
       ..sort((a, b) {

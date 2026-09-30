@@ -70,6 +70,10 @@ class GamesService {
     final response = await _api.getWithStatus(
       ApiConstants.gamesPath,
       params: {'uid': uid, 'limit': ApiConstants.gamesHistoryLimit},
+      // The backup has its own budget and tracking state, so re-running a
+      // possibly-served request there can spend a second slot or report
+      // "not tracked". A failure just shows stored history until the retry.
+      failover: false,
     );
 
     if (response.status == 200) {

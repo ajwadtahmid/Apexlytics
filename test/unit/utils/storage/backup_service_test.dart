@@ -427,6 +427,38 @@ void main() {
       },
     );
   });
+
+  group('profilesReplacedBy', () {
+    String profiles(List<(String, String)> ps) => jsonEncode([
+      for (final (name, uid) in ps) {'name': name, 'uid': uid, 'platform': 'PC'},
+    ]);
+
+    BackupPreview previewWith(List<(String, String)> ps) =>
+        BackupPreview.forTesting(
+          version: 3,
+          envelope: {
+            'prefs': {PrefsKeys.profiles: profiles(ps)},
+          },
+        );
+
+    test('names current profiles the backup does not contain', () async {
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.profiles: profiles([('Kept', '1'), ('Lost', '2')]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      expect(previewWith([('Kept', '1')]).profilesReplacedBy(prefs), ['Lost']);
+    });
+
+    test('is empty when the backup covers every current profile', () async {
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.profiles: profiles([('Kept', '1')]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      expect(previewWith([('Kept', '1'), ('New', '3')]).profilesReplacedBy(prefs), isEmpty);
+    });
+  });
 }
 
 /// Runs the real [restorePrefs] callback (so its writes actually land),

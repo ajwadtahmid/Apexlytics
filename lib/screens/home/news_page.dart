@@ -90,7 +90,10 @@ class _CardTile extends StatelessWidget {
             ? null
             : () async {
                 final uri = Uri.tryParse(url);
-                if (uri == null) return;
+                // Server-supplied link: web schemes only.
+                if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+                  return;
+                }
                 final ok = await launchUrl(
                   uri,
                   mode: LaunchMode.externalApplication,

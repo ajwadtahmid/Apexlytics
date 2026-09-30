@@ -142,15 +142,23 @@ class ApiService {
   /// Unlike [get]/[getList], which only ever see `200`, this exposes `202` too —
   /// `/games` uses it to mean "request accepted, no fresh data yet". Never
   /// caches the response.
+  ///
+  /// [failover] false keeps the request on the primary host (see
+  /// [kNoFailoverKey]).
   Future<({int status, dynamic data})> getWithStatus(
     String endpoint, {
     Map<String, dynamic>? params,
+    bool failover = true,
   }) async {
     try {
       final response = await withOverallDeadline(
         _overallDeadline,
-        (token) =>
-            _dio.get(endpoint, queryParameters: params, cancelToken: token),
+        (token) => _dio.get(
+          endpoint,
+          queryParameters: params,
+          cancelToken: token,
+          options: failover ? null : Options(extra: {kNoFailoverKey: true}),
+        ),
       );
       final data = response.data;
       if (data is Map && data.containsKey('error')) {
@@ -224,7 +232,12 @@ class ApiService {
           );
         }
       }
-      throw AppException(friendlyError(e));
+      // Status and Retry-After kept, as in [getWithStatus].
+      throw AppException(
+        friendlyError(e),
+        status: e.response?.statusCode,
+        retryAfter: _retryAfter(e.response),
+      );
     }
   }
 

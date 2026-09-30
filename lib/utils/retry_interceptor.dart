@@ -17,6 +17,11 @@ const _kPreferredBackupKey = '_preferred_backup';
 // failure after that must not fail over to it a second time.
 const _kBackupSpentKey = '_backup_spent';
 
+/// [Options.extra] flag: only the primary host may answer this request. It is
+/// never started on or failed over to the backup, nor retried after a
+/// timeout. For requests with per-server effects (a spent `/games` slot).
+const kNoFailoverKey = '_no_failover';
+
 /// Retries requests on transient server errors (5xx) and network failures.
 ///
 /// Uses exponential backoff — delays are [initialDelay] * 2^attempt:
@@ -74,7 +79,10 @@ class RetryInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final backup = backupBaseUrl;
-    if (backup != null && backup.isNotEmpty && _primaryIsDown) {
+    if (options.extra[kNoFailoverKey] != true &&
+        backup != null &&
+        backup.isNotEmpty &&
+        _primaryIsDown) {
       options
         ..baseUrl = backup
         // A preference, not [_kUsedBackupKey]'s commitment: lets a backup
@@ -107,6 +115,10 @@ class RetryInterceptor extends Interceptor {
       return handler.next(err);
     }
 
+    final noFailover = err.requestOptions.extra[kNoFailoverKey] == true;
+    // A timeout is ambiguous (the server may have acted), so don't re-run.
+    if (noFailover && _isTimeout(err)) return handler.next(err);
+
     final attempt = (err.requestOptions.extra[_kRetryKey] as int?) ?? 0;
     final usedBackup = err.requestOptions.extra[_kUsedBackupKey] == true;
     final preferredBackup =
@@ -114,7 +126,11 @@ class RetryInterceptor extends Interceptor {
     final backupSpent = err.requestOptions.extra[_kBackupSpentKey] == true;
     final backup = backupBaseUrl;
     final canFailOverToBackup =
-        !usedBackup && !backupSpent && backup != null && backup.isNotEmpty;
+        !noFailover &&
+        !usedBackup &&
+        !backupSpent &&
+        backup != null &&
+        backup.isNotEmpty;
     // Whether the chain below still has a different host to try.
     final hasOtherHost =
         (preferredBackup && !usedBackup) || canFailOverToBackup;

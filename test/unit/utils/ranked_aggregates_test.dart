@@ -651,9 +651,10 @@ void main() {
   });
 
   group('entityTrends', () {
-    // kTrendRecentGames is 10, so trends need 20+ games. RP = the match's
-    // index (0, 1, 2, ...), oldest to newest, one game apart - so the most
-    // recent 10 are indices 14-23 and everything "older" is indices 0-13.
+    // RP = the match's index, oldest to newest, so the newest
+    // kTrendRecentGames have the highest values.
+    const total = kTrendRecentGames * 2 + 4;
+    const olderCount = total - kTrendRecentGames;
     List<RankedMatch> manyMatches(int count, {String legend = 'Axle'}) => [
       for (var i = 0; i < count; i++)
         match(
@@ -669,13 +670,15 @@ void main() {
 
     test('current is the overall average across every game, matching what the '
         'entity row already displays - not just the recent window', () {
-      final trends = entityTrends(manyMatches(24));
+      final trends = entityTrends(manyMatches(total));
       expect(trends.rp, isNotNull);
-      // current = avg RP over all 24 games: sum(0..23)/24.
-      expect(trends.rp!.current, closeTo(276 / 24, 0.01));
-      // older = avg over everything but the most recent 10: sum(0..13)/14.
-      expect(trends.rp!.older, closeTo(91 / 14, 0.01));
-      expect(trends.rp!.delta, closeTo(276 / 24 - 91 / 14, 0.01));
+      // current = avg RP over all games: sum(0..total-1)/total.
+      final currentAvg = (total * (total - 1) / 2) / total;
+      expect(trends.rp!.current, closeTo(currentAvg, 0.01));
+      // older = avg over everything but the newest window.
+      final olderAvg = (olderCount * (olderCount - 1) / 2) / olderCount;
+      expect(trends.rp!.older, closeTo(olderAvg, 0.01));
+      expect(trends.rp!.delta, closeTo(currentAvg - olderAvg, 0.01));
     });
 
     test('null below kTrendRecentGames * 2 games - no older baseline yet', () {

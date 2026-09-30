@@ -136,6 +136,13 @@ class RankedMatch {
   /// The `trackers` column exactly as stored, decoded lazily by [trackers].
   final String? _trackersJson;
 
+  /// The stored primary key of a match read from the store. An imported row
+  /// can carry an id other than [dedupKey].
+  final String? _storedId;
+
+  /// The key to address this match by in the store.
+  String get id => _storedId ?? dedupKey;
+
   /// Memoizes [trackers] per stored match without giving up `const`.
   static final _decodedTrackers = Expando<List<MatchTracker>>();
 
@@ -189,7 +196,8 @@ class RankedMatch {
     // parameter, which an initializing formal can't provide.
     // ignore: prefer_initializing_formals
   }) : _trackers = trackers,
-       _trackersJson = null;
+       _trackersJson = null,
+       _storedId = null;
 
   /// Shared by [fromStoredMap] and the copy methods below, so copying a
   /// stored match (e.g. to apply an edit) doesn't force its blob to decode.
@@ -208,6 +216,7 @@ class RankedMatch {
     required this.isPartyFull,
     required List<MatchTracker>? trackers,
     required String? trackersJson,
+    String? storedId,
     this.kills,
     this.damage,
     this.seasonId,
@@ -217,7 +226,9 @@ class RankedMatch {
     // ignore: prefer_initializing_formals
   }) : _trackers = trackers,
        // ignore: prefer_initializing_formals
-       _trackersJson = trackersJson;
+       _trackersJson = trackersJson,
+       // ignore: prefer_initializing_formals
+       _storedId = storedId;
 
   /// Whether this is a Battle Royale match of any kind (ranked or pubs).
   bool get isBattleRoyale => gameMode == 'BATTLE_ROYALE';
@@ -256,57 +267,22 @@ class RankedMatch {
   /// like an `int`, since it only tolerates an already-null one. Unlike
   /// `kills`/`damage` below, neither field is nullable here, so a bad
   /// `changes` entry means "leave this field alone," not "clear it."
-  RankedMatch withEdits(Map<String, Object?> changes) => RankedMatch._(
-    uid: uid,
-    playerName: playerName,
-    legend: changes.containsKey('legend') && changes['legend'] is String
-        ? changes['legend'] as String
-        : legend,
-    gameMode: gameMode,
-    mapKey: changes.containsKey('map_key') && changes['map_key'] is String
-        ? changes['map_key'] as String
-        : mapKey,
+  RankedMatch withEdits(Map<String, Object?> changes) => _copy(
+    legend: changes['legend'] is String ? changes['legend'] as String : null,
+    mapKey: changes['map_key'] is String ? changes['map_key'] as String : null,
     rpChange: changes.containsKey('rp_change')
         ? changes['rp_change'] as int
-        : rpChange,
-    cumulativeRp: cumulativeRp,
-    rankImg: rankImg,
-    lengthSecs: lengthSecs,
-    startTime: startTime,
-    endTime: endTime,
-    isPartyFull: isPartyFull,
-    trackers: _trackers,
-    trackersJson: _trackersJson,
-    kills: changes.containsKey('kills') ? changes['kills'] as int? : kills,
-    damage: changes.containsKey('damage') ? changes['damage'] as int? : damage,
-    seasonId: seasonId,
+        : null,
+    kills: changes.containsKey('kills') ? (value: changes['kills'] as int?) : null,
+    damage: changes.containsKey('damage')
+        ? (value: changes['damage'] as int?)
+        : null,
     editedFields: {...editedFields, ...changes.keys},
-    excluded: excluded,
   );
 
   /// Returns a copy with [excluded] set. Kept separate from [withEdits] since
   /// exclusion isn't tracked in [editedFields] — see [excluded].
-  RankedMatch withExcluded(bool excluded) => RankedMatch._(
-    uid: uid,
-    playerName: playerName,
-    legend: legend,
-    gameMode: gameMode,
-    mapKey: mapKey,
-    rpChange: rpChange,
-    cumulativeRp: cumulativeRp,
-    rankImg: rankImg,
-    lengthSecs: lengthSecs,
-    startTime: startTime,
-    endTime: endTime,
-    isPartyFull: isPartyFull,
-    trackers: _trackers,
-    trackersJson: _trackersJson,
-    kills: kills,
-    damage: damage,
-    seasonId: seasonId,
-    editedFields: editedFields,
-    excluded: excluded,
-  );
+  RankedMatch withExcluded(bool excluded) => _copy(excluded: excluded);
 
   /// Returns a copy with [field] (or every field, if null) cleared from
   /// [editedFields] — mirrors what the history store's `clearEdits` does:
@@ -319,27 +295,7 @@ class RankedMatch {
     } else {
       flags.remove(field);
     }
-    return RankedMatch._(
-      uid: uid,
-      playerName: playerName,
-      legend: legend,
-      gameMode: gameMode,
-      mapKey: mapKey,
-      rpChange: rpChange,
-      cumulativeRp: cumulativeRp,
-      rankImg: rankImg,
-      lengthSecs: lengthSecs,
-      startTime: startTime,
-      endTime: endTime,
-      isPartyFull: isPartyFull,
-      trackers: _trackers,
-      trackersJson: _trackersJson,
-      kills: kills,
-      damage: damage,
-      seasonId: seasonId,
-      editedFields: flags,
-      excluded: excluded,
-    );
+    return _copy(editedFields: flags);
   }
 
   /// Returns a copy with [kills]/[damage] nulled if negative or above
@@ -357,28 +313,41 @@ class RankedMatch {
         ? d
         : null;
     if (validKills == k && validDamage == d) return this;
-    return RankedMatch._(
-      uid: uid,
-      playerName: playerName,
-      legend: legend,
-      gameMode: gameMode,
-      mapKey: mapKey,
-      rpChange: rpChange,
-      cumulativeRp: cumulativeRp,
-      rankImg: rankImg,
-      lengthSecs: lengthSecs,
-      startTime: startTime,
-      endTime: endTime,
-      isPartyFull: isPartyFull,
-      trackers: _trackers,
-      trackersJson: _trackersJson,
-      kills: validKills,
-      damage: validDamage,
-      seasonId: seasonId,
-      editedFields: editedFields,
-      excluded: excluded,
-    );
+    return _copy(kills: (value: validKills), damage: (value: validDamage));
   }
+
+  /// Copies every field. Null leaves a field as is; [kills]/[damage] are
+  /// wrapped so a copy can set them to null.
+  RankedMatch _copy({
+    String? legend,
+    String? mapKey,
+    int? rpChange,
+    ({int? value})? kills,
+    ({int? value})? damage,
+    Set<String>? editedFields,
+    bool? excluded,
+  }) => RankedMatch._(
+    uid: uid,
+    playerName: playerName,
+    legend: legend ?? this.legend,
+    gameMode: gameMode,
+    mapKey: mapKey ?? this.mapKey,
+    rpChange: rpChange ?? this.rpChange,
+    cumulativeRp: cumulativeRp,
+    rankImg: rankImg,
+    lengthSecs: lengthSecs,
+    startTime: startTime,
+    endTime: endTime,
+    isPartyFull: isPartyFull,
+    trackers: _trackers,
+    trackersJson: _trackersJson,
+    storedId: _storedId,
+    kills: kills != null ? kills.value : this.kills,
+    damage: damage != null ? damage.value : this.damage,
+    seasonId: seasonId,
+    editedFields: editedFields ?? this.editedFields,
+    excluded: excluded ?? this.excluded,
+  );
 
   /// Looks up a tracker value by its stable human [name] (case-insensitive).
   /// Returns null when absent. Test-only — production code goes through
@@ -519,35 +488,42 @@ class RankedMatch {
     return trackers;
   }
 
+  /// A stored column as an int, or null if absent or not a number, so one
+  /// bad imported row can't break every view that loads it.
+  static int? _asInt(Object? v) => v is num ? v.toInt() : null;
+
+  static String? _asString(Object? v) => v is String ? v : null;
+
   factory RankedMatch.fromStoredMap(Map<String, Object?> m) {
     return RankedMatch._(
-      uid: m['uid'] as String? ?? '',
-      playerName: m['player_name'] as String? ?? '',
-      legend: m['legend'] as String? ?? 'Unknown',
-      gameMode: m['game_mode'] as String? ?? 'UNKNOWN',
-      mapKey: m['map_key'] as String? ?? 'UNKNOWN',
-      rpChange: (m['rp_change'] as num?)?.toInt() ?? 0,
-      cumulativeRp: (m['cumulative_rp'] as num?)?.toInt() ?? 0,
-      rankImg: m['rank_img'] as String? ?? '',
-      lengthSecs: (m['length_secs'] as num?)?.toInt() ?? 0,
+      uid: _asString(m['uid']) ?? '',
+      playerName: _asString(m['player_name']) ?? '',
+      legend: _asString(m['legend']) ?? 'Unknown',
+      gameMode: _asString(m['game_mode']) ?? 'UNKNOWN',
+      mapKey: _asString(m['map_key']) ?? 'UNKNOWN',
+      rpChange: _asInt(m['rp_change']) ?? 0,
+      cumulativeRp: _asInt(m['cumulative_rp']) ?? 0,
+      rankImg: _asString(m['rank_img']) ?? '',
+      lengthSecs: _asInt(m['length_secs']) ?? 0,
       startTime: DateTime.fromMillisecondsSinceEpoch(
-        (m['start_ms'] as num?)?.toInt() ?? 0,
+        _asInt(m['start_ms']) ?? 0,
         isUtc: true,
       ),
       endTime: DateTime.fromMillisecondsSinceEpoch(
-        (m['end_ms'] as num?)?.toInt() ?? 0,
+        _asInt(m['end_ms']) ?? 0,
         isUtc: true,
       ),
-      isPartyFull: (m['is_party_full'] as num?)?.toInt() == 1,
+      isPartyFull: _asInt(m['is_party_full']) == 1,
       trackers: null,
-      trackersJson: m['trackers'] is String ? m['trackers'] as String : null,
+      trackersJson: _asString(m['trackers']),
+      storedId: _asString(m['id']),
       // The stored columns win over the trackers blob: they carry any hand
       // correction, and the blob stays as upstream sent it.
-      kills: (m['kills'] as num?)?.toInt(),
-      damage: (m['damage'] as num?)?.toInt(),
-      seasonId: m['season_id'] as String?,
+      kills: _asInt(m['kills']),
+      damage: _asInt(m['damage']),
+      seasonId: _asString(m['season_id']),
       editedFields: decodeEditedFields(m['edited_fields']),
-      excluded: (m['excluded'] as num?)?.toInt() == 1,
+      excluded: _asInt(m['excluded']) == 1,
     );
   }
 }

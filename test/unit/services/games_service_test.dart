@@ -63,6 +63,7 @@ void main() {
         () => mockApi.getWithStatus(
           ApiConstants.gamesPath,
           params: any(named: 'params'),
+          failover: false,
         ),
       ).thenAnswer((_) async => (status: status, data: data));
     }

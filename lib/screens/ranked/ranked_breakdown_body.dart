@@ -69,9 +69,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
   Timer? _refreshTimer;
   bool _showCoachMark = false;
 
-  // Re-check every 10 min while the tab is alive. This is cheap: the sync
-  // provider holds a persisted per-UID cooldown, so most ticks skip the network
-  // entirely and only re-read the local store.
+  // Re-checks every 10 min; only invalidates once the sync cooldown is over.
   static const _kViewRefreshInterval = Duration(minutes: 10);
 
   @override
@@ -79,7 +77,12 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     super.initState();
     _refreshTimer = Timer.periodic(
       _kViewRefreshInterval,
-      (_) => ref.invalidate(rankedSyncProvider(widget.uid)),
+      (_) {
+        // Skip while the sync would only replay its stored outcome.
+        if (rankedSyncDue(ref.read(sharedPreferencesProvider), widget.uid)) {
+          ref.invalidate(rankedSyncProvider(widget.uid));
+        }
+      },
     );
     final prefs = ref.read(sharedPreferencesProvider);
     _showCoachMark =
@@ -652,7 +655,7 @@ class _OverviewTab extends StatelessWidget {
                   child: RankedTimeBreakdownEntry(
                     hourBuckets: data.timeOfDay,
                     weekdayBuckets: data.dayOfWeek,
-                    matches: matches,
+                    sessions: data.sessions,
                   ),
                 ),
               ],

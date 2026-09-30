@@ -28,11 +28,6 @@ const _excludedKeys = {
   PrefsKeys.onboardingVersion,
 };
 
-// Historical: the API response cache used to live under these prefixes in
-// prefs before moving to its own SQLite database. Nothing writes these keys
-// anymore — kept as a harmless exclusion in case anything ever does again.
-const _excludedPrefixes = ['api_cache:', 'api_cache_ts:'];
-
 const _staticBackupKeys = {
   PrefsKeys.profiles,
   PrefsKeys.activeProfileIndex,
@@ -69,9 +64,6 @@ const _dynamicBackupPrefixes = [
 
 bool _include(String key) {
   if (_excludedKeys.contains(key)) return false;
-  for (final prefix in _excludedPrefixes) {
-    if (key.startsWith(prefix)) return false;
-  }
   if (_staticBackupKeys.contains(key)) return true;
   for (final prefix in _dynamicBackupPrefixes) {
     if (key.startsWith(prefix)) return true;
@@ -274,10 +266,20 @@ Future<String?> exportBackup(
   if (Platform.isIOS) {
     final dir = await getTemporaryDirectory();
     final filePath = '${dir.path}/$defaultFilename';
-    await File(filePath).writeAsBytes(compressed);
-    await SharePlus.instance.share(
-      ShareParams(files: [XFile(filePath, mimeType: 'application/gzip')]),
-    );
+    final file = File(filePath);
+    await file.writeAsBytes(compressed);
+    try {
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(filePath, mimeType: 'application/gzip')]),
+      );
+    } finally {
+      // Don't leave the export (UIDs, names) in the temp directory.
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (e) {
+        log.w('Backup temp file cleanup failed', error: e);
+      }
+    }
     // Path deliberately omitted: on desktop it can embed the OS username,
     // and log.i reaches Sentry as a breadcrumb in release builds — see the
     // privacy rule in app_logger.dart.
@@ -357,6 +359,21 @@ class BackupPreview {
     required this._envelope,
   });
 
+  /// Names of saved profiles the backup doesn't contain. A restore replaces
+  /// the profile list, so these would disappear (their history stays on disk).
+  List<String> profilesReplacedBy(SharedPreferences prefs) {
+    final backupUids = _profileEntries(
+      (_envelope['prefs'] as Map<String, dynamic>)[PrefsKeys.profiles],
+    ).map((p) => p['uid']).toSet();
+    return [
+      for (final p in _profileEntries(prefs.getString(PrefsKeys.profiles)))
+        if (!backupUids.contains(p['uid']))
+          (p['name'] as String?)?.isNotEmpty == true
+              ? p['name'] as String
+              : 'Unnamed profile',
+    ];
+  }
+
   /// Builds a preview directly from an already-parsed envelope, skipping the
   /// file picker [previewBackup] normally goes through. Lets a test exercise
   /// [commitBackupImport] end to end (real JSON encode/decode, real
@@ -395,6 +412,16 @@ class PreviewError extends PreviewResult {
   PreviewError(this.message);
 }
 
+/// Decompresses and parses a picked backup for [Isolate.run]. [sizeBytes] is
+/// the decompressed JSON size.
+({Map<String, dynamic> envelope, int sizeBytes}) _decodeBackupEnvelope(
+  Uint8List rawBytes,
+) {
+  final jsonBytes = decompressIfGzipped(rawBytes);
+  final envelope = jsonDecode(utf8.decode(jsonBytes)) as Map<String, dynamic>;
+  return (envelope: envelope, sizeBytes: jsonBytes.length);
+}
+
 /// Shows a file picker dialog and parses+summarizes the selected backup,
 /// without writing anything. Pass the [BackupPreview] from a [PreviewReady]
 /// result to [commitBackupImport] to actually restore it.
@@ -416,9 +443,10 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
 
   try {
     final rawBytes = await pickedFile.readAsBytes();
-    final jsonBytes = decompressIfGzipped(rawBytes);
-    final rawJson = utf8.decode(jsonBytes);
-    final envelope = jsonDecode(rawJson) as Map<String, dynamic>;
+    // Off the UI isolate: a large backup is tens of MB of JSON.
+    final (:envelope, :sizeBytes) = await Isolate.run(
+      () => _decodeBackupEnvelope(rawBytes),
+    );
 
     final version = envelope['version'];
     // Lower-bounded too, not just upper-bounded: a malformed or hand-edited
@@ -443,7 +471,7 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
           envelope['ranked_history'],
           rankedStore,
         ),
-        sizeBytes: jsonBytes.length,
+        sizeBytes: sizeBytes,
         envelope: envelope,
       ),
     );
@@ -568,6 +596,19 @@ int _countProfiles(Map<String, dynamic> prefsData) {
     return decoded is List ? decoded.length : 0;
   } on FormatException {
     return 0;
+  }
+}
+
+/// The profile maps in a stored `player_profiles` string, or none.
+List<Map<String, dynamic>> _profileEntries(Object? raw) {
+  if (raw is! String) return const [];
+  try {
+    final decoded = jsonDecode(raw);
+    return decoded is List
+        ? decoded.whereType<Map<String, dynamic>>().toList()
+        : const [];
+  } catch (_) {
+    return const [];
   }
 }
 

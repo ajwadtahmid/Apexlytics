@@ -415,6 +415,8 @@ class RankedHistoryStore {
       "season_id = CASE WHEN excluded.season_id GLOB '$_splitIdGlob' "
           'AND ($_needsSeasonId) THEN excluded.season_id ELSE season_id END',
       if (restore) 'edited_fields = excluded.edited_fields',
+      // A restore can exclude a match but never re-include one.
+      if (restore) 'excluded = MAX($table.excluded, excluded.excluded)',
     ].join(',\n          ');
   }
 
@@ -538,12 +540,14 @@ class RankedHistoryStore {
   /// edited flag, which stops every later sync from correcting the column, so
   /// an out-of-range value written through this method is permanent.
   ///
-  /// Returns `false` when no row matches [id] — a possible mismatch between
-  /// an in-memory match's `dedupKey` and what's actually stored (e.g. a
-  /// hand-edited or foreign backup imported with an `id` inconsistent with
-  /// its own `uid`/`start_ms`). The caller must not report success in that
-  /// case, since nothing was persisted.
-  Future<bool> editMatch(String id, Map<String, Object?> values) async {
+  /// [excluded], when given, is set in the same transaction.
+  ///
+  /// Returns `false` when no row matches [id]; nothing is written.
+  Future<bool> editMatch(
+    String id,
+    Map<String, Object?> values, {
+    bool? excluded,
+  }) async {
     final invalid = values.keys.toSet().difference(kEditableMatchFields);
     if (invalid.isNotEmpty) {
       throw ArgumentError('Not editable: ${invalid.join(', ')}');
@@ -556,27 +560,34 @@ class RankedHistoryStore {
       kMinPlausibleRpChange,
       kRankedOutlierThreshold - 1,
     );
-    if (values.isEmpty) return true;
+    if (values.isEmpty && excluded == null) return true;
     final db = await _open();
-    final existing = await db.query(
-      table,
-      columns: ['edited_fields'],
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    if (existing.isEmpty) return false;
-    final flags = {
-      ...decodeEditedFields(existing.first['edited_fields']),
-      ...values.keys,
-    };
-    await db.update(
-      table,
-      {...values, 'edited_fields': encodeEditedFields(flags)},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    return true;
+    // One transaction so the edit and exclusion can't half-apply.
+    return db.transaction((txn) async {
+      final existing = await txn.query(
+        table,
+        columns: ['edited_fields'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (existing.isEmpty) return false;
+      final flags = {
+        ...decodeEditedFields(existing.first['edited_fields']),
+        ...values.keys,
+      };
+      await txn.update(
+        table,
+        {
+          ...values,
+          if (values.isNotEmpty) 'edited_fields': encodeEditedFields(flags),
+          if (excluded != null) 'excluded': excluded ? 1 : 0,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      return true;
+    });
   }
 
   /// Throws when [values] carries [key] with a value outside `[min, max]`.
@@ -626,11 +637,8 @@ class RankedHistoryStore {
   }
 
   /// Sets [RankedMatch.excluded] on the match [id]. Deliberately separate
-  /// from [editMatch]: exclusion isn't a value correction subject to
-  /// [kEditableMatchFields]/`edited_fields` sync-protection — it's never
-  /// written or cleared by a sync either way (omitted from both
-  /// [upsertAll]'s and [importRows]'s column lists), so it survives on its
-  /// own with no CASE logic needed.
+  /// from [editMatch]: a sync never writes or clears it, and a restore can
+  /// only set it (see [_conflictUpdateSet]).
   ///
   /// Returns `false` when no row matches [id], same as [editMatch].
   Future<bool> setExcluded(String id, bool excluded) async {
@@ -671,7 +679,7 @@ class RankedHistoryStore {
     final rows = await db.rawQuery(
       'SELECT COALESCE(season_id, ?) AS sid, COUNT(*) AS c FROM $table '
       "WHERE uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0 "
-      'GROUP BY sid',
+      'AND excluded = 0 GROUP BY sid',
       [kUnknownSeasonId, uid],
     );
     return {for (final r in rows) r['sid'] as String: (r['c'] as num).toInt()};
@@ -724,11 +732,17 @@ class RankedHistoryStore {
 
   /// Ranked-only WHERE scope for [uid] and an optional [seasonId] (null = every
   /// split — the lifetime scope). Folds Unknown/NULL together like [getBySeason].
-  (String, List<Object?>) _rankedScope(String uid, String? seasonId) {
+  ///
+  /// [includeExcluded] is only for reading the running RP.
+  (String, List<Object?>) _rankedScope(
+    String uid,
+    String? seasonId, {
+    bool includeExcluded = false,
+  }) {
     final buf = StringBuffer(
-      "uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0 "
-      'AND excluded = 0',
+      "uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0",
     );
+    if (!includeExcluded) buf.write(' AND excluded = 0');
     final args = <Object?>[uid];
     if (seasonId == kUnknownSeasonId) {
       buf.write(' AND (season_id = ? OR season_id IS NULL)');
@@ -766,27 +780,23 @@ class RankedHistoryStore {
       'SELECT $_aggCols FROM $table WHERE $where',
       args,
     )).first;
-    final games = (agg['games'] as num).toInt();
-    if (games == 0) return RankedSummary.empty;
-    // Newest ranked match supplies current RP / rank image.
+    final total = RankedAgg()..addRow(agg);
+    if (total.games == 0) return RankedSummary.empty;
+    // Newest ranked match supplies current RP / rank image, excluded or not.
+    final (latestWhere, latestArgs) = _rankedScope(
+      uid,
+      seasonId,
+      includeExcluded: true,
+    );
     final latest = await db.rawQuery(
-      'SELECT cumulative_rp, rank_img FROM $table WHERE $where '
+      'SELECT cumulative_rp, rank_img FROM $table WHERE $latestWhere '
       'ORDER BY end_ms DESC LIMIT 1',
-      args,
+      latestArgs,
     );
     final newest = latest.isEmpty ? null : latest.first;
-    return RankedSummary(
-      games: games,
-      netRp: (agg['net_rp'] as num).toInt(),
+    return total.toSummary(
       currentRp: (newest?['cumulative_rp'] as num?)?.toInt() ?? 0,
       latestRankImg: newest?['rank_img'] as String? ?? '',
-      totalKills: (agg['kills'] as num).toInt(),
-      totalDamage: (agg['damage'] as num).toInt(),
-      killsGames: (agg['kills_games'] as num).toInt(),
-      damageGames: (agg['damage_games'] as num).toInt(),
-      totalLengthSecs: (agg['length_secs'] as num).toInt(),
-      wins: (agg['wins'] as num).toInt(),
-      losses: (agg['losses'] as num).toInt(),
     );
   }
 
@@ -814,29 +824,11 @@ class RankedHistoryStore {
     );
 
     RankedSummary summaryFromRow(int isPartyFull) {
-      Map<String, Object?>? agg;
+      final agg = RankedAgg();
       for (final r in rows) {
-        if ((r['is_party_full'] as num?)?.toInt() == isPartyFull) {
-          agg = r;
-          break;
-        }
+        if ((r['is_party_full'] as num?)?.toInt() == isPartyFull) agg.addRow(r);
       }
-      if (agg == null) return RankedSummary.empty;
-      final games = (agg['games'] as num).toInt();
-      if (games == 0) return RankedSummary.empty;
-      return RankedSummary(
-        games: games,
-        netRp: (agg['net_rp'] as num).toInt(),
-        currentRp: 0,
-        latestRankImg: '',
-        totalKills: (agg['kills'] as num).toInt(),
-        totalDamage: (agg['damage'] as num).toInt(),
-        killsGames: (agg['kills_games'] as num).toInt(),
-        damageGames: (agg['damage_games'] as num).toInt(),
-        totalLengthSecs: (agg['length_secs'] as num).toInt(),
-        wins: (agg['wins'] as num).toInt(),
-        losses: (agg['losses'] as num).toInt(),
-      );
+      return agg.toSummary();
     }
 
     return (full: summaryFromRow(1), partial: summaryFromRow(0));
@@ -870,39 +862,7 @@ class RankedHistoryStore {
 
     return [
       for (final entry in byLegend.entries)
-        LegendBreakdown(
-          legend: entry.key,
-          games: entry.value.fold(0, (s, r) => s + (r['games'] as num).toInt()),
-          totalRp: entry.value.fold(
-            0,
-            (s, r) => s + (r['net_rp'] as num).toInt(),
-          ),
-          totalKills: entry.value.fold(
-            0,
-            (s, r) => s + (r['kills'] as num).toInt(),
-          ),
-          totalDamage: entry.value.fold(
-            0,
-            (s, r) => s + (r['damage'] as num).toInt(),
-          ),
-          killsGames: entry.value.fold(
-            0,
-            (s, r) => s + (r['kills_games'] as num).toInt(),
-          ),
-          damageGames: entry.value.fold(
-            0,
-            (s, r) => s + (r['damage_games'] as num).toInt(),
-          ),
-          totalLengthSecs: entry.value.fold(
-            0,
-            (s, r) => s + (r['length_secs'] as num).toInt(),
-          ),
-          wins: entry.value.fold(0, (s, r) => s + (r['wins'] as num).toInt()),
-          losses: entry.value.fold(
-            0,
-            (s, r) => s + (r['losses'] as num).toInt(),
-          ),
-        ),
+        (RankedAgg()..addAllRows(entry.value)).toLegend(entry.key),
     ]..sort(byTotalRpThenName);
   }
 
@@ -935,44 +895,13 @@ class RankedHistoryStore {
       representativeKey.putIfAbsent(canonical, () => rawKey);
     }
 
-    final out = [
+    return [
       for (final entry in byMap.entries)
-        MapBreakdown(
-          mapKey: representativeKey[entry.key]!,
-          displayName: battleRoyaleMapName(representativeKey[entry.key]!),
-          games: entry.value.fold(0, (s, r) => s + (r['games'] as num).toInt()),
-          totalRp: entry.value.fold(
-            0,
-            (s, r) => s + (r['net_rp'] as num).toInt(),
-          ),
-          totalKills: entry.value.fold(
-            0,
-            (s, r) => s + (r['kills'] as num).toInt(),
-          ),
-          totalDamage: entry.value.fold(
-            0,
-            (s, r) => s + (r['damage'] as num).toInt(),
-          ),
-          killsGames: entry.value.fold(
-            0,
-            (s, r) => s + (r['kills_games'] as num).toInt(),
-          ),
-          damageGames: entry.value.fold(
-            0,
-            (s, r) => s + (r['damage_games'] as num).toInt(),
-          ),
-          totalLengthSecs: entry.value.fold(
-            0,
-            (s, r) => s + (r['length_secs'] as num).toInt(),
-          ),
-          wins: entry.value.fold(0, (s, r) => s + (r['wins'] as num).toInt()),
-          losses: entry.value.fold(
-            0,
-            (s, r) => s + (r['losses'] as num).toInt(),
-          ),
+        (RankedAgg()..addAllRows(entry.value)).toMap(
+          representativeKey[entry.key]!,
+          battleRoyaleMapName(representativeKey[entry.key]!),
         ),
     ]..sort(byGamesThenName);
-    return out;
   }
 
   /// Per (legend, map) breakdown for [uid] across [seasonId] (null =
@@ -1004,73 +933,35 @@ class RankedHistoryStore {
 
     return [
       for (final entry in byPair.entries)
-        LegendMapCell(
-          legend: entry.key.$1,
-          mapName: entry.key.$2,
-          games: entry.value.fold(0, (s, r) => s + (r['games'] as num).toInt()),
-          totalRp: entry.value.fold(
-            0,
-            (s, r) => s + (r['net_rp'] as num).toInt(),
-          ),
-          wins: entry.value.fold(0, (s, r) => s + (r['wins'] as num).toInt()),
-          losses: entry.value.fold(
-            0,
-            (s, r) => s + (r['losses'] as num).toInt(),
-          ),
+        (RankedAgg()..addAllRows(entry.value)).toCell(
+          entry.key.$1,
+          entry.key.$2,
         ),
     ];
   }
 
-  /// Time-of-day performance for [uid] across [seasonId] (null = lifetime).
-  /// Unlike the RP progression chart or rank-progress header, "which hour do I
-  /// play best" isn't season-relative — it only needs each match's start time
-  /// and RP change, so it's a good Lifetime candidate. Kept scalable with a
-  /// narrow projection (2 columns, no trackers/legend/map strings — the
-  /// expensive part of a full row) fed straight into
-  /// [timeOfDayBucketsFromRankedRows], so no [RankedMatch] is hydrated and the
-  /// bucketing logic isn't duplicated in SQL.
-  Future<List<HourBucket>> timeOfDayBucketsFor(
-    String uid, {
-    String? seasonId,
-  }) async {
+  /// Time-of-day and day-of-week performance for [uid] across [seasonId]
+  /// (null = lifetime), from one narrow (start time, RP) projection fed to the
+  /// `*BucketsFromRankedRows` helpers, so no [RankedMatch] is hydrated.
+  Future<({List<HourBucket> hours, List<WeekdayBucket> weekdays})>
+  timeBucketsFor(String uid, {String? seasonId}) async {
     final db = await _open();
     final (where, args) = _rankedScope(uid, seasonId);
     final rows = await db.rawQuery(
       'SELECT start_ms, rp_change FROM $table WHERE $where',
       args,
     );
-    // Bucket straight from the two projected columns — no RankedMatch per row.
-    return timeOfDayBucketsFromRankedRows([
+    final pairs = [
       for (final r in rows)
         (
           (r['start_ms'] as num?)?.toInt() ?? 0,
           (r['rp_change'] as num?)?.toInt() ?? 0,
         ),
-    ]);
-  }
-
-  /// Day-of-week performance for [uid] across [seasonId] (null = lifetime).
-  /// Same shape and same reasoning as [timeOfDayBucketsFor] — "which day do I
-  /// play best" isn't season-relative either, and the same narrow start/RP
-  /// projection feeds [dayOfWeekBucketsFromRankedRows] without hydrating a
-  /// [RankedMatch] per row.
-  Future<List<WeekdayBucket>> dayOfWeekBucketsFor(
-    String uid, {
-    String? seasonId,
-  }) async {
-    final db = await _open();
-    final (where, args) = _rankedScope(uid, seasonId);
-    final rows = await db.rawQuery(
-      'SELECT start_ms, rp_change FROM $table WHERE $where',
-      args,
+    ];
+    return (
+      hours: timeOfDayBucketsFromRankedRows(pairs),
+      weekdays: dayOfWeekBucketsFromRankedRows(pairs),
     );
-    return dayOfWeekBucketsFromRankedRows([
-      for (final r in rows)
-        (
-          (r['start_ms'] as num?)?.toInt() ?? 0,
-          (r['rp_change'] as num?)?.toInt() ?? 0,
-        ),
-    ]);
   }
 
   /// Ranked matches for one legend across [seasonId] (null = lifetime), newest
@@ -1346,6 +1237,20 @@ class RankedHistoryStore {
     'kills',
     'damage',
     'edited_fields',
+    'excluded',
+  };
+
+  /// Columns holding integers; the rest of [_importableColumns] hold text.
+  static const _integerColumns = {
+    'rp_change',
+    'cumulative_rp',
+    'length_secs',
+    'start_ms',
+    'end_ms',
+    'is_party_full',
+    'kills',
+    'damage',
+    'excluded',
   };
 
   /// Restores rows from an export (single JSON file). Idempotent. Returns
@@ -1409,8 +1314,8 @@ class RankedHistoryStore {
         INSERT INTO $table (
           id, uid, player_name, legend, game_mode, map_key, rp_change,
           cumulative_rp, rank_img, length_secs, start_ms, end_ms,
-          is_party_full, trackers, season_id, kills, damage, edited_fields
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          is_party_full, trackers, season_id, kills, damage, edited_fields, excluded
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
         ${_conflictUpdateSet(restore: true)}
         ''',
@@ -1433,6 +1338,7 @@ class RankedHistoryStore {
           row['kills'],
           row['damage'],
           row['edited_fields'],
+          row['excluded'],
         ],
       );
     }
@@ -1449,17 +1355,40 @@ class RankedHistoryStore {
     if (uid is! String || uid.isEmpty) return null;
     if (r['start_ms'] is! num || r['end_ms'] is! num) return null;
 
+    // Type-check every column: SQLite would store text in an INTEGER column
+    // and break the views that later load the row.
     final row = <String, Object?>{};
     for (final col in _importableColumns) {
       final v = r[col];
-      if (v == null || v is num || v is String) {
+      if (_integerColumns.contains(col)) {
+        if (v == null || v is num) {
+          row[col] = (v as num?)?.toInt();
+        } else if (v is bool) {
+          row[col] = v ? 1 : 0;
+        } else {
+          return null;
+        }
+      } else if (v == null || v is String) {
         row[col] = v;
-      } else if (v is bool) {
-        row[col] = v ? 1 : 0;
       } else {
         return null;
       }
     }
+    // NOT NULL in the table; absent means "not excluded".
+    row['excluded'] = (row['excluded'] as int? ?? 0) != 0 ? 1 : 0;
+
+    // The stored GLOB is looser than [SeasonMeta.isSplitId] and never demotes
+    // an id, so drop anything Dart wouldn't accept.
+    final seasonId = row['season_id'];
+    if (seasonId is! String || !SeasonMeta.isSplitId(seasonId)) {
+      row['season_id'] = null;
+    }
+
+    // The same range check a sync and a hand edit apply.
+    int? plausible(Object? v, int max) =>
+        v is int && v >= 0 && v <= max ? v : null;
+    row['kills'] = plausible(row['kills'], kMaxPlausibleKills);
+    row['damage'] = plausible(row['damage'], kMaxPlausibleDamage);
 
     final missingKills = !r.containsKey('kills');
     final missingDamage = !r.containsKey('damage');
@@ -1467,8 +1396,6 @@ class RankedHistoryStore {
       final trackers = RankedMatch.fromStoredMap({
         'trackers': row['trackers'],
       }).trackers;
-      int? plausible(int? v, int max) =>
-          v != null && v >= 0 && v <= max ? v : null;
       if (missingKills) {
         row['kills'] = plausible(
           RankedMatch.killsFrom(trackers),

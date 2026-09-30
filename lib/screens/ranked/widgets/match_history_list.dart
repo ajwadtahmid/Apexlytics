@@ -92,7 +92,7 @@ class _MatchHistoryListState extends State<MatchHistoryList> {
   }
 
   String? _headKey(List<RankedMatch> matches) =>
-      matches.isEmpty ? null : matches.first.dedupKey;
+      matches.isEmpty ? null : matches.first.id;
 
   void _onScroll() {
     if (widget.grouping != null) return; // pagination is day-mode only

@@ -1,7 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/ranked_match.dart';
 import '../../utils/formatting/format.dart' show formatSigned;
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
@@ -21,18 +20,18 @@ final _rangeFmt = DateFormat('MMM d');
 /// Entry point for "Performance Trends": recent session-over-session
 /// sparklines up top, then the existing hour-of-day/day-of-week breakdown —
 /// out of the main Overview list so it doesn't compete for space with the
-/// RP-focused cards there. [matches] drives the sparklines and is expected
+/// RP-focused cards there. [sessions] drives the sparklines and is expected
 /// empty at Lifetime scope (sessions are a split-relative concept — Lifetime
 /// never hydrates matches); the hour/day charts work at either scope.
 class RankedTimeBreakdownEntry extends StatelessWidget {
   final List<HourBucket> hourBuckets;
   final List<WeekdayBucket> weekdayBuckets;
-  final List<RankedMatch> matches;
+  final List<RankedSession> sessions;
   const RankedTimeBreakdownEntry({
     super.key,
     required this.hourBuckets,
     required this.weekdayBuckets,
-    this.matches = const [],
+    this.sessions = const [],
   });
 
   @override
@@ -46,7 +45,7 @@ class RankedTimeBreakdownEntry extends StatelessWidget {
             builder: (_) => RankedTimeBreakdownScreen(
               hourBuckets: hourBuckets,
               weekdayBuckets: weekdayBuckets,
-              matches: matches,
+              sessions: sessions,
             ),
           ),
         ),
@@ -77,22 +76,21 @@ class RankedTimeBreakdownEntry extends StatelessWidget {
 
 /// Session sparklines (when available) followed by the hour-of-day and
 /// day-of-week charts. The latter two take precomputed buckets, so they work
-/// unchanged at split or Lifetime scope; the sparklines need [matches] and
+/// unchanged at split or Lifetime scope; the sparklines need [sessions] and
 /// simply don't render without them.
 class RankedTimeBreakdownScreen extends StatelessWidget {
   final List<HourBucket> hourBuckets;
   final List<WeekdayBucket> weekdayBuckets;
-  final List<RankedMatch> matches;
+  final List<RankedSession> sessions;
   const RankedTimeBreakdownScreen({
     super.key,
     required this.hourBuckets,
     required this.weekdayBuckets,
-    this.matches = const [],
+    this.sessions = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    final sessions = sessionize(matches);
     return Scaffold(
       appBar: AppBar(title: const Text('Performance Trends')),
       body: SafeArea(

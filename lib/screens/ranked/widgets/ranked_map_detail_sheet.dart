@@ -5,6 +5,7 @@ import '../../../utils/formatting/format.dart'
     show formatNumber, formatDuration, formatSigned;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
+import '../../../widgets/map_asset_image.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/trend_lines.dart';
 import '../../../widgets/win_loss_stat.dart';
@@ -88,13 +89,7 @@ class _MapDetailSheet extends StatelessWidget {
                     width: 72,
                     height: 44,
                     child: asset != null
-                        ? Image.asset(
-                            asset,
-                            fit: BoxFit.cover,
-                            cacheWidth: 400,
-                            errorBuilder: (_, _, _) =>
-                                Container(color: AppTheme.surface2),
-                          )
+                        ? MapAssetImage(asset: asset)
                         : Container(color: AppTheme.surface2),
                   ),
                 ),

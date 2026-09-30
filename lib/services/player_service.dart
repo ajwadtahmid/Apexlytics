@@ -31,6 +31,11 @@ class PlayerService {
   final ApiService _api;
   PlayerService(this._api);
 
+  /// Parsed cache reads, valid while the cache entry's save time is unchanged,
+  /// so rebuilding the favourites list doesn't re-parse every payload.
+  final Map<String, (DateTime savedAt, PlayerStats stats)> _parsed = {};
+  static const _maxParsed = 50;
+
   /// Normalizes a name for both the upstream query and the cache key.
   /// Upstream name lookups are case-insensitive, so "Bob" and "bob" are the
   /// same player — sending the lowercased form for both means they also share
@@ -79,10 +84,18 @@ class PlayerService {
       return null;
     }
     log.d('Cache hit, stale=${result.staleAt != null}');
-    return ApiResult(
-      PlayerStats.fromJson(result.data),
-      staleAt: result.staleAt,
-    );
+    final savedAt = result.staleAt;
+    final memoKey = '$endpoint|${params.values.join('|')}';
+    final memo = _parsed[memoKey];
+    if (memo != null && savedAt != null && memo.$1 == savedAt) {
+      return ApiResult(memo.$2, staleAt: savedAt);
+    }
+    final stats = PlayerStats.fromJson(result.data);
+    if (savedAt != null) {
+      if (_parsed.length >= _maxParsed) _parsed.clear();
+      _parsed[memoKey] = (savedAt, stats);
+    }
+    return ApiResult(stats, staleAt: savedAt);
   }
 
   /// Fetches stats by UID. This is the preferred lookup path for saved profiles.

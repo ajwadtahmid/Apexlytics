@@ -5,6 +5,7 @@ import '../../../utils/formatting/format.dart' show formatNumber;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
+import '../../../widgets/map_asset_image.dart';
 import '../../../widgets/rp_pill.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
@@ -387,12 +388,7 @@ class _MapCard extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         if (asset != null)
-          Image.asset(
-            asset,
-            fit: BoxFit.cover,
-            cacheWidth: 800,
-            errorBuilder: (_, _, _) => Container(color: AppTheme.surface2),
-          )
+          MapAssetImage(asset: asset)
         else
           Container(color: AppTheme.surface2),
         const DecoratedBox(

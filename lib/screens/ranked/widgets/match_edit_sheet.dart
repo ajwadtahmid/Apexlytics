@@ -264,36 +264,23 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
       _error = null;
     });
     try {
-      if (changes.isNotEmpty) {
-        final saved = await ref
-            .read(rankedHistoryStoreProvider)
-            .editMatch(widget.match.dedupKey, changes);
-        if (!saved) {
-          // No row matched this match's id - report the failure instead of
-          // applying the edit to the in-memory copy the caller would
-          // otherwise treat as persisted.
-          if (mounted) {
-            setState(() {
-              _error = 'That match is no longer in your history.';
-              _saving = false;
-            });
-          }
-          return;
+      // One transaction: the edit and the exclusion land together.
+      final saved = await ref
+          .read(rankedHistoryStoreProvider)
+          .editMatch(
+            widget.match.id,
+            changes,
+            excluded: excludedChanged ? _excluded : null,
+          );
+      if (!saved) {
+        // No row matched: report it rather than update the in-memory copy.
+        if (mounted) {
+          setState(() {
+            _error = 'That match is no longer in your history.';
+            _saving = false;
+          });
         }
-      }
-      if (excludedChanged) {
-        final saved = await ref
-            .read(rankedHistoryStoreProvider)
-            .setExcluded(widget.match.dedupKey, _excluded);
-        if (!saved) {
-          if (mounted) {
-            setState(() {
-              _error = 'That match is no longer in your history.';
-              _saving = false;
-            });
-          }
-          return;
-        }
+        return;
       }
       _refreshBreakdown();
       var updated = widget.match;
@@ -317,7 +304,7 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
     try {
       await ref
           .read(rankedHistoryStoreProvider)
-          .clearEdits(widget.match.dedupKey);
+          .clearEdits(widget.match.id);
       _refreshBreakdown();
       if (mounted) Navigator.pop(context, widget.match.withEditsCleared());
     } catch (e, st) {

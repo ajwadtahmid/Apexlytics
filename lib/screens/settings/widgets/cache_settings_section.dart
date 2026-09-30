@@ -212,13 +212,16 @@ class CacheSettingsSection extends ConsumerWidget {
     BackupPreview preview,
     RankedHistoryStore rankedStore,
   ) async {
+    final replaced = preview.profilesReplacedBy(
+      ref.read(sharedPreferencesProvider),
+    );
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
         title: const Text('Import backup?'),
         content: Text(
-          _summarize(preview),
+          _summarize(preview, replaced),
           style: const TextStyle(color: AppTheme.muted),
         ),
         actions: [
@@ -275,7 +278,7 @@ class CacheSettingsSection extends ConsumerWidget {
   // work fine, but it's large enough that "may take a moment" is honest.
   static const _largeBackupWarningBytes = 15 * 1024 * 1024; // 15 MB
 
-  String _summarize(BackupPreview preview) {
+  String _summarize(BackupPreview preview, List<String> replacedProfiles) {
     final exportedAt = preview.exportedAt;
     final profiles = _profilesLabel(preview.profileCount);
     return [
@@ -288,6 +291,11 @@ class CacheSettingsSection extends ConsumerWidget {
             'restoring may take a moment.',
       "This will restore the backup's settings and profiles, and merge its "
           'match history into your current data.',
+      if (replacedProfiles.isNotEmpty)
+        'Your saved profiles will be replaced by the backup\'s, so '
+            '${replacedProfiles.join(', ')} will no longer be listed. Their '
+            'match history stays on this device; re-add the player to see it '
+            'again.',
     ].join('\n\n');
   }
 
