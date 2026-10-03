@@ -23,6 +23,9 @@ class WinLossStat extends StatelessWidget {
   /// one line of chips.
   final bool compact;
 
+  /// Centres the label and value instead of left-aligning them.
+  final bool centered;
+
   const WinLossStat({
     super.key,
     required this.wins,
@@ -30,6 +33,7 @@ class WinLossStat extends StatelessWidget {
     this.onImage = false,
     this.showRecord = true,
     this.compact = false,
+    this.centered = false,
   });
 
   @override
@@ -76,7 +80,9 @@ class WinLossStat extends StatelessWidget {
     );
 
     final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(

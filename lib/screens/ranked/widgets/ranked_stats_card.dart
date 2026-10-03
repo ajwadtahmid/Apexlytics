@@ -7,8 +7,8 @@ import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
 import '../../../widgets/win_loss_stat.dart';
 
-/// Match-stat aggregates for the ranked window, grouped into RP/record,
-/// combat, and playtime sections — same convention as the drill-down sheets.
+/// Match-stat aggregates for the ranked window, as a record row plus an
+/// Avg | Total table; the drill-down sheets use a 2-column chip grid instead.
 class RankedStatsCard extends StatelessWidget {
   final RankedSummary summary;
   const RankedStatsCard({super.key, required this.summary});
@@ -35,45 +35,43 @@ class RankedStatsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppTheme.sm),
-          GroupedStatChips(
-            alignment: WrapAlignment.center,
-            groups: [
+          StatGrid(
+            rows: [
               [
+                WinLossStat(wins: s.wins, losses: s.losses, centered: true),
                 StatDisplay(
-                  label: 'Avg RP',
-                  value: formatSigned(avgRp),
-                  valueColor: avgRpColor,
-                ),
-                StatDisplay(
-                  label: 'Total RP',
-                  value: formatSignedInt(s.netRp),
-                  valueColor: netRpColor,
-                ),
-                WinLossStat(wins: s.wins, losses: s.losses),
-                StatDisplay(label: 'Games', value: '${s.games}'),
-              ],
-              [
-                StatDisplay(
-                  label: 'Avg Kills',
-                  value: s.avgKills.toStringAsFixed(1),
-                ),
-                StatDisplay(label: 'Kills', value: formatNumber(s.totalKills)),
-                StatDisplay(
-                  label: 'Avg Dmg',
-                  value: formatNumber(s.avgDamage.round()),
-                ),
-                StatDisplay(label: 'Dmg', value: formatNumber(s.totalDamage)),
-              ],
-              [
-                StatDisplay(
-                  label: 'Avg Time',
-                  value: formatDuration(s.avgGameLengthSecs.round()),
-                ),
-                StatDisplay(
-                  label: 'Time',
-                  value: formatDuration(s.totalLengthSecs),
+                  label: 'Games',
+                  centered: true,
+                  value: formatNumber(s.games),
                 ),
               ],
+            ],
+          ),
+          const SizedBox(height: AppTheme.sm),
+          StatTable(
+            rows: [
+              StatTableRow(
+                label: 'RP',
+                avg: formatSigned(avgRp),
+                total: formatSignedInt(s.netRp),
+                avgColor: avgRpColor,
+                totalColor: netRpColor,
+              ),
+              StatTableRow(
+                label: 'Kills',
+                avg: s.avgKills.toStringAsFixed(1),
+                total: formatNumber(s.totalKills),
+              ),
+              StatTableRow(
+                label: 'Damage',
+                avg: formatNumber(s.avgDamage.round()),
+                total: formatNumber(s.totalDamage),
+              ),
+              StatTableRow(
+                label: 'Time',
+                avg: formatDuration(s.avgGameLengthSecs.round()),
+                total: formatDuration(s.totalLengthSecs),
+              ),
             ],
           ),
         ],

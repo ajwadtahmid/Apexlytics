@@ -12,6 +12,9 @@ class StatDisplay extends StatelessWidget {
   /// [highlight] when set.
   final Color? valueColor;
 
+  /// Centres the label and value instead of left-aligning them.
+  final bool centered;
+
   const StatDisplay({
     super.key,
     required this.label,
@@ -19,6 +22,7 @@ class StatDisplay extends StatelessWidget {
     this.highlight = false,
     this.compact = false,
     this.valueColor,
+    this.centered = false,
   });
 
   @override
@@ -39,24 +43,35 @@ class StatDisplay extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: centered
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: labelColor,
-              fontSize: labelSize,
-              fontWeight: FontWeight.w600,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: labelColor,
+                fontSize: labelSize,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(height: 3),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: valueSize,
-              fontWeight: FontWeight.bold,
+          // Scales down rather than wrapping or clipping on a huge value or
+          // a large system font size.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: centered ? Alignment.center : Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: valueColor,
+                fontSize: valueSize,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -65,38 +80,134 @@ class StatDisplay extends StatelessWidget {
   }
 }
 
-/// Stat chips split into [groups] (e.g. RP/record, combat, playtime) by a
-/// thin divider — no section labels needed since the chip labels say enough.
-class GroupedStatChips extends StatelessWidget {
-  final List<List<Widget>> groups;
-  final WrapAlignment alignment;
-  const GroupedStatChips({
-    super.key,
-    required this.groups,
-    this.alignment = WrapAlignment.start,
-  });
+/// Stat chips laid out as a two-column grid: each row in [rows] holds a pair
+/// (e.g. per-game figure and its total) that split the width evenly, so every
+/// chip is the same size and long values have half the row to fit in.
+class StatGrid extends StatelessWidget {
+  final List<List<Widget>> rows;
+  const StatGrid({super.key, required this.rows});
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (var i = 0; i < groups.length; i++) ...[
-          if (i > 0)
-            const Divider(color: AppTheme.surface2, height: AppTheme.lg),
-          // Forces full width so a single-line Wrap has room to center in,
-          // rather than shrinking to its content and pinning left.
-          SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: alignment,
-              spacing: AppTheme.sm,
-              runSpacing: AppTheme.sm,
-              children: groups[i],
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const SizedBox(height: AppTheme.sm),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var j = 0; j < rows[i].length; j++) ...[
+                  if (j > 0) const SizedBox(width: AppTheme.sm),
+                  Expanded(child: rows[i][j]),
+                ],
+              ],
             ),
           ),
         ],
       ],
+    );
+  }
+}
+
+/// One row of a [StatTable]: a [label] with its per-game [avg] and cumulative
+/// [total] values, optionally tinted (e.g. green/red for RP).
+class StatTableRow {
+  final String label;
+  final String avg;
+  final String total;
+  final Color? avgColor;
+  final Color? totalColor;
+  const StatTableRow({
+    required this.label,
+    required this.avg,
+    required this.total,
+    this.avgColor,
+    this.totalColor,
+  });
+}
+
+/// Compact Avg | Total table: one line per stat instead of a chip pair, so it
+/// stays short and every value column lines up however big the numbers get.
+class StatTable extends StatelessWidget {
+  final List<StatTableRow> rows;
+  const StatTable({super.key, required this.rows});
+
+  static const _labelFlex = 2;
+  static const _valueFlex = 3;
+
+  Widget _headerCell(String text) => Expanded(
+    flex: _valueFlex,
+    child: Text(
+      text,
+      textAlign: TextAlign.right,
+      style: const TextStyle(
+        color: AppTheme.muted,
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+
+  Widget _valueCell(String text, Color? color) => Expanded(
+    flex: _valueFlex,
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color ?? AppTheme.textPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.md,
+        vertical: AppTheme.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Spacer(flex: _labelFlex),
+              _headerCell('AVERAGE'),
+              _headerCell('TOTAL'),
+            ],
+          ),
+          for (final r in rows)
+            Padding(
+              padding: const EdgeInsets.only(top: AppTheme.sm),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: _labelFlex,
+                    child: Text(
+                      r.label,
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  _valueCell(r.avg, r.avgColor),
+                  _valueCell(r.total, r.totalColor),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

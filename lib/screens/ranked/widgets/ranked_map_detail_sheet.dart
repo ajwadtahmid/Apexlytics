@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatDuration, formatSigned;
+    show formatNumber, formatDuration, formatSigned, formatSignedInt;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/map_asset_image.dart';
@@ -105,54 +105,55 @@ class _MapDetailSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppTheme.md),
-            GroupedStatChips(
-              groups: [
-                [
-                  StatDisplay(
-                    label: 'Avg RP',
-                    value: formatSigned(map.avgRpPerGame),
-                    valueColor: map.avgRpPerGame >= 0
-                        ? AppTheme.green
-                        : AppTheme.red,
-                  ),
-                  StatDisplay(
-                    label: 'Total RP',
-                    value: formatSigned(map.totalRp.toDouble()),
-                    valueColor: map.totalRp >= 0
-                        ? AppTheme.green
-                        : AppTheme.red,
-                  ),
-                  WinLossStat(wins: map.wins, losses: map.losses),
-                  StatDisplay(label: 'Games', value: '${map.games}'),
-                ],
-                [
-                  StatDisplay(
-                    label: 'Avg Kills',
-                    value: map.avgKills.toStringAsFixed(1),
-                  ),
-                  StatDisplay(
-                    label: 'Total Kills',
-                    value: formatNumber(map.totalKills),
-                  ),
-                  StatDisplay(
-                    label: 'Avg Dmg',
-                    value: formatNumber(map.avgDamage.round()),
-                  ),
-                  StatDisplay(
-                    label: 'Total Dmg',
-                    value: formatNumber(map.totalDamage),
-                  ),
-                ],
-                [
-                  StatDisplay(
-                    label: 'Avg Time',
-                    value: formatDuration(map.avgLengthSecs.round()),
-                  ),
-                  StatDisplay(
-                    label: 'Total Time',
-                    value: formatDuration(map.totalLengthSecs),
-                  ),
-                ],
+            Column(
+              children: [
+                StatGrid(
+                  rows: [
+                    [
+                      WinLossStat(
+                        wins: map.wins,
+                        losses: map.losses,
+                        centered: true,
+                      ),
+                      StatDisplay(
+                        label: 'Games',
+                        centered: true,
+                        value: formatNumber(map.games),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: AppTheme.sm),
+                StatTable(
+                  rows: [
+                    StatTableRow(
+                      label: 'RP',
+                      avg: formatSigned(map.avgRpPerGame),
+                      total: formatSignedInt(map.totalRp),
+                      avgColor: map.avgRpPerGame >= 0
+                          ? AppTheme.green
+                          : AppTheme.red,
+                      totalColor: map.totalRp >= 0
+                          ? AppTheme.green
+                          : AppTheme.red,
+                    ),
+                    StatTableRow(
+                      label: 'Kills',
+                      avg: map.avgKills.toStringAsFixed(1),
+                      total: formatNumber(map.totalKills),
+                    ),
+                    StatTableRow(
+                      label: 'Damage',
+                      avg: formatNumber(map.avgDamage.round()),
+                      total: formatNumber(map.totalDamage),
+                    ),
+                    StatTableRow(
+                      label: 'Time',
+                      avg: formatDuration(map.avgLengthSecs.round()),
+                      total: formatDuration(map.totalLengthSecs),
+                    ),
+                  ],
+                ),
               ],
             ),
             FutureBuilder<List<RankedMatch>>(

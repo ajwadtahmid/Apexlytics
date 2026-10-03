@@ -161,9 +161,14 @@ class _LegendCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 96, right: AppTheme.lg),
+              padding: const EdgeInsets.only(left: 96),
               child: Padding(
-                padding: const EdgeInsets.all(AppTheme.md),
+                padding: const EdgeInsets.fromLTRB(
+                  AppTheme.md,
+                  AppTheme.md,
+                  AppTheme.sm,
+                  AppTheme.md,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -172,15 +177,20 @@ class _LegendCard extends StatelessWidget {
                       children: [
                         _RankBadge(rank: rank),
                         const SizedBox(width: AppTheme.sm),
+                        // Scales down a touch on a narrow card rather than
+                        // truncating the legend name.
                         Expanded(
-                          child: Text(
-                            row.legend,
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              row.legend,
+                              style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: AppTheme.sm),
@@ -188,38 +198,36 @@ class _LegendCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: AppTheme.sm),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _AvgRpChip(avgRp: row.avgRpPerGame, compact: true),
-                          const SizedBox(width: AppTheme.sm),
-                          _chip(
-                            'Avg Dmg',
-                            formatNumber(row.avgDamage.round()),
-                          ),
-                          const SizedBox(width: AppTheme.sm),
-                          _chip('Total Dmg', formatNumber(row.totalDamage)),
-                        ],
-                      ),
+                    // Equal-width centred chips fill the row; the right padding
+                    // keeps clear of the chevron.
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppTheme.lg),
+                      child: _chipRow([
+                        _chip(
+                          'Avg RP',
+                          _signedAvg(row.avgRpPerGame),
+                          valueColor: row.avgRpPerGame >= 0
+                              ? AppTheme.green
+                              : AppTheme.red,
+                        ),
+                        _chip('Avg Dmg', formatNumber(row.avgDamage.round())),
+                        _chip('Total Dmg', formatNumber(row.totalDamage)),
+                      ]),
                     ),
                     const SizedBox(height: AppTheme.sm),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          WinLossStat(
-                            wins: row.wins,
-                            losses: row.losses,
-                            showRecord: false,
-                            compact: true,
-                          ),
-                          const SizedBox(width: AppTheme.sm),
-                          _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
-                          const SizedBox(width: AppTheme.sm),
-                          _chip('Total Kills', formatNumber(row.totalKills)),
-                        ],
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppTheme.lg),
+                      child: _chipRow([
+                        WinLossStat(
+                          wins: row.wins,
+                          losses: row.losses,
+                          showRecord: false,
+                          compact: true,
+                          centered: true,
+                        ),
+                        _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
+                        _chip('Total Kills', formatNumber(row.totalKills)),
+                      ]),
                     ),
                   ],
                 ),
@@ -243,53 +251,28 @@ class _LegendCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, String value, {bool highlight = false}) =>
-      StatDisplay(label: label, value: value, highlight: highlight, compact: true);
-}
+  Widget _chip(
+    String label,
+    String value, {
+    bool highlight = false,
+    Color? valueColor,
+  }) => StatDisplay(
+    label: label,
+    value: value,
+    highlight: highlight,
+    valueColor: valueColor,
+    compact: true,
+    centered: true,
+  );
 
-/// Avg RP chip in the same neutral box as the other stat chips — only the
-/// value itself is coloured green/red (positive/negative), not the whole box.
-class _AvgRpChip extends StatelessWidget {
-  final double avgRp;
-  final bool compact;
-  const _AvgRpChip({required this.avgRp, this.compact = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = avgRp >= 0 ? AppTheme.green : AppTheme.red;
-    return Container(
-      padding: compact
-          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
-          : const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Avg RP',
-            style: TextStyle(
-              color: AppTheme.muted,
-              fontSize: compact ? 9 : 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            _signedAvg(avgRp),
-            style: TextStyle(
-              color: color,
-              fontSize: compact ? 12 : 15,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _chipRow(List<Widget> chips) => Row(
+    children: [
+      for (var i = 0; i < chips.length; i++) ...[
+        if (i > 0) const SizedBox(width: AppTheme.sm),
+        Expanded(child: chips[i]),
+      ],
+    ],
+  );
 }
 
 /// Up to 3 short lines (RP/Kills/Damage) under a legend/map card's chip row,
@@ -435,43 +418,54 @@ class _MapCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Equal thirds spread the stats across the card; the
+                    // padding on the right keeps clear of the chevron.
                     Row(
                       children: [
-                        _MapStat(
-                          label: 'Avg RP',
-                          value: _signedAvg(row.avgRpPerGame),
-                          color: rpColor,
+                        Expanded(
+                          child: _MapStat(
+                            label: 'Avg RP',
+                            value: _signedAvg(row.avgRpPerGame),
+                            color: rpColor,
+                          ),
                         ),
-                        const SizedBox(width: AppTheme.md),
-                        _MapStat(
-                          label: 'Avg Dmg',
-                          value: formatNumber(row.avgDamage.round()),
+                        Expanded(
+                          child: _MapStat(
+                            label: 'Avg Dmg',
+                            value: formatNumber(row.avgDamage.round()),
+                          ),
                         ),
-                        const SizedBox(width: AppTheme.md),
-                        _MapStat(
-                          label: 'Total Dmg',
-                          value: formatNumber(row.totalDamage),
+                        Expanded(
+                          child: _MapStat(
+                            label: 'Total Dmg',
+                            value: formatNumber(row.totalDamage),
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        WinLossStat(
-                          wins: row.wins,
-                          losses: row.losses,
-                          onImage: true,
-                          showRecord: false,
+                        Expanded(
+                          child: WinLossStat(
+                            wins: row.wins,
+                            losses: row.losses,
+                            onImage: true,
+                            showRecord: false,
+                            centered: true,
+                          ),
                         ),
-                        const SizedBox(width: AppTheme.md),
-                        _MapStat(
-                          label: 'Avg Kills',
-                          value: row.avgKills.toStringAsFixed(1),
+                        Expanded(
+                          child: _MapStat(
+                            label: 'Avg Kills',
+                            value: row.avgKills.toStringAsFixed(1),
+                          ),
                         ),
-                        const SizedBox(width: AppTheme.md),
-                        _MapStat(
-                          label: 'Total Kills',
-                          value: formatNumber(row.totalKills),
+                        Expanded(
+                          child: _MapStat(
+                            label: 'Total Kills',
+                            value: formatNumber(row.totalKills),
+                          ),
                         ),
                       ],
                     ),
@@ -503,7 +497,7 @@ class _MapStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(

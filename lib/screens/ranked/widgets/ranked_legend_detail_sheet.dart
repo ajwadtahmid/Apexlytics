@@ -6,7 +6,7 @@ import '../../../models/player_stats.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatDuration, formatSigned;
+    show formatNumber, formatDuration, formatSigned, formatSignedInt;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/storage/legend_stats_storage.dart';
 import '../../../utils/theme.dart';
@@ -154,54 +154,55 @@ class _LegendDetailSheet extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: AppTheme.md),
-            GroupedStatChips(
-              groups: [
-                [
-                  StatDisplay(
-                    label: 'Avg RP',
-                    value: formatSigned(breakdown.avgRpPerGame),
-                    valueColor: breakdown.avgRpPerGame >= 0
-                        ? AppTheme.green
-                        : AppTheme.red,
-                  ),
-                  StatDisplay(
-                    label: 'Total RP',
-                    value: formatSigned(breakdown.totalRp.toDouble()),
-                    valueColor: breakdown.totalRp >= 0
-                        ? AppTheme.green
-                        : AppTheme.red,
-                  ),
-                  WinLossStat(wins: breakdown.wins, losses: breakdown.losses),
-                  StatDisplay(label: 'Games', value: '${breakdown.games}'),
-                ],
-                [
-                  StatDisplay(
-                    label: 'Avg Kills',
-                    value: breakdown.avgKills.toStringAsFixed(1),
-                  ),
-                  StatDisplay(
-                    label: 'Total Kills',
-                    value: formatNumber(breakdown.totalKills),
-                  ),
-                  StatDisplay(
-                    label: 'Avg Dmg',
-                    value: formatNumber(breakdown.avgDamage.round()),
-                  ),
-                  StatDisplay(
-                    label: 'Total Dmg',
-                    value: formatNumber(breakdown.totalDamage),
-                  ),
-                ],
-                [
-                  StatDisplay(
-                    label: 'Avg Time',
-                    value: formatDuration(breakdown.avgLengthSecs.round()),
-                  ),
-                  StatDisplay(
-                    label: 'Total Time',
-                    value: formatDuration(breakdown.totalLengthSecs),
-                  ),
-                ],
+            Column(
+              children: [
+                StatGrid(
+                  rows: [
+                    [
+                      WinLossStat(
+                        wins: breakdown.wins,
+                        losses: breakdown.losses,
+                        centered: true,
+                      ),
+                      StatDisplay(
+                        label: 'Games',
+                        centered: true,
+                        value: formatNumber(breakdown.games),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: AppTheme.sm),
+                StatTable(
+                  rows: [
+                    StatTableRow(
+                      label: 'RP',
+                      avg: formatSigned(breakdown.avgRpPerGame),
+                      total: formatSignedInt(breakdown.totalRp),
+                      avgColor: breakdown.avgRpPerGame >= 0
+                          ? AppTheme.green
+                          : AppTheme.red,
+                      totalColor: breakdown.totalRp >= 0
+                          ? AppTheme.green
+                          : AppTheme.red,
+                    ),
+                    StatTableRow(
+                      label: 'Kills',
+                      avg: breakdown.avgKills.toStringAsFixed(1),
+                      total: formatNumber(breakdown.totalKills),
+                    ),
+                    StatTableRow(
+                      label: 'Damage',
+                      avg: formatNumber(breakdown.avgDamage.round()),
+                      total: formatNumber(breakdown.totalDamage),
+                    ),
+                    StatTableRow(
+                      label: 'Time',
+                      avg: formatDuration(breakdown.avgLengthSecs.round()),
+                      total: formatDuration(breakdown.totalLengthSecs),
+                    ),
+                  ],
+                ),
               ],
             ),
             FutureBuilder<List<RankedMatch>>(

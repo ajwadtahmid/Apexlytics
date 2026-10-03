@@ -2,7 +2,6 @@ import 'dart:async' show unawaited;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -47,14 +46,6 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
         ),
       );
       return;
-    }
-    // Copy only on the first tap so the unlock sequence doesn't spam toasts.
-    if (_taps == 1) {
-      Clipboard.setData(ClipboardData(text: version));
-      context.showMessage(
-        'Version copied',
-        duration: const Duration(seconds: 2),
-      );
     }
   }
 

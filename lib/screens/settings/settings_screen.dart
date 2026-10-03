@@ -109,12 +109,6 @@ class SettingsScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ActionRow(
-                  icon: Icons.explore_outlined,
-                  label: 'Take the tour',
-                  onTap: () => unawaited(openOnboarding(context)),
-                ),
-                const Divider(color: AppTheme.surface2, height: 24),
-                ActionRow(
                   icon: Icons.info_outline,
                   label: 'About Apexlytics',
                   onTap: () => Navigator.of(context).push(
@@ -122,6 +116,12 @@ class SettingsScreen extends ConsumerWidget {
                       builder: (_) => const AboutScreen(),
                     ),
                   ),
+                ),
+                const Divider(color: AppTheme.surface2, height: 24),
+                ActionRow(
+                  icon: Icons.explore_outlined,
+                  label: 'Take the tour',
+                  onTap: () => unawaited(openOnboarding(context)),
                 ),
               ],
             ),
