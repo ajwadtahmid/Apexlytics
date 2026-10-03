@@ -16,8 +16,9 @@ class LegendBaseline {
 }
 
 /// The average to compare [match] against: the same legend in the same mode
-/// (ranked vs pubs), from [pool], skipping outlier and excluded games and any
-/// game that didn't report the stat. [match] itself counts when it qualifies.
+/// (ranked vs pubs), from [pool], skipping excluded games (hand-excluded or
+/// auto-excluded for an implausible RP swing) and any game that didn't report
+/// the stat. [match] itself counts when it qualifies.
 /// Null when neither stat has enough games.
 LegendBaseline? legendBaselineFor(RankedMatch match, Iterable<RankedMatch> pool) {
   var killSum = 0;
@@ -26,7 +27,7 @@ LegendBaseline? legendBaselineFor(RankedMatch match, Iterable<RankedMatch> pool)
   var dmgN = 0;
   for (final m in pool) {
     if (m.legend != match.legend || m.isRanked != match.isRanked) continue;
-    if (m.excluded || m.isRankedOutlier) continue;
+    if (!m.countsTowardStats) continue;
     final k = m.kills;
     if (k != null) {
       killSum += k;

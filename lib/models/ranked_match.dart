@@ -12,14 +12,16 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../constants/tracker_constants.dart';
 
 /// RP swings at or beyond this magnitude are rank-reset artifacts
-/// (end-of-split/season placement drops), not real per-game RP. The match still
-/// counts as a played game; only its RP value is neutralized in RP aggregates.
-const int kRankedOutlierThreshold = 1000;
+/// (end-of-split/season placement drops), not real per-game RP. Such a match
+/// is excluded automatically from every stat (see
+/// [RankedMatch.isAutoExcluded]); correcting its RP to a plausible value
+/// brings it back.
+const int kImplausibleRpThreshold = 1000;
 
 /// Lower bound of a plausible single-game [RankedMatch.rpChange]. A drop
-/// beyond this — but short of [kRankedOutlierThreshold] — is still almost
+/// beyond this — but short of [kImplausibleRpThreshold] — is still almost
 /// certainly a bad upstream value rather than a real per-game loss, and is
-/// excluded from RP aggregates the same way (see [RankedMatch.isRankedOutlier]).
+/// excluded the same way (see [RankedMatch.isAutoExcluded]).
 const int kMinPlausibleRpChange = -250;
 
 /// Plausible per-game ceilings for [RankedMatch.kills] and
@@ -31,24 +33,20 @@ const int kMaxPlausibleDamage = 20000;
 
 /// Whether [rpChange] is a reset artifact or bad upstream value rather than
 /// RP the player actually moved. Plausible range is `[kMinPlausibleRpChange,
-/// kRankedOutlierThreshold)`, i.e. -250..=999.
+/// kImplausibleRpThreshold)`, i.e. -250..=999.
 ///
 /// **This is the only definition** - every aggregate, Dart or SQL, must reach
 /// the same verdict, or Split/Lifetime/Comparison views disagree on the same
 /// rows. Queries use [kSqlPlausibleRpChange], derived from the same constants.
 bool isImplausibleRpChange(int rpChange) =>
-    rpChange < kMinPlausibleRpChange || rpChange >= kRankedOutlierThreshold;
-
-/// [rpChange] with an implausible value neutralized to 0.
-int effectiveRpOf(int rpChange) =>
-    isImplausibleRpChange(rpChange) ? 0 : rpChange;
+    rpChange < kMinPlausibleRpChange || rpChange >= kImplausibleRpThreshold;
 
 /// SQL counterpart of `!`[isImplausibleRpChange], interpolated from the same
 /// constants rather than restated - a hand-copied version of this is how the
 /// SQL and Dart aggregates drifted before.
 const String kSqlPlausibleRpChange =
     'rp_change >= $kMinPlausibleRpChange AND '
-    'rp_change < $kRankedOutlierThreshold';
+    'rp_change < $kImplausibleRpThreshold';
 
 /// Stored columns a user may correct by hand, after which sync leaves them
 /// alone. Timestamps are excluded: they derive the row's primary key, its split
@@ -242,16 +240,21 @@ class RankedMatch {
 
   /// True when this match's [rpChange] is a rank-reset artifact, or otherwise
   /// outside the plausible per-game range, rather than a real per-game swing.
-  /// The game itself still counts (kills, damage, etc.).
-  bool get isRankedOutlier => isRanked && isImplausibleRpChange(rpChange);
+  /// Such a match is left out of every stat automatically, like a hand-
+  /// excluded one (see [countsTowardStats]); it is derived from the stored RP,
+  /// so correcting the RP to a plausible value includes it again.
+  bool get isAutoExcluded => isRanked && isImplausibleRpChange(rpChange);
 
-  /// [rpChange] with reset artifacts and hand-excluded matches zeroed out.
-  /// Used in every RP aggregate (Overview, Legends, Maps, Sessions, Time of
-  /// Day) and in the History tab's day/group RP rollups — the latter still
-  /// lists an excluded match's row (see [excluded]), just not its RP. The raw
-  /// [rpChange] is only shown on the match's own row and the RP progression
-  /// graph.
-  int get effectiveRpChange => (isRankedOutlier || excluded) ? 0 : rpChange;
+  /// Whether this match feeds the stats: neither hand-[excluded] nor
+  /// [isAutoExcluded]. Every aggregate — the Dart filters and the SQL
+  /// `_rankedScope` alike — keys off this one definition.
+  bool get countsTowardStats => !excluded && !isAutoExcluded;
+
+  /// [rpChange], or 0 when the match doesn't [countsTowardStats]. Used in the
+  /// History tab's day/group RP rollups, which still list an excluded match's
+  /// row but not its RP. The raw [rpChange] is only shown on the match's own
+  /// row and the RP progression graph.
+  int get effectiveRpChange => countsTowardStats ? rpChange : 0;
 
   /// Whether any column on this match has been hand-corrected.
   bool get isEdited => editedFields.isNotEmpty;

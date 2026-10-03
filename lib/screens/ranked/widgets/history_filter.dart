@@ -51,7 +51,7 @@ class HistoryFilter {
         if (m.isRanked) return false;
     }
     // Same definition as the day header and the win-rate chip: positive /
-    // negative effective RP, so outliers and excluded games are neither.
+    // negative effective RP, so excluded games are neither.
     switch (result) {
       case HistoryResult.any:
         break;

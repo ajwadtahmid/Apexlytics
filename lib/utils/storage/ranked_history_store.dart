@@ -175,9 +175,9 @@ class RankedHistoryStore {
         // real game. Nulled rather than zeroed (same "not reported" meaning
         // as an absent tracker) and flagged in edited_fields so a future sync
         // can't bring the bad value back. rp_change doesn't need row repair:
-        // RankedMatch.isRankedOutlier already excludes an implausible swing
-        // from every RP aggregate, computed fresh from the stored value with
-        // no migration needed.
+        // RankedMatch.isAutoExcluded leaves an implausible swing out of every
+        // aggregate, computed fresh from the stored value with no migration
+        // needed.
         if (oldVersion < 7) {
           await _repairImplausibleStats(db);
         }
@@ -558,7 +558,7 @@ class RankedHistoryStore {
       values,
       'rp_change',
       kMinPlausibleRpChange,
-      kRankedOutlierThreshold - 1,
+      kImplausibleRpThreshold - 1,
     );
     if (values.isEmpty && excluded == null) return true;
     final db = await _open();
@@ -679,7 +679,7 @@ class RankedHistoryStore {
     final rows = await db.rawQuery(
       'SELECT COALESCE(season_id, ?) AS sid, COUNT(*) AS c FROM $table '
       "WHERE uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0 "
-      'AND excluded = 0 GROUP BY sid',
+      'AND excluded = 0 AND $kSqlPlausibleRpChange GROUP BY sid',
       [kUnknownSeasonId, uid],
     );
     return {for (final r in rows) r['sid'] as String: (r['c'] as num).toInt()};
@@ -727,22 +727,27 @@ class RankedHistoryStore {
   // These compute the same figures as the Dart aggregates in `ranked_aggregates`
   // but as GROUP BY sums, so a 50k-match lifetime scope returns a handful of rows
   // instead of loading every match. Semantics mirror the Dart path exactly:
-  // ranked-only (`BATTLE_ROYALE` with an RP change), net RP and win/loss use the
-  // same outlier neutralisation ([kRankedOutlierThreshold]).
+  // ranked-only (`BATTLE_ROYALE` with an RP change) and limited to matches that
+  // count toward the stats — see [RankedMatch.countsTowardStats].
 
   /// Ranked-only WHERE scope for [uid] and an optional [seasonId] (null = every
   /// split — the lifetime scope). Folds Unknown/NULL together like [getBySeason].
+  /// Leaves out hand-excluded matches and ones with an implausible RP swing
+  /// ([kSqlPlausibleRpChange], the SQL form of [RankedMatch.isAutoExcluded]).
   ///
-  /// [includeExcluded] is only for reading the running RP.
+  /// [includeNonCounting] keeps those matches in; it is only for reading the
+  /// running RP, which they still moved.
   (String, List<Object?>) _rankedScope(
     String uid,
     String? seasonId, {
-    bool includeExcluded = false,
+    bool includeNonCounting = false,
   }) {
     final buf = StringBuffer(
       "uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0",
     );
-    if (!includeExcluded) buf.write(' AND excluded = 0');
+    if (!includeNonCounting) {
+      buf.write(' AND excluded = 0 AND $kSqlPlausibleRpChange');
+    }
     final args = <Object?>[uid];
     if (seasonId == kUnknownSeasonId) {
       buf.write(' AND (season_id = ? OR season_id IS NULL)');
@@ -754,9 +759,10 @@ class RankedHistoryStore {
     return (buf.toString(), args);
   }
 
-  // Shared aggregate columns. Uses [kSqlPlausibleRpChange] rather than a
-  // hand-copied threshold test - restating the rule here is what let these
-  // columns drift from `RankedMatch.effectiveRpChange` in the past.
+  // Shared aggregate columns. Always paired with [_rankedScope], which already
+  // keeps implausible RP swings out, so net RP and win/loss need no test of
+  // their own - restating the rule here is what let these columns drift from
+  // the Dart aggregates in the past.
   static const _aggCols =
       '''
       COUNT(*) AS games,
@@ -765,12 +771,9 @@ class RankedHistoryStore {
       COUNT(kills) AS kills_games,
       COUNT(damage) AS damage_games,
       COALESCE(SUM(length_secs), 0) AS length_secs,
-      COALESCE(SUM(CASE WHEN $kSqlPlausibleRpChange
-                        THEN rp_change ELSE 0 END), 0) AS net_rp,
-      COALESCE(SUM(CASE WHEN rp_change > 0 AND $kSqlPlausibleRpChange
-                        THEN 1 ELSE 0 END), 0) AS wins,
-      COALESCE(SUM(CASE WHEN rp_change < 0 AND $kSqlPlausibleRpChange
-                        THEN 1 ELSE 0 END), 0) AS losses''';
+      COALESCE(SUM(rp_change), 0) AS net_rp,
+      COALESCE(SUM(CASE WHEN rp_change > 0 THEN 1 ELSE 0 END), 0) AS wins,
+      COALESCE(SUM(CASE WHEN rp_change < 0 THEN 1 ELSE 0 END), 0) AS losses''';
 
   /// Window summary for [uid] across [seasonId] (null = lifetime), via SQL.
   Future<RankedSummary> summaryFor(String uid, {String? seasonId}) async {
@@ -782,11 +785,11 @@ class RankedHistoryStore {
     )).first;
     final total = RankedAgg()..addRow(agg);
     if (total.games == 0) return RankedSummary.empty;
-    // Newest ranked match supplies current RP / rank image, excluded or not.
+    // Newest ranked match supplies current RP / rank image, counting or not.
     final (latestWhere, latestArgs) = _rankedScope(
       uid,
       seasonId,
-      includeExcluded: true,
+      includeNonCounting: true,
     );
     final latest = await db.rawQuery(
       'SELECT cumulative_rp, rank_img FROM $table WHERE $latestWhere '
@@ -1028,9 +1031,9 @@ class RankedHistoryStore {
 
   /// The single best RP/kills/damage game for [uid] across [seasonId] (null =
   /// lifetime) — one `ORDER BY ... LIMIT 1` query per stat rather than
-  /// hydrating the whole history, so this stays cheap at Lifetime scope. RP
-  /// excludes reset outliers, matching [RankedMatch.effectiveRpChange]; a
-  /// null kills/damage game means no row in scope ever reported that tracker.
+  /// hydrating the whole history, so this stays cheap at Lifetime scope. Only
+  /// matches that count toward the stats are considered; a null kills/damage
+  /// game means no row in scope ever reported that tracker.
   ///
   /// Ties go to the most recently ended match (`end_ms DESC`), the same rule
   /// [personalRecords] applies — equal kill counts are common, and without
@@ -1052,10 +1055,7 @@ class RankedHistoryStore {
     }
 
     return (
-      bestRpGame: await top(
-        'rp_change',
-        extraWhere: ' AND $kSqlPlausibleRpChange',
-      ),
+      bestRpGame: await top('rp_change'),
       // `IS NOT NULL` is load-bearing: `LIMIT 1` on a non-empty table always
       // returns a row, so without it an untracked stat returned a real match
       // with a null value instead of no match at all.

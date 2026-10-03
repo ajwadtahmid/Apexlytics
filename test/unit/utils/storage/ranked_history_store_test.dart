@@ -1108,6 +1108,61 @@ void main() {
       },
     );
 
+    test('an auto-excluded game is left out of every SQL aggregate, but '
+        'still moves the running RP', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [
+        match('1', 1000, rp: 40),
+        match('1', 2000, rp: -20),
+        // Newest game: a reset artifact. Its cumulative RP is still the
+        // player's current RP.
+        match('1', 3000, rp: -1500),
+      ]);
+
+      final summary = await store.summaryFor('1');
+      expect(summary.games, 2);
+      expect(summary.netRp, 20);
+      expect(summary.decidedGames, summary.games);
+      expect(summary.totalKills, 6, reason: 'its kills are left out too');
+
+      expect(await store.matchesForLegend('1', 'Axle'), hasLength(2));
+      expect(
+        (await store.legendBreakdownsFor('1')).single.games,
+        2,
+      );
+      expect(
+        (await store.rankedSeasonCounts('1')).values.fold<int>(
+          0,
+          (a, b) => a + b,
+        ),
+        2,
+      );
+      expect((await store.personalBestGamesFor('1')).bestRpGame?.rpChange, 40);
+      expect((await store.mapBreakdownsFor('1')).single.games, 2);
+      final squad = await store.squadBreakdownFor('1');
+      expect(squad.partial.games + squad.full.games, 2);
+      final time = await store.timeBucketsFor('1');
+      expect(time.hours.fold<int>(0, (a, b) => a + b.games), 2);
+      expect(time.hours.fold<int>(0, (a, b) => a + b.netRp), 20);
+      expect(time.weekdays.fold<int>(0, (a, b) => a + b.netRp), 20);
+    });
+
+    test('correcting an auto-excluded game brings it back into the SQL '
+        'aggregates', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final reset = match('1', 1000, rp: -1500);
+      await store.upsertAll('1', [match('1', 2000, rp: 30), reset]);
+      expect((await store.summaryFor('1')).games, 1);
+
+      await store.editMatch(reset.dedupKey, {'rp_change': -60});
+      final summary = await store.summaryFor('1');
+      expect(summary.games, 2);
+      expect(summary.netRp, -30);
+      expect(summary.decidedGames, summary.games);
+    });
+
     test('the plausible RP range is -250 ..= 999 inclusive', () async {
       // Pins the boundary itself, so a future tuning of either constant has to
       // be a deliberate edit here rather than a silent behaviour change.
@@ -1115,9 +1170,6 @@ void main() {
       expect(isImplausibleRpChange(-250), isFalse);
       expect(isImplausibleRpChange(999), isFalse);
       expect(isImplausibleRpChange(1000), isTrue);
-      expect(effectiveRpOf(-400), 0);
-      expect(effectiveRpOf(-250), -250);
-      expect(effectiveRpOf(1000), 0);
     });
 
     void expectSummaryEq(RankedSummary a, RankedSummary b) {
@@ -1147,7 +1199,7 @@ void main() {
           mapKey: 'storm_point_rotation',
           rp: 60,
         ), // s1
-        match('1', 350, legend: 'Axle', rp: 1500), // s1, reset outlier
+        match('1', 350, legend: 'Axle', rp: 1500), // s1, reset game
         match(
           '1',
           250,
@@ -1236,7 +1288,7 @@ void main() {
 
       final axle = await store.matchesForLegend('1', 'Axle');
       expect(axle.every((m) => m.legend == 'Axle' && m.isRanked), true);
-      expect(axle.length, 4); // 3 real + 1 reset outlier, all ranked
+      expect(axle.length, 3); // the reset game is excluded automatically
 
       final storm = await store.matchesForMap('1', 'storm_point_rotation');
       expect(storm.every((m) => m.mapKey == 'storm_point_rotation'), true);

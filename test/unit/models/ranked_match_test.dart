@@ -322,4 +322,50 @@ void main() {
       expect(m.effectiveRpChange, 0);
     });
   });
+
+  group('RankedMatch.countsTowardStats', () {
+    RankedMatch withRp(int rp) =>
+        RankedMatch.fromJson({...brMatch(), 'BRScoreChange': rp});
+
+    test('a plausible ranked match counts', () {
+      final m = withRp(44);
+      expect(m.isAutoExcluded, isFalse);
+      expect(m.countsTowardStats, isTrue);
+      expect(m.effectiveRpChange, 44);
+    });
+
+    test('an implausible RP swing is excluded automatically', () {
+      for (final rp in [-251, -1500, 1000, 4000]) {
+        final m = withRp(rp);
+        expect(m.isAutoExcluded, isTrue, reason: 'rp=$rp');
+        expect(m.countsTowardStats, isFalse, reason: 'rp=$rp');
+        expect(m.effectiveRpChange, 0, reason: 'rp=$rp');
+      }
+    });
+
+    test('the plausible range edges still count', () {
+      expect(withRp(-250).countsTowardStats, isTrue);
+      expect(withRp(999).countsTowardStats, isTrue);
+    });
+
+    test('a hand-excluded match does not count either', () {
+      final m = withRp(44).withExcluded(true);
+      expect(m.isAutoExcluded, isFalse);
+      expect(m.countsTowardStats, isFalse);
+      expect(m.effectiveRpChange, 0);
+    });
+
+    test('correcting an auto-excluded RP brings the match back', () {
+      final fixed = withRp(-1500).withEdits({'rp_change': -60});
+      expect(fixed.isAutoExcluded, isFalse);
+      expect(fixed.countsTowardStats, isTrue);
+      expect(fixed.effectiveRpChange, -60);
+    });
+
+    test('a pubs game (0 RP) is not auto-excluded, just not ranked', () {
+      final m = withRp(0);
+      expect(m.isRanked, isFalse);
+      expect(m.isAutoExcluded, isFalse);
+    });
+  });
 }

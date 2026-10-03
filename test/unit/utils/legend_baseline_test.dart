@@ -48,7 +48,7 @@ void main() {
       expect(b.avgDamage, 300);
     });
 
-    test('ignores other legends, excluded and outlier games', () {
+    test('ignores other legends, excluded and auto-excluded games', () {
       final pool = [
         for (var i = 0; i < 5; i++) game(kills: 4),
         game(legend: 'Wraith', kills: 40),

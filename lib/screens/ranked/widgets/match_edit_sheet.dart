@@ -34,11 +34,11 @@ Future<RankedMatch?> showMatchEditSheet(
 
 /// Bounds enforced on a hand-entered RP change, derived from the model's
 /// plausibility constants rather than restated. The `- 1` matters:
-/// [isImplausibleRpChange] treats [kRankedOutlierThreshold] itself as a reset
+/// [isImplausibleRpChange] treats [kImplausibleRpThreshold] itself as a reset
 /// artifact, so a correction of exactly `1000` used to be accepted here and
-/// then silently neutralized to 0.
+/// then silently excluded from the stats.
 const int kMinEditableRpChange = kMinPlausibleRpChange;
-const int kMaxEditableRpChange = kRankedOutlierThreshold - 1;
+const int kMaxEditableRpChange = kImplausibleRpThreshold - 1;
 
 /// One editable numeric stat: its stored column, form label, and a
 /// field-specific range check for a human-readable error.
@@ -369,7 +369,8 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
               ],
               const Divider(color: AppTheme.surface2),
               _ExcludeRow(
-                value: _excluded,
+                value: _excluded || widget.match.isAutoExcluded,
+                autoExcluded: widget.match.isAutoExcluded,
                 onChanged: (v) => setState(() => _excluded = v),
               ),
               if (_error != null) ...[
@@ -549,29 +550,38 @@ class _MapRow extends StatelessWidget {
 
 /// Toggle for [RankedMatch.excluded]. Saved immediately alongside any other
 /// change via the normal Save button, not on flip, so it can still be
-/// cancelled.
+/// cancelled. Locked on for a match that is [RankedMatch.isAutoExcluded]: it
+/// stays out until its RP is corrected into the normal range.
 class _ExcludeRow extends StatelessWidget {
   final bool value;
+  final bool autoExcluded;
   final ValueChanged<bool> onChanged;
 
-  const _ExcludeRow({required this.value, required this.onChanged});
+  const _ExcludeRow({
+    required this.value,
+    required this.autoExcluded,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Exclude this match',
                 style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
               ),
               Text(
-                'Removed from every stat, breakdown, and trend. Still shows '
-                'here in History.',
-                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                autoExcluded
+                    ? 'Excluded automatically: its RP change is outside the '
+                          'normal range. Correct the RP above to include it.'
+                    : 'Removed from every stat, breakdown, and trend. Still '
+                          'shows here in History.',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
               ),
             ],
           ),
@@ -579,7 +589,8 @@ class _ExcludeRow extends StatelessWidget {
         Switch(
           value: value,
           activeThumbColor: AppTheme.accent,
-          onChanged: onChanged,
+          // Null disables the switch.
+          onChanged: autoExcluded ? null : onChanged,
         ),
       ],
     );

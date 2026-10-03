@@ -229,6 +229,47 @@ void main() {
     },
   );
 
+  testWidgets('the exclude toggle is locked for an auto-excluded match', (
+    tester,
+  ) async {
+    final m = match(rp: -1500);
+    expect(m.isAutoExcluded, isTrue);
+
+    await tester.pumpWidget(
+      app(
+        match: m,
+        store: _FakeStore([m]),
+        prefs: await emptyPrefs(),
+        onResult: (_) {},
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final toggle = tester.widget<Switch>(find.byType(Switch));
+    expect(toggle.value, isTrue);
+    expect(toggle.onChanged, isNull);
+    expect(find.textContaining('Excluded automatically'), findsOneWidget);
+  });
+
+  testWidgets('the exclude toggle works for a normal match', (tester) async {
+    final m = match();
+    await tester.pumpWidget(
+      app(
+        match: m,
+        store: _FakeStore([m]),
+        prefs: await emptyPrefs(),
+        onResult: (_) {},
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final toggle = tester.widget<Switch>(find.byType(Switch));
+    expect(toggle.value, isFalse);
+    expect(toggle.onChanged, isNotNull);
+  });
+
   testWidgets('an out-of-range RP change shows an error and does not save', (
     tester,
   ) async {
@@ -247,7 +288,7 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
-    // kMaxEditableRpChange is kRankedOutlierThreshold - 1 (999) - 5000 is
+    // kMaxEditableRpChange is kImplausibleRpThreshold - 1 (999) - 5000 is
     // well past it.
     await tester.enterText(find.byType(TextField).last, '5000');
     await tester.pump();

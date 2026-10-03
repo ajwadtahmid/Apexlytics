@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/ranked_match.dart';
+import '../../../utils/formatting/format.dart' show formatSignedInt;
 import '../../../utils/theme.dart';
 
 /// Pill for a mode or state flag on a match, in the muted/accent family.
@@ -47,18 +48,9 @@ class CasualTag extends StatelessWidget {
   );
 }
 
-/// Muted pill flagging a rank-reset RP swing. Matches the RP pill's shape but
-/// stays neutral, signalling the value is excluded from every RP aggregate.
-class OutlierTag extends StatelessWidget {
-  const OutlierTag({super.key});
-
-  @override
-  Widget build(BuildContext context) =>
-      const _TagPill(text: 'Outlier', color: AppTheme.muted);
-}
-
-/// Muted pill flagging a hand-excluded match — its row still shows (greyed)
-/// but every stat/breakdown/trend skips it.
+/// Muted pill flagging a match that is left out of the stats — hand-excluded,
+/// or excluded automatically for an implausible RP swing. Its row still shows
+/// (greyed) but every stat/breakdown/trend skips it.
 class ExcludedTag extends StatelessWidget {
   const ExcludedTag({super.key});
 
@@ -82,8 +74,8 @@ class EditedChip extends StatelessWidget {
   );
 }
 
-/// Muted "Edited" pill for a match row, in the family of [ExcludedTag] and
-/// [OutlierTag]; sized to sit beside the row's kills/damage line.
+/// Muted "Edited" pill for a match row, in the family of [ExcludedTag];
+/// sized to sit beside the row's kills/damage line.
 class EditedTag extends StatelessWidget {
   const EditedTag({super.key});
 
@@ -130,9 +122,8 @@ const _fieldLabels = {
   'damage': 'damage',
 };
 
-/// Every state flag on [m] (excluded, outlier, edited), most important first.
-/// An excluded match's outlier flag is dropped: it's already left out of
-/// everything, so the second note would only repeat that.
+/// Every state flag on [m] (excluded, edited), most important first. Both kinds
+/// of exclusion read as "Excluded"; the text says which it was.
 List<MatchTagNote> matchTagNotes(RankedMatch m) {
   return [
     if (m.excluded)
@@ -140,10 +131,11 @@ List<MatchTagNote> matchTagNotes(RankedMatch m) {
         'Excluded',
         'Left out of every stat, trend and total.',
       )
-    else if (m.isRankedOutlier)
-      const MatchTagNote(
-        'Outlier',
-        'Outlier Ranked Points: excluded from all calculation.',
+    else if (m.isAutoExcluded)
+      MatchTagNote(
+        'Excluded',
+        'Excluded automatically: its RP change (${formatSignedInt(m.rpChange)}) '
+            'is outside the normal range. Correct the RP to include it.',
       ),
     if (m.isEdited)
       MatchTagNote(

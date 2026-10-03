@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
+import 'package:apexlytics/screens/ranked/widgets/match_tags.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_history_items.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_history_list.dart';
 
@@ -63,6 +64,22 @@ void main() {
       expect(h.playSecs, 1800);
     });
 
+    test('skips auto-excluded games like hand-excluded ones', () {
+      final day = [
+        game(dayOffset: 0, slot: 3, rp: -1500, kills: 9, damage: 9000),
+        game(dayOffset: 0, slot: 2, rp: 20, kills: 2, damage: 400),
+        game(dayOffset: 0, slot: 1, rp: -10, kills: 1, damage: 200),
+      ];
+      final h = buildDayItems(day).whereType<DayHeaderItem>().single;
+      expect(h.games, 3, reason: 'still listed in the day');
+      expect(h.kills, 3);
+      expect(h.damage, 600);
+      expect(h.wins, 1);
+      expect(h.losses, 1);
+      expect(h.netRp, 10);
+      expect(h.avgRp, closeTo(5, 0.001));
+    });
+
     test('skips excluded games and has no average without ranked games', () {
       final day = [
         game(dayOffset: 0, slot: 2, rp: 20, kills: 5, excluded: true),
@@ -89,6 +106,18 @@ void main() {
       expect(f.apply(pool), hasLength(3));
     });
 
+    test('an auto-excluded game is neither a win nor a loss', () {
+      final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
+      expect(
+        const HistoryFilter(result: HistoryResult.wins).apply(reset),
+        isEmpty,
+      );
+      expect(
+        const HistoryFilter(result: HistoryResult.losses).apply(reset),
+        isEmpty,
+      );
+    });
+
     test('combines mode, result, legend and map', () {
       expect(
         const HistoryFilter(mode: HistoryMode.casual).apply(pool),
@@ -104,6 +133,28 @@ void main() {
       );
       expect(f.apply(pool), hasLength(1));
       expect(f.activeCount, 2);
+    });
+  });
+
+  group('exclusion tags', () {
+    test('an auto-excluded match is explained as such', () {
+      final notes = matchTagNotes(game(dayOffset: 0, slot: 1, rp: -1500));
+      expect(notes, hasLength(1));
+      expect(notes.single.label, 'Excluded');
+      expect(notes.single.text, contains('automatically'));
+      expect(notes.single.text, contains('-1,500'));
+    });
+
+    test('a hand-excluded match reads as left out of every stat', () {
+      final notes = matchTagNotes(
+        game(dayOffset: 0, slot: 1, excluded: true),
+      );
+      expect(notes.single.label, 'Excluded');
+      expect(notes.single.text, contains('every stat'));
+    });
+
+    test('a normal match has no exclusion note', () {
+      expect(matchTagNotes(game(dayOffset: 0, slot: 1)), isEmpty);
     });
   });
 
@@ -150,6 +201,40 @@ void main() {
       await tester.tap(find.text('Today'));
       await tester.pump();
       expect(find.text('Axle').evaluate().length, rowsBefore);
+    });
+
+    testWidgets('an auto-excluded match shows the Excluded tag', (tester) async {
+      final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(matches: reset, onRefresh: () async {}),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Excluded'), findsOneWidget);
+      expect(find.byType(ExcludedTag), findsOneWidget);
+    });
+
+    testWidgets('the detail sheet explains an auto-excluded match', (
+      tester,
+    ) async {
+      final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(matches: reset, onRefresh: () async {}),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Axle'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ExcludedTag), findsNWidgets(2)); // row + sheet
+      expect(find.textContaining('Excluded automatically'), findsOneWidget);
     });
 
     testWidgets('scrolls with pinned headers without errors', (tester) async {

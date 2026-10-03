@@ -26,8 +26,8 @@ class DayHeaderItem extends HistoryItem {
   final int losses;
   final double? avgRp;
 
-  /// Totals over the day's counted games (hand-excluded matches skipped, like
-  /// every other stat rollup). Kills/damage skip games that didn't report them.
+  /// Totals over the day's counted games (excluded matches skipped, like every
+  /// other stat rollup). Kills/damage skip games that didn't report them.
   final int kills;
   final int damage;
   final int playSecs;
@@ -122,7 +122,7 @@ List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
     final netRp = bucket.fold<int>(0, (a, m) => a + m.effectiveRpChange);
     final hasRanked = bucket.any((m) => m.isRanked);
     final day = bucket.first.endTime.toLocal();
-    final counted = bucket.where((m) => !m.excluded).toList();
+    final counted = bucket.where((m) => m.countsTowardStats).toList();
     final rankedGames = counted.where((m) => m.isRanked).length;
     items.add(
       DayHeaderItem(

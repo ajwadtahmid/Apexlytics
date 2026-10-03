@@ -546,11 +546,8 @@ class _MatchRow extends StatelessWidget {
     final tagRow = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (match.excluded) ...[
+        if (!match.countsTowardStats) ...[
           const ExcludedTag(),
-          const SizedBox(width: 4),
-        ] else if (match.isRankedOutlier) ...[
-          const OutlierTag(),
           const SizedBox(width: 4),
         ],
         if (ranked)
@@ -578,7 +575,7 @@ class _MatchRow extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       child: Opacity(
-        opacity: match.excluded ? 0.45 : 1,
+        opacity: match.countsTowardStats ? 1 : 0.45,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Row(

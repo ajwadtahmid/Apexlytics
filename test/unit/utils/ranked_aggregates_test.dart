@@ -146,7 +146,59 @@ void main() {
     expect(s.winRate, closeTo(0.75, 0.001));
   });
 
-  test('win/loss ignores RP-neutral and reset-outlier games', () {
+  test('rankedOnly drops pubs, hand-excluded and auto-excluded matches', () {
+    RankedMatch game(int rp, int offset) => match(
+      legend: 'Axle',
+      mapKey: 'olympus_rotation',
+      rpChange: rp,
+      cumulativeRp: 1000,
+      kills: 1,
+      damage: 100,
+      startOffset: offset,
+    );
+    final kept = game(25, 0);
+    final all = [
+      kept,
+      game(0, 60), // pubs: no RP movement
+      game(30, 120).withExcluded(true),
+      game(-300, 180), // just below the plausible range
+      game(1000, 240), // at the reset threshold
+      game(-250, 300), // lowest plausible loss still counts
+      game(999, 360), // highest plausible gain still counts
+    ];
+    final counted = rankedOnly(all);
+    expect(counted, hasLength(3));
+    expect(counted, contains(kept));
+    expect(counted.every((m) => m.countsTowardStats && m.isRanked), isTrue);
+  });
+
+  test('personalRecords ignores auto-excluded matches for best RP', () {
+    final ms = [
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 40,
+        cumulativeRp: 40,
+        kills: 1,
+        damage: 100,
+        startOffset: 0,
+      ),
+      match(
+        legend: 'Axle',
+        mapKey: 'olympus_rotation',
+        rpChange: 1500, // reset artifact: must not become "best game"
+        cumulativeRp: 1540,
+        kills: 9,
+        damage: 4000,
+        startOffset: 60,
+      ),
+    ];
+    final r = personalRecords(ms);
+    expect(r.bestRpGame?.rpChange, 40);
+    expect(r.bestKillsGame?.kills, 1, reason: 'its kills are left out too');
+  });
+
+  test('a reset game (implausible RP) is left out of games and win rate alike', () {
     final withResets = rankedOnly([
       match(
         legend: 'Axle',
@@ -166,8 +218,8 @@ void main() {
         damage: 100,
         startOffset: 60,
       ),
-      // End-of-split reset artifact: |rp| >= 1000 → effectiveRpChange 0, so it's
-      // neither a win nor a loss (a played game, but RP-neutral).
+      // End-of-split reset artifact: |rp| >= 1000 is excluded automatically, so
+      // rankedOnly drops it and it counts toward neither games nor win rate.
       match(
         legend: 'Axle',
         mapKey: 'olympus_rotation',
@@ -179,10 +231,10 @@ void main() {
       ),
     ]);
     final s = summarize(withResets);
-    expect(s.games, 3); // all three are ranked games
+    expect(s.games, 2);
     expect(s.wins, 1);
     expect(s.losses, 1);
-    expect(s.decidedGames, 2); // the reset game is excluded
+    expect(s.decidedGames, s.games, reason: 'every counted game is decided');
     expect(s.winRate, closeTo(0.5, 0.001));
   });
 
@@ -412,20 +464,14 @@ void main() {
     expect(buckets.every((b) => b.weekday >= 1 && b.weekday <= 7), true);
   });
 
-  test(
-    'dayOfWeekBucketsFromRankedRows neutralizes outliers like the match path',
-    () {
-      final rows = [(1782090000000, 40), (1782090000000, -2000)];
-      final buckets = dayOfWeekBucketsFromRankedRows(rows);
-      final totalRp = buckets.fold<int>(0, (a, b) => a + b.netRp);
-      expect(
-        totalRp,
-        40,
-        reason: 'the 2000 RP swing is a reset artifact, zeroed',
-      );
-      expect(buckets.fold<int>(0, (a, b) => a + b.games), 2);
-    },
-  );
+  test('dayOfWeekBucketsFromRankedRows sums the rows it is given', () {
+    // The store scopes its rows to matches that count toward the stats, so the
+    // helper takes them as they come rather than re-judging their RP.
+    final rows = [(1782090000000, 40), (1782090000000, -20)];
+    final buckets = dayOfWeekBucketsFromRankedRows(rows);
+    expect(buckets.fold<int>(0, (a, b) => a + b.netRp), 20);
+    expect(buckets.fold<int>(0, (a, b) => a + b.games), 2);
+  });
 
   group('RankProgress Apex Predator cutoff', () {
     // Master starts at 16000 RP with no upper bound on kRankLadder, so these
@@ -508,7 +554,7 @@ void main() {
       expect(r.currentStreakStart, ranked[1].startTime); // C, 3rd oldest
     });
 
-    test('an RP-neutral reset-outlier game does not break a win streak', () {
+    test('a reset game (implausible RP) does not break a win streak', () {
       final withReset = rankedOnly([
         match(
           legend: 'Axle',
@@ -519,7 +565,7 @@ void main() {
           damage: 100,
           startOffset: 0,
         ),
-        // |rpChange| >= 1000 → effectiveRpChange 0: neither a win nor a loss.
+        // |rpChange| >= 1000 → excluded automatically, so it's skipped.
         match(
           legend: 'Axle',
           mapKey: 'olympus_rotation',

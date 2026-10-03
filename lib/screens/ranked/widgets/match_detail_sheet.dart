@@ -187,7 +187,7 @@ class _Header extends StatelessWidget {
                     ),
                   ),
                   MatchModeChip(ranked: match.isRanked),
-                  if (match.excluded) const ExcludedTag(),
+                  if (!match.countsTowardStats) const ExcludedTag(),
                   if (match.isEdited) const EditedChip(),
                 ],
               ),
@@ -328,7 +328,7 @@ class _StatsBlock extends StatelessWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               'Compared with your ${match.legend} average '
-              '(${match.isRanked ? 'ranked' : 'casual'}, outliers and '
+              '(${match.isRanked ? 'ranked' : 'casual'}, '
               'excluded games left out)',
               style: const TextStyle(color: AppTheme.muted, fontSize: 11),
             ),

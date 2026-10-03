@@ -17,9 +17,11 @@ const Duration kSessionGap = Duration(hours: 2);
 /// single lucky game doesn't crown a legend.
 const int kMinGamesForInsight = 3;
 
-/// Returns only ranked (Battle Royale), non-excluded matches, newest first.
+/// Returns only ranked (Battle Royale) matches that count toward the stats —
+/// not hand-excluded, not auto-excluded for an implausible RP swing — newest
+/// first.
 List<RankedMatch> rankedOnly(List<RankedMatch> all) {
-  final list = all.where((m) => m.isRanked && !m.excluded).toList()
+  final list = all.where((m) => m.isRanked && m.countsTowardStats).toList()
     ..sort((a, b) => b.endTime.compareTo(a.endTime));
   return list;
 }
@@ -539,8 +541,8 @@ List<RankedSession> sessionize(
 /// Where the player sits on the rank ladder and how far the next division — and
 /// an optional user-set goal — are at their current RP-per-game pace.
 ///
-/// Pace uses the window's effective RP/game (reset outliers already neutralized),
-/// so end-of-split placement drops don't poison the estimate.
+/// Pace uses the window's RP/game with reset games already left out, so
+/// end-of-split placement drops don't poison the estimate.
 /// Sentinel [goalIndex] meaning "Apex Predator" — not a real [kRankLadder]
 /// index but stored the same way in SharedPreferences.
 const int kPredatorGoalIndex = 99;
@@ -665,18 +667,14 @@ List<HourBucket> timeOfDayBuckets(List<RankedMatch> matches) =>
 /// Buckets ranked rows given only their raw UTC start-millis and RP change —
 /// the counterpart to [timeOfDayBuckets] for the SQL projection, so the store
 /// can build the Lifetime time-of-day chart without hydrating a full
-/// [RankedMatch] per row. Callers must pass already-ranked rows; RP-reset
-/// outliers are neutralized here to match [RankedMatch.effectiveRpChange].
+/// [RankedMatch] per row. Callers must pass rows already scoped to matches that
+/// count toward the stats (the store's `_rankedScope`).
 List<HourBucket> timeOfDayBucketsFromRankedRows(
   Iterable<(int startMsUtc, int rpChange)> rows,
 ) => _bucketByHour(
   rows.map((r) {
     final (startMs, rp) = r;
-    final effectiveRp = effectiveRpOf(rp);
-    return (
-      DateTime.fromMillisecondsSinceEpoch(startMs, isUtc: true),
-      effectiveRp,
-    );
+    return (DateTime.fromMillisecondsSinceEpoch(startMs, isUtc: true), rp);
   }),
 );
 
@@ -722,18 +720,14 @@ List<WeekdayBucket> dayOfWeekBuckets(List<RankedMatch> matches) =>
 /// Buckets ranked rows given only their raw UTC start-millis and RP change —
 /// the counterpart to [dayOfWeekBuckets] for the SQL projection, so the store
 /// can build the Lifetime day-of-week chart without hydrating a full
-/// [RankedMatch] per row. Callers must pass already-ranked rows; RP-reset
-/// outliers are neutralized here to match [RankedMatch.effectiveRpChange].
+/// [RankedMatch] per row. Callers must pass rows already scoped to matches that
+/// count toward the stats (the store's `_rankedScope`).
 List<WeekdayBucket> dayOfWeekBucketsFromRankedRows(
   Iterable<(int startMsUtc, int rpChange)> rows,
 ) => _bucketByWeekday(
   rows.map((r) {
     final (startMs, rp) = r;
-    final effectiveRp = effectiveRpOf(rp);
-    return (
-      DateTime.fromMillisecondsSinceEpoch(startMs, isUtc: true),
-      effectiveRp,
-    );
+    return (DateTime.fromMillisecondsSinceEpoch(startMs, isUtc: true), rp);
   }),
 );
 
@@ -795,13 +789,15 @@ class PersonalRecords {
 /// Computes [PersonalRecords] from ranked matches (any order). A "win" is the
 /// same effective-RP-gain > 0 definition used everywhere else in this file
 /// (see [legendBreakdowns]'s wins/losses). Only a loss (effective RP < 0)
-/// breaks a streak — an RP-neutral game (0, e.g. a reset outlier) is neither
-/// a win nor a loss, so it leaves the streak exactly where it was.
+/// breaks a streak. Matches that don't count toward the stats (hand-excluded or
+/// auto-excluded for an implausible RP swing) are skipped, so they leave the
+/// streak exactly where it was.
 ///
 /// A tie on a best-game stat goes to the most recently ended match — the same
 /// `end_ms DESC` tie-break `RankedHistoryStore.personalBestGamesFor` uses, so
 /// the split view and Lifetime name the same match for the same record.
-PersonalRecords personalRecords(List<RankedMatch> matches) {
+PersonalRecords personalRecords(List<RankedMatch> all) {
+  final matches = all.where((m) => m.countsTowardStats).toList();
   if (matches.isEmpty) {
     return const PersonalRecords(currentWinStreak: 0, bestWinStreak: 0);
   }
@@ -819,14 +815,7 @@ PersonalRecords personalRecords(List<RankedMatch> matches) {
 
   RankedMatch? bestRp, bestKills, bestDamage;
   for (final m in matches) {
-    // A reset artifact or merged-diff entry ([RankedMatch.isRankedOutlier])
-    // is excluded from [bestRp], matching the SQL path's WHERE clause
-    // (`personalBestGamesFor`) — otherwise its effectiveRpChange (0) could
-    // beat an ordinary loss and win "best game". kills/damage aren't gated
-    // the same way: only the outlier's RP value is suspect.
-    if (!m.isRankedOutlier && beats(m, bestRp, (x) => x.effectiveRpChange)) {
-      bestRp = m;
-    }
+    if (beats(m, bestRp, (x) => x.rpChange)) bestRp = m;
     if (m.kills != null && beats(m, bestKills, (x) => x.kills!)) {
       bestKills = m;
     }
@@ -852,7 +841,6 @@ PersonalRecords personalRecords(List<RankedMatch> matches) {
       current = 0;
       runStart = null;
     }
-    // rp == 0: neutral game, streak (and its start) unchanged.
   }
 
   return PersonalRecords(
