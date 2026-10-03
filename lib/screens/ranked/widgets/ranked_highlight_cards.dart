@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
-import '../../../utils/formatting/format.dart' show formatNumber, formatSigned;
+import '../../../utils/formatting/format.dart'
+    show formatNumber, formatSignedInt;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -59,19 +60,19 @@ class RankedOverviewHighlights extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (best.isNotEmpty) ...[
-          const _SectionLabel('Best Legends'),
+          const _SectionLabel('Strongest Legends'),
           _legendList(best),
         ],
         if (worst.isNotEmpty) ...[
           const SizedBox(height: AppTheme.md),
-          const _SectionLabel('Worst Legends'),
+          const _SectionLabel('Weakest Legends'),
           _legendList(worst),
         ],
         if (mapsRanked.isNotEmpty) ...[
           const SizedBox(height: AppTheme.md),
           const _SectionLabel('Maps'),
           _MapHighlight(
-            label: 'Best Map',
+            label: 'Strongest Map',
             map: mapsRanked.first,
             matchesFor: mapMatchesFor,
             onRefresh: onRefresh,
@@ -79,7 +80,7 @@ class RankedOverviewHighlights extends StatelessWidget {
           if (mapsRanked.length > 1) ...[
             const SizedBox(height: AppTheme.sm),
             _MapHighlight(
-              label: 'Worst Map',
+              label: 'Weakest Map',
               map: mapsRanked.last,
               matchesFor: mapMatchesFor,
               onRefresh: onRefresh,
@@ -144,6 +145,7 @@ class _SectionLabel extends StatelessWidget {
 
 class _CompactLegend extends StatelessWidget {
   final LegendBreakdown breakdown;
+
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
 
@@ -153,97 +155,117 @@ class _CompactLegend extends StatelessWidget {
     required this.onRefresh,
   });
 
-  // Sized to the portrait's own aspect ratio so it shows uncropped.
-  static const _portraitHeight = 56.0;
+  // The portrait fills the card's full height, flush with its left edge, and
+  // its width follows its own aspect ratio so it shows uncropped.
+  static const _cardHeight = 80.0;
+
+  // RpPill: 13pt text plus 4dp padding top and bottom.
+  static const _pillHeight = 24.0;
 
   @override
   Widget build(BuildContext context) {
-    final positive = breakdown.avgRpPerGame >= 0;
-    final rpColor = positive ? AppTheme.green : AppTheme.red;
-    final portraitWidth = _portraitHeight * kLegendPortraitAspectRatio;
+    final portraitWidth = _cardHeight * kLegendPortraitAspectRatio;
 
     return SurfaceCard(
-      padding: const EdgeInsets.all(AppTheme.sm + 2),
+      padding: EdgeInsets.zero,
+      clip: Clip.antiAlias,
       onTap: () =>
           showLegendDetailSheet(context, breakdown, matchesFor, onRefresh),
-      // Needed for `stretch` below: this card has no fixed height to stretch against otherwise.
-      child: IntrinsicHeight(
+      child: SizedBox(
+        height: _cardHeight,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-              child: SizedBox(
-                width: portraitWidth,
-                height: _portraitHeight,
-                child: LegendAssetImage(
-                  imageKey: legendImageKey(breakdown.legend),
-                  displayName: breakdown.legend,
-                  fallbackFontSize: 20,
-                ),
+            SizedBox(
+              width: portraitWidth,
+              child: LegendAssetImage(
+                imageKey: legendImageKey(breakdown.legend),
+                displayName: breakdown.legend,
+                fallbackFontSize: 20,
               ),
             ),
             const SizedBox(width: AppTheme.sm),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    breakdown.legend,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+              // Same top and bottom inset as the pill column, so the name sits
+              // on the pill's line and the stats at the card's lower edge.
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // As tall as the pill, so the two centre on one line.
+                    SizedBox(
+                      height: _pillHeight,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          breakdown.legend,
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 3),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: [
-                        _HighlightStat(
-                          label: 'Avg RP',
-                          value: formatSigned(breakdown.avgRpPerGame),
-                          color: rpColor,
-                          compact: true,
-                        ),
-                        _HighlightStat(
-                          label: 'Kills',
-                          value: breakdown.avgKills.toStringAsFixed(1),
-                          compact: true,
-                        ),
-                        _HighlightStat(
-                          label: 'Dmg',
-                          value: formatNumber(breakdown.avgDamage.round()),
-                          compact: true,
-                        ),
-                        _HighlightStat(
-                          label: 'Games',
-                          value: '${breakdown.games}',
-                          compact: true,
-                        ),
-                      ],
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          _HighlightStat(
+                            label: 'Total RP',
+                            value: formatSignedInt(breakdown.totalRp),
+                            color: breakdown.totalRp >= 0
+                                ? AppTheme.green
+                                : AppTheme.red,
+                            compact: true,
+                          ),
+                          _HighlightStat(
+                            label: 'Avg Kills',
+                            value: breakdown.avgKills.toStringAsFixed(1),
+                            compact: true,
+                          ),
+                          _HighlightStat(
+                            label: 'Avg Dmg',
+                            value: formatNumber(breakdown.avgDamage.round()),
+                            compact: true,
+                          ),
+                          _HighlightStat(
+                            label: 'Games',
+                            value: '${breakdown.games}',
+                            compact: true,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: AppTheme.sm),
-            Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                RpPill(totalRp: breakdown.totalRp),
-                const Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: AppTheme.muted,
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                0,
+                AppTheme.sm,
+                AppTheme.sm + 2,
+                AppTheme.sm,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // The ranking metric, so the pill and the order agree.
+                  RpPill.perGame(avgRp: breakdown.avgRpPerGame),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: AppTheme.muted,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -298,11 +320,12 @@ class _MapHighlight extends StatelessWidget {
               right: AppTheme.sm,
               child: Icon(Icons.chevron_right, size: 20, color: Colors.white70),
             ),
-            // Total RP gained/lost, top-right (matches the Maps tab).
+            // Average RP per game, top-right — the ranking metric, as on the
+            // legend cards.
             Positioned(
               top: AppTheme.sm,
               right: AppTheme.sm,
-              child: MapRpBadge(totalRp: map.totalRp, color: accent),
+              child: MapRpBadge.perGame(avgRp: map.avgRpPerGame, color: accent),
             ),
             Padding(
               padding: const EdgeInsets.all(AppTheme.md),
@@ -336,18 +359,20 @@ class _MapHighlight extends StatelessWidget {
                     child: Row(
                       children: [
                         _HighlightStat(
-                          label: 'Avg RP',
-                          value: formatSigned(map.avgRpPerGame),
-                          color: accent,
+                          label: 'Total RP',
+                          value: formatSignedInt(map.totalRp),
+                          color: map.totalRp >= 0
+                              ? AppTheme.green
+                              : AppTheme.red,
                           onImage: true,
                         ),
                         _HighlightStat(
-                          label: 'Kills',
+                          label: 'Avg Kills',
                           value: map.avgKills.toStringAsFixed(1),
                           onImage: true,
                         ),
                         _HighlightStat(
-                          label: 'Dmg',
+                          label: 'Avg Dmg',
                           value: formatNumber(map.avgDamage.round()),
                           onImage: true,
                         ),
@@ -399,7 +424,7 @@ class _HighlightStat extends StatelessWidget {
             label.toUpperCase(),
             style: TextStyle(
               color: labelColor,
-              fontSize: compact ? 8 : 9,
+              fontSize: 9,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -408,7 +433,7 @@ class _HighlightStat extends StatelessWidget {
             value,
             style: TextStyle(
               color: valueColor,
-              fontSize: compact ? 11 : 14,
+              fontSize: compact ? 12 : 14,
               fontWeight: FontWeight.bold,
             ),
           ),

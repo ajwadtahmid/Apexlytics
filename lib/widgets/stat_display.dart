@@ -15,6 +15,11 @@ class StatDisplay extends StatelessWidget {
   /// Centres the label and value instead of left-aligning them.
   final bool centered;
 
+  /// Small line under the value (e.g. a comparison to an average), tinted by
+  /// [footnoteColor].
+  final String? footnote;
+  final Color? footnoteColor;
+
   const StatDisplay({
     super.key,
     required this.label,
@@ -23,6 +28,8 @@ class StatDisplay extends StatelessWidget {
     this.compact = false,
     this.valueColor,
     this.centered = false,
+    this.footnote,
+    this.footnoteColor,
   });
 
   @override
@@ -74,6 +81,17 @@ class StatDisplay extends StatelessWidget {
               ),
             ),
           ),
+          if (footnote != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              footnote!,
+              style: TextStyle(
+                color: footnoteColor ?? AppTheme.muted,
+                fontSize: compact ? 9 : 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );

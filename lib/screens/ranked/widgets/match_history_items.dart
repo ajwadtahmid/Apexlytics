@@ -19,12 +19,34 @@ class DayHeaderItem extends HistoryItem {
   final bool hasRanked;
   final int games;
   final bool isFirst;
+
+  /// Decided ranked games (effective RP above / below zero) and the average RP
+  /// over the ranked games played; null avg when the day had none.
+  final int wins;
+  final int losses;
+  final double? avgRp;
+
+  /// Totals over the day's counted games (hand-excluded matches skipped, like
+  /// every other stat rollup). Kills/damage skip games that didn't report them.
+  final int kills;
+  final int damage;
+  final int playSecs;
+
+  /// Average damage over the counted games that reported it; null when none did.
+  final double? avgDamage;
   DayHeaderItem({
     required this.day,
     required this.netRp,
     required this.hasRanked,
     required this.games,
     required this.isFirst,
+    this.wins = 0,
+    this.losses = 0,
+    this.avgRp,
+    this.kills = 0,
+    this.damage = 0,
+    this.playSecs = 0,
+    this.avgDamage,
   });
 }
 
@@ -100,6 +122,8 @@ List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
     final netRp = bucket.fold<int>(0, (a, m) => a + m.effectiveRpChange);
     final hasRanked = bucket.any((m) => m.isRanked);
     final day = bucket.first.endTime.toLocal();
+    final counted = bucket.where((m) => !m.excluded).toList();
+    final rankedGames = counted.where((m) => m.isRanked).length;
     items.add(
       DayHeaderItem(
         day: DateTime(day.year, day.month, day.day),
@@ -107,6 +131,16 @@ List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
         hasRanked: hasRanked,
         games: bucket.length,
         isFirst: identical(bucket, dayBuckets.first),
+        wins: counted.where((m) => m.effectiveRpChange > 0).length,
+        losses: counted.where((m) => m.effectiveRpChange < 0).length,
+        avgRp: rankedGames == 0 ? null : netRp / rankedGames,
+        kills: counted.fold<int>(0, (a, m) => a + (m.kills ?? 0)),
+        damage: counted.fold<int>(0, (a, m) => a + (m.damage ?? 0)),
+        playSecs: counted.fold<int>(0, (a, m) => a + m.lengthSecs),
+        avgDamage: counted.any((m) => m.damage != null)
+            ? counted.fold<int>(0, (a, m) => a + (m.damage ?? 0)) /
+                  counted.where((m) => m.damage != null).length
+            : null,
       ),
     );
     for (var i = 0; i < bucket.length; i++) {

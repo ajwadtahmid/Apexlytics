@@ -1,18 +1,23 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
+import '../../../providers/history_collapse_provider.dart';
 import '../../../utils/formatting/format.dart'
     show calendarDaysBetween, formatNumber, timeAgo, formatDuration;
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
-import 'match_edit_sheet.dart';
+import 'match_detail_sheet.dart';
 import 'match_history_items.dart';
+import 'match_tags.dart';
 
 /// Day-grouped match list with session breaks and tap-through detail sheets.
 /// Reused by the History tab (with a filter bar header) and the legend/map
 /// drill-down screens (no header, pre-filtered list).
+///
+/// Each day (or entity section) has a header that pins to the top while its
+/// matches scroll underneath; a day header also collapses its matches on tap.
 ///
 /// When [grouping] is supplied, matches are instead sectioned by that entity
 /// (e.g. map within a legend), each section headed by its games/net-RP/avg-RP
@@ -23,7 +28,7 @@ import 'match_history_items.dart';
 /// session boundary (see [buildDayItems]) — grouped mode shows everything,
 /// since it's already a filtered, RP-sorted subset rather than a long
 /// chronological feed.
-class MatchHistoryList extends StatefulWidget {
+class MatchHistoryList extends ConsumerStatefulWidget {
   final List<RankedMatch> matches; // newest first
   final Future<void> Function() onRefresh;
 
@@ -41,6 +46,15 @@ class MatchHistoryList extends StatefulWidget {
   /// copy so the edit is visible without leaving the page.
   final ValueChanged<RankedMatch>? onMatchUpdated;
 
+  /// Matches the detail sheet averages a legend over, to show how a game
+  /// compares. Null hides the comparison — right for a list that doesn't hold
+  /// the legend's whole history (e.g. one map's games).
+  final List<RankedMatch>? averagePool;
+
+  /// Names this list when remembering collapsed days, so the same date
+  /// collapsed here doesn't also collapse in another list.
+  final String collapseScope;
+
   const MatchHistoryList({
     super.key,
     required this.matches,
@@ -49,17 +63,26 @@ class MatchHistoryList extends StatefulWidget {
     this.emptyLabel = 'No games yet',
     this.grouping,
     this.onMatchUpdated,
+    this.averagePool,
+    this.collapseScope = 'history',
   });
 
   @override
-  State<MatchHistoryList> createState() => _MatchHistoryListState();
+  ConsumerState<MatchHistoryList> createState() => _MatchHistoryListState();
 }
 
 // Start auto-loading the next page once the user scrolls within this many
 // pixels of the bottom, so the next batch is ready before they hit the edge.
 const double _kLoadMoreThreshold = 400;
 
-class _MatchHistoryListState extends State<MatchHistoryList> {
+/// A pinned header and the rows beneath it.
+class _Section {
+  final HistoryItem header;
+  final List<HistoryItem> body = [];
+  _Section(this.header);
+}
+
+class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   int _pageLimit = kHistoryPageSize;
   final _scrollController = ScrollController();
 
@@ -103,12 +126,48 @@ class _MatchHistoryListState extends State<MatchHistoryList> {
     }
   }
 
+  /// Splits the flat item list into header-led sections. Both builders open
+  /// every section with its header, so nothing precedes the first one.
+  List<_Section> _sectionsOf(List<HistoryItem> items) {
+    final sections = <_Section>[];
+    for (final item in items) {
+      if (item is DayHeaderItem || item is GroupHeaderItem) {
+        sections.add(_Section(item));
+      } else if (sections.isNotEmpty) {
+        sections.last.body.add(item);
+      }
+    }
+    return sections;
+  }
+
+  Future<void> _openDetail(List<RankedMatch> ordered, RankedMatch m) async {
+    final i = ordered.indexWhere((x) => x.id == m.id);
+    if (i < 0) return;
+    final updated = await showMatchDetailSheet(
+      context,
+      matches: ordered,
+      index: i,
+      baselinePool: widget.averagePool,
+    );
+    if (updated != null) widget.onMatchUpdated?.call(updated);
+  }
+
   @override
   Widget build(BuildContext context) {
     final g = widget.grouping;
     final items = g == null
         ? buildDayItems(widget.matches, limit: _pageLimit)
         : buildGroupedItems(widget.matches, g);
+    final sections = _sectionsOf(items);
+    final collapsed = ref.watch(collapsedHistoryDaysProvider);
+    // What prev/next in the detail sheet walks: the full list in display
+    // order, not just the page currently rendered.
+    final ordered = g == null
+        ? widget.matches
+        : [
+            for (final item in items)
+              if (item is MatchItem) item.match,
+          ];
 
     return Column(
       children: [
@@ -135,29 +194,72 @@ class _MatchHistoryListState extends State<MatchHistoryList> {
                       ),
                     ],
                   )
-                : ListView.builder(
+                : CustomScrollView(
                     controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(
-                      AppTheme.md,
-                      AppTheme.sm,
-                      AppTheme.md,
-                      AppTheme.md,
-                    ),
-                    itemCount: items.length,
-                    itemBuilder: (_, i) => switch (items[i]) {
-                      final DayHeaderItem h => _DayHeader(item: h),
-                      final GroupHeaderItem h => _GroupHeader(item: h),
-                      final SessionBreakItem s => _SessionBreak(
-                        gapSecs: s.gapSecs,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppTheme.md,
+                          0,
+                          AppTheme.md,
+                          AppTheme.md,
+                        ),
+                        sliver: SliverMainAxisGroup(
+                          slivers: [
+                            for (final section in sections)
+                              _buildSection(section, collapsed, ordered),
+                          ],
+                        ),
                       ),
-                      final MatchItem m => _MatchRow(
-                        match: m.match,
-                        onMatchUpdated: widget.onMatchUpdated,
-                      ),
-                    },
+                    ],
                   ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildSection(
+    _Section section,
+    Set<String> collapsed,
+    List<RankedMatch> ordered,
+  ) {
+    final header = section.header;
+    final dayKey = header is DayHeaderItem
+        ? historyDayKey(widget.collapseScope, header.day)
+        : null;
+    final isCollapsed = dayKey != null && collapsed.contains(dayKey);
+
+    final Widget headerWidget = switch (header) {
+      final DayHeaderItem h => _DayHeader(
+        item: h,
+        collapsed: isCollapsed,
+        onToggle: () =>
+            ref.read(collapsedHistoryDaysProvider.notifier).toggle(dayKey!),
+      ),
+      final GroupHeaderItem h => _GroupHeader(item: h),
+      _ => const SizedBox.shrink(),
+    };
+
+    return SliverMainAxisGroup(
+      slivers: [
+        // Opaque so rows scrolling underneath don't show through the pin.
+        PinnedHeaderSliver(
+          child: ColoredBox(color: AppTheme.bg, child: headerWidget),
+        ),
+        if (!isCollapsed)
+          SliverList.builder(
+            itemCount: section.body.length,
+            itemBuilder: (_, i) => switch (section.body[i]) {
+              final SessionBreakItem s => _SessionBreak(gapSecs: s.gapSecs),
+              final MatchItem m => _MatchRow(
+                match: m.match,
+                onTap: () => _openDetail(ordered, m.match),
+              ),
+              _ => const SizedBox.shrink(),
+            },
+          ),
       ],
     );
   }
@@ -174,14 +276,28 @@ String _dayLabel(DateTime day) {
   return _dayFmt.format(day);
 }
 
+/// Day title row with the net RP and a collapse chevron, over a one-line
+/// summary of the day: record, average RP, kills, damage and time played.
+/// Tapping anywhere on it collapses or expands the day's matches.
 class _DayHeader extends StatelessWidget {
   final DayHeaderItem item;
-  const _DayHeader({required this.item});
+  final bool collapsed;
+  final VoidCallback onToggle;
+  const _DayHeader({
+    required this.item,
+    required this.collapsed,
+    required this.onToggle,
+  });
+
+  static const _muted = TextStyle(color: AppTheme.muted, fontSize: 11);
 
   @override
   Widget build(BuildContext context) {
     final positive = item.netRp >= 0;
     final color = positive ? AppTheme.green : AppTheme.red;
+    final avg = item.avgRp;
+    const sep = TextSpan(text: '  ·  ');
+
     return Column(
       children: [
         // Separate one day's session from the previous one.
@@ -190,50 +306,115 @@ class _DayHeader extends StatelessWidget {
             padding: EdgeInsets.only(top: AppTheme.sm),
             child: Divider(color: AppTheme.surface2, height: 1, thickness: 1),
           ),
-        Padding(
-          padding: EdgeInsets.only(
-            top: item.isFirst ? AppTheme.sm : AppTheme.md,
-            bottom: 6,
-          ),
-          child: Row(
-            children: [
-              Text(
-                _dayLabel(item.day),
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
+        InkWell(
+          onTap: onToggle,
+          child: Padding(
+            padding: EdgeInsets.only(
+              top: item.isFirst ? AppTheme.sm : AppTheme.md,
+              bottom: 6,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    AnimatedRotation(
+                      turns: collapsed ? -0.25 : 0,
+                      duration: const Duration(milliseconds: 150),
+                      child: const Icon(
+                        Icons.expand_more,
+                        size: 18,
+                        color: AppTheme.muted,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      _dayLabel(item.day),
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: AppTheme.sm),
+                    Text(
+                      '${item.games} games',
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    // Plain "Net ±RP" text (no pill) so the day total reads
+                    // differently from the per-match RP pills below it.
+                    if (item.hasRanked) ...[
+                      const Text(
+                        'NET',
+                        style: TextStyle(
+                          color: AppTheme.muted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        '${positive ? '+' : ''}${formatNumber(item.netRp)} RP',
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-              const SizedBox(width: AppTheme.sm),
-              Text(
-                '${item.games} games',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-              ),
-              const Spacer(),
-              // Plain "Net ±RP" text (no pill) so the day total reads
-              // differently from the per-match RP pills below it.
-              if (item.hasRanked) ...[
-                const Text(
-                  'NET',
-                  style: TextStyle(
-                    color: AppTheme.muted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  '${positive ? '+' : ''}${formatNumber(item.netRp)} RP',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 3),
+                // Centred under the title row; shrinks a little on a narrow
+                // screen rather than wrapping.
+                SizedBox(
+                  width: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text.rich(
+                      TextSpan(
+                        style: _muted,
+                        children: [
+                          if (item.hasRanked) ...[
+                            TextSpan(
+                              text: '${item.wins}W',
+                              style: const TextStyle(color: AppTheme.green),
+                            ),
+                            const TextSpan(text: '–'),
+                            TextSpan(
+                              text: '${item.losses}L',
+                              style: const TextStyle(color: AppTheme.red),
+                            ),
+                            if (avg != null)
+                              TextSpan(
+                                text:
+                                    '  ·  ${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(1)} avg RP',
+                              ),
+                            sep,
+                          ],
+                          TextSpan(text: '${formatNumber(item.kills)} K'),
+                          sep,
+                          TextSpan(text: '${formatNumber(item.damage)} dmg'),
+                          if (item.avgDamage != null)
+                            TextSpan(
+                              text:
+                                  '  ·  ${formatNumber(item.avgDamage!.round())} avg dmg',
+                            ),
+                          sep,
+                          TextSpan(text: formatDuration(item.playSecs)),
+                        ],
+                      ),
+                      maxLines: 1,
+                    ),
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -342,22 +523,59 @@ class _SessionBreak extends StatelessWidget {
 
 // ── Match row ───────────────────────────────────────────────────────────────
 
-String _legendImageKey(String legend) =>
-    legend.toLowerCase().replaceAll(' ', '_');
-
 class _MatchRow extends StatelessWidget {
   final RankedMatch match;
-  final ValueChanged<RankedMatch>? onMatchUpdated;
-  const _MatchRow({required this.match, this.onMatchUpdated});
+  final VoidCallback onTap;
+  const _MatchRow({required this.match, required this.onTap});
+
+  static Widget _tagged(List<MatchTagNote> notes, Widget child) {
+    if (notes.isEmpty) return child;
+    return Tooltip(
+      message: [for (final n in notes) '${n.label}: ${n.text}'].join('\n'),
+      child: child,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final ranked = match.isRanked;
     final up = match.rpChange >= 0;
     final rpColor = up ? AppTheme.green : AppTheme.red;
+    final notes = matchTagNotes(match);
+
+    final tagRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (match.excluded) ...[
+          const ExcludedTag(),
+          const SizedBox(width: 4),
+        ] else if (match.isRankedOutlier) ...[
+          const OutlierTag(),
+          const SizedBox(width: 4),
+        ],
+        if (ranked)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: rpColor.withAlpha(30),
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+            ),
+            child: Text(
+              '${up ? '+' : ''}${match.rpChange} RP',
+              style: TextStyle(
+                color: rpColor,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          )
+        else
+          const CasualTag(),
+      ],
+    );
 
     return InkWell(
-      onTap: () => _showDetail(context, match),
+      onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       child: Opacity(
         opacity: match.excluded ? 0.45 : 1,
@@ -371,7 +589,7 @@ class _MatchRow extends StatelessWidget {
                   width: 36,
                   height: 36,
                   child: LegendAssetImage(
-                    imageKey: _legendImageKey(match.legend),
+                    imageKey: legendImageKey(match.legend),
                     displayName: match.legend,
                     fallbackFontSize: 16,
                   ),
@@ -400,368 +618,39 @@ class _MatchRow extends StatelessWidget {
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (ranked)
+              // Long-press explains the flags; the row's tap still opens the
+              // sheet, which spells them out too.
+              _tagged(
+                notes,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    tagRow,
+                    const SizedBox(height: 2),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (match.excluded) ...[
-                          const _ExcludedTag(),
-                          const SizedBox(width: 4),
-                        ] else if (match.isRankedOutlier) ...[
-                          const _OutlierTag(),
-                          const SizedBox(width: 4),
+                        if (match.isEdited) ...[
+                          const EditedTag(),
+                          const SizedBox(width: 6),
                         ],
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: rpColor.withAlpha(30),
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.radiusSm,
-                            ),
-                          ),
-                          child: Text(
-                            '${up ? '+' : ''}${match.rpChange} RP',
-                            style: TextStyle(
-                              color: rpColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        Text(
+                          // An em dash marks a stat upstream never reported,
+                          // which is not the same as a scoreless game.
+                          '${match.kills ?? '—'} K · '
+                          '${match.damage == null ? '—' : formatNumber(match.damage!)} dmg',
+                          style: const TextStyle(
+                            color: AppTheme.muted,
+                            fontSize: 11,
                           ),
                         ),
                       ],
-                    )
-                  else
-                    const _CasualTag(),
-                  const SizedBox(height: 2),
-                  Text(
-                    // An em dash marks a stat upstream never reported, which is
-                    // not the same as a scoreless game.
-                    '${match.kills ?? '—'} K · '
-                    '${match.damage == null ? '—' : formatNumber(match.damage!)} dmg',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 11),
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showDetail(BuildContext context, RankedMatch m) async {
-    final updated = await showModalBottomSheet<RankedMatch>(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppTheme.radiusLg),
-        ),
-      ),
-      builder: (_) => _MatchDetailSheet(match: m),
-    );
-    if (updated != null) onMatchUpdated?.call(updated);
-  }
-}
-
-class _CasualTag extends StatelessWidget {
-  const _CasualTag();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: const Text(
-        'Casual',
-        style: TextStyle(
-          color: AppTheme.muted,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-/// Muted pill flagging a rank-reset RP swing. Matches the RP pill's shape but
-/// stays neutral, signalling the value is excluded from every RP aggregate.
-class _OutlierTag extends StatelessWidget {
-  const _OutlierTag();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: const Text(
-        'Outlier',
-        style: TextStyle(
-          color: AppTheme.muted,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
-/// Muted pill flagging a hand-excluded match — its row still shows (greyed,
-/// via [_MatchRow]'s [Opacity]) but every stat/breakdown/trend skips it.
-class _ExcludedTag extends StatelessWidget {
-  const _ExcludedTag();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: const Text(
-        'Excluded',
-        style: TextStyle(
-          color: AppTheme.muted,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
-/// Marks a match carrying at least one hand-corrected stat.
-class _EditedChip extends StatelessWidget {
-  const _EditedChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppTheme.accent.withAlpha(30),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: const Text(
-        'Edited',
-        style: TextStyle(
-          color: AppTheme.accent,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Detail sheet ────────────────────────────────────────────────────────────
-
-class _MatchDetailSheet extends StatelessWidget {
-  final RankedMatch match;
-  const _MatchDetailSheet({required this.match});
-
-  static final _fmt = DateFormat('MMM d, yyyy · h:mm a');
-
-  @override
-  Widget build(BuildContext context) {
-    final ranked = match.isRanked;
-    final up = match.rpChange >= 0;
-    final rpColor = up ? AppTheme.green : AppTheme.red;
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppTheme.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  match.legend,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: AppTheme.sm),
-                _ModeChip(ranked: ranked),
-                if (match.excluded) ...[
-                  const SizedBox(width: AppTheme.xs),
-                  const _ExcludedTag(),
-                ],
-                if (match.isEdited) ...[
-                  const SizedBox(width: AppTheme.xs),
-                  const _EditedChip(),
-                ],
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  color: AppTheme.muted,
-                  tooltip: 'Correct this match',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () async {
-                    // Close this sheet too on a real save, passing the
-                    // updated match back up so the caller (row/list) can show
-                    // it immediately instead of the stale copy this sheet was
-                    // opened with.
-                    final updated = await showMatchEditSheet(context, match);
-                    if (updated != null && context.mounted) {
-                      Navigator.pop(context, updated);
-                    }
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: AppTheme.sm),
-            // RP block (ranked only) with tier badge.
-            if (ranked) ...[
-              Row(
-                children: [
-                  if (match.rankImg.isNotEmpty) ...[
-                    CachedNetworkImage(
-                      imageUrl: match.rankImg,
-                      width: 34,
-                      height: 34,
-                      fit: BoxFit.contain,
-                      memCacheWidth: (34 * MediaQuery.devicePixelRatioOf(context))
-                          .ceil(),
-                      errorWidget: (_, _, _) => const SizedBox(width: 34),
-                    ),
-                    const SizedBox(width: AppTheme.sm),
-                  ],
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Ranked Points',
-                        style: TextStyle(color: AppTheme.muted, fontSize: 11),
-                      ),
-                      Text(
-                        formatNumber(match.cumulativeRp),
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${up ? '+' : ''}${match.rpChange} RP',
-                    style: TextStyle(
-                      color: rpColor,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              if (match.isRankedOutlier) ...[
-                const SizedBox(height: 6),
-                const Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 13, color: AppTheme.muted),
-                    SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        'Outlier Ranked Points: excluded from all calculation',
-                        style: TextStyle(color: AppTheme.muted, fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: AppTheme.sm),
-            ],
-            // Meta line.
-            Text(
-              '${battleRoyaleMapName(match.mapKey)} · ${_fmt.format(match.endTime.toLocal())}',
-              style: const TextStyle(color: AppTheme.muted, fontSize: 13),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '${(match.lengthSecs / 60).round()}m · ${match.isPartyFull ? 'Full squad' : 'Partial squad'}',
-              style: const TextStyle(color: AppTheme.muted, fontSize: 13),
-            ),
-            const SizedBox(height: AppTheme.md),
-            const Divider(color: AppTheme.surface2, height: 1),
-            const SizedBox(height: AppTheme.md),
-            if (match.trackers.isEmpty)
-              const Text(
-                'No tracker data for this match',
-                style: TextStyle(color: AppTheme.muted, fontSize: 13),
-              )
-            else
-              ...match.trackers.map(
-                (t) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          t.name,
-                          style: const TextStyle(
-                            color: AppTheme.muted,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppTheme.sm),
-                      Text(
-                        formatNumber(t.value.toInt()),
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ModeChip extends StatelessWidget {
-  final bool ranked;
-  const _ModeChip({required this.ranked});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = ranked ? AppTheme.accent : AppTheme.muted;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: Text(
-        ranked ? 'Ranked' : 'Casual',
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

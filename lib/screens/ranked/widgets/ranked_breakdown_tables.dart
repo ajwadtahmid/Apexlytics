@@ -11,6 +11,7 @@ import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
 import '../../../widgets/win_loss_stat.dart';
 import 'map_rp_badge.dart';
+import 'rank_badge.dart';
 import 'ranked_legend_detail_sheet.dart';
 import 'ranked_map_detail_sheet.dart';
 
@@ -35,34 +36,6 @@ _Sort _nextSort(_Sort s) => switch (s) {
 };
 
 String _signedAvg(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}';
-
-/// Leaderboard rank chip shown beside a legend/map name. [onImage] uses a dark
-/// scrim + white text so it stays legible over map artwork.
-class _RankBadge extends StatelessWidget {
-  final int rank;
-  final bool onImage;
-  const _RankBadge({required this.rank, this.onImage = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: onImage ? Colors.black.withAlpha(140) : AppTheme.surface2,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      ),
-      child: Text(
-        '#$rank',
-        style: const TextStyle(
-          color: AppTheme.accent,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
 
 // ── Legends tab ─────────────────────────────────────────────────────────────
 
@@ -175,7 +148,7 @@ class _LegendCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        _RankBadge(rank: rank),
+                        RankBadge(rank: rank),
                         const SizedBox(width: AppTheme.sm),
                         // Scales down a touch on a narrow card rather than
                         // truncating the legend name.
@@ -396,7 +369,7 @@ class _MapCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _RankBadge(rank: rank, onImage: true),
+                  RankBadge(rank: rank, onImage: true),
                   const SizedBox(width: AppTheme.sm),
                   Expanded(
                     child: Text(

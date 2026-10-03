@@ -87,6 +87,11 @@ class _RankedEntityHistoryScreenState extends State<RankedEntityHistoryScreen> {
           emptyLabel: 'No ranked games here',
           grouping: _grouped ? widget.grouping : null,
           onMatchUpdated: _onMatchUpdated,
+          collapseScope: widget.title,
+          // A legend's page holds all its games, so the comparison has the
+          // history it needs; a map's page only has one map's worth of each
+          // legend, which would skew the average.
+          averagePool: widget.groupLabel == 'map' ? _matches : null,
           header: _SortToggle(
             grouped: _grouped,
             groupLabel: widget.groupLabel,

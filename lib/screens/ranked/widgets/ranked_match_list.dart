@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/theme.dart';
+import 'history_filter.dart';
 import 'match_history_items.dart';
 import 'match_history_list.dart';
 
@@ -22,18 +23,12 @@ class RankedMatchList extends StatefulWidget {
   State<RankedMatchList> createState() => _RankedMatchListState();
 }
 
-enum _Filter { all, ranked, casual }
-
 class _RankedMatchListState extends State<RankedMatchList> {
-  // Default to Ranked — it's the headline view; All/Casual are one tap away.
-  _Filter _filter = _Filter.ranked;
+  // Defaults to Ranked — it's the headline view; the rest is in the sheet.
+  HistoryFilter _filter = const HistoryFilter();
   _HistorySort _sort = _HistorySort.date;
 
-  List<RankedMatch> get _visible => switch (_filter) {
-    _Filter.all => widget.matches,
-    _Filter.ranked => widget.matches.where((m) => m.isRanked).toList(),
-    _Filter.casual => widget.matches.where((m) => !m.isRanked).toList(),
-  };
+  List<RankedMatch> get _visible => _filter.apply(widget.matches);
 
   MatchGrouping? get _grouping => switch (_sort) {
     _HistorySort.date => null,
@@ -54,10 +49,18 @@ class _RankedMatchListState extends State<RankedMatchList> {
       onRefresh: widget.onRefresh,
       emptyLabel: 'No games in this filter',
       grouping: _grouping,
+      // The whole period, not the filtered view: a legend's average shouldn't
+      // shrink because the list is filtered to one map.
+      averagePool: widget.matches,
       header: _HistoryControls(
         filter: _filter,
         sort: _sort,
-        onFilterTap: () => setState(() => _filter = _nextFilter(_filter)),
+        onFilterTap: () => showHistoryFilterSheet(
+          context,
+          filter: _filter,
+          pool: widget.matches,
+          onChanged: (f) => setState(() => _filter = f),
+        ),
         onSortTap: () => setState(() => _sort = _nextSort(_sort)),
       ),
     );
@@ -65,25 +68,6 @@ class _RankedMatchListState extends State<RankedMatchList> {
 }
 
 // ── Filter bar ──────────────────────────────────────────────────────────────
-
-const _filterLabels = {
-  _Filter.all: 'All',
-  _Filter.ranked: 'Ranked',
-  _Filter.casual: 'Casual',
-};
-
-const _filterIcons = {
-  _Filter.all: Icons.filter_list,
-  _Filter.ranked: Icons.military_tech,
-  _Filter.casual: Icons.sports_esports,
-};
-
-// Cycle starts on Ranked (the default), then All, then Casual.
-_Filter _nextFilter(_Filter f) => switch (f) {
-  _Filter.ranked => _Filter.all,
-  _Filter.all => _Filter.casual,
-  _Filter.casual => _Filter.ranked,
-};
 
 enum _HistorySort { date, legend, map }
 
@@ -108,7 +92,7 @@ _HistorySort _nextSort(_HistorySort s) => switch (s) {
 /// History control strip: filter pill pinned left, sort pill pinned right.
 /// Both cycle on tap, mirroring the Legends/Maps sort control's pill styling.
 class _HistoryControls extends StatelessWidget {
-  final _Filter filter;
+  final HistoryFilter filter;
   final _HistorySort sort;
   final VoidCallback onFilterTap;
   final VoidCallback onSortTap;
@@ -135,9 +119,10 @@ class _HistoryControls extends StatelessWidget {
       child: Row(
         children: [
           _ControlPill(
-            prefix: 'Filter:',
-            icon: _filterIcons[filter]!,
-            label: _filterLabels[filter]!,
+            icon: Icons.tune,
+            label: filter.activeCount == 0
+                ? 'Filter'
+                : 'Filter · ${filter.activeCount}',
             onTap: onFilterTap,
           ),
           const Spacer(),
@@ -155,13 +140,13 @@ class _HistoryControls extends StatelessWidget {
 
 /// A labelled, cycling pill: `prefix [icon value]`.
 class _ControlPill extends StatelessWidget {
-  final String prefix;
+  final String? prefix;
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
   const _ControlPill({
-    required this.prefix,
+    this.prefix,
     required this.icon,
     required this.label,
     required this.onTap,
@@ -172,11 +157,13 @@ class _ControlPill extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          prefix,
-          style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-        ),
-        const SizedBox(width: 4),
+        if (prefix != null) ...[
+          Text(
+            prefix!,
+            style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+          ),
+          const SizedBox(width: 4),
+        ],
         GestureDetector(
           onTap: onTap,
           child: Container(
