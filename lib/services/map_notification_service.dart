@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/map_rotation.dart';
 import '../providers/map_provider.dart';
@@ -48,6 +49,11 @@ class MapNotificationService {
               }
             })
             .catchError((Object e) {
+              // 2003 = permission revoked mid-flight; expected user state.
+              if (e is PlatformException && e.code == 'Error 2003') {
+                log.w('Notification scheduling not authorized', error: e);
+                return;
+              }
               log.e('Notification scheduling failed', error: e);
             }),
       );

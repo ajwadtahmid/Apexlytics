@@ -321,6 +321,13 @@ class NotificationService {
 
     await _cancelAllInternal();
 
+    // OS permission revoked after alerts were enabled: scheduling would only
+    // be rejected (iOS UNErrorDomain 2003). The Settings banner covers it.
+    if (!await notificationsEnabled()) {
+      log.i('Notification scheduling skipped: permission not granted');
+      return;
+    }
+
     var budget = _maxTotalScheduled;
 
     if (notifyRanked && rankedMinutesBefore > 0) {
