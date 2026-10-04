@@ -280,7 +280,7 @@ class _SectionSliver extends ConsumerWidget {
         );
 
     final Widget headerWidget = switch (header) {
-      final DayHeaderItem h => _DayHeader(
+      final DayHeaderItem h => _DayTitle(
         item: h,
         collapsed: isCollapsed,
         onToggle: () =>
@@ -296,6 +296,11 @@ class _SectionSliver extends ConsumerWidget {
         PinnedHeaderSliver(
           child: ColoredBox(color: AppTheme.bg, child: headerWidget),
         ),
+        // The labelled stats scroll with the day rather than pinning.
+        if (header is DayHeaderItem)
+          SliverToBoxAdapter(
+            child: _DayStats(item: header, collapsed: isCollapsed),
+          ),
         if (!isCollapsed)
           SliverList.builder(
             itemCount: section.body.length,
@@ -324,27 +329,29 @@ String _dayLabel(DateTime day) {
   return _dayFmt.format(day);
 }
 
-/// Day title row with the net RP and a collapse chevron, over a one-line
-/// summary of the day: record, average RP, kills, damage and time played.
-/// Tapping anywhere on it collapses or expands the day's matches.
-class _DayHeader extends StatelessWidget {
+/// A day's title row: collapse chevron, the day, "N games · time played", and
+/// the day's net RP as a pill that matches the per-match RP badges below.
+///
+/// This is the only part of a day's header that pins while scrolling; the
+/// labelled stats ([_DayStats]) scroll away with the day, so the pinned bar
+/// stays small and calm. Tapping it collapses or expands the day's matches.
+class _DayTitle extends StatelessWidget {
   final DayHeaderItem item;
   final bool collapsed;
   final VoidCallback onToggle;
-  const _DayHeader({
+  const _DayTitle({
     required this.item,
     required this.collapsed,
     required this.onToggle,
   });
 
-  static const _muted = TextStyle(color: AppTheme.muted, fontSize: 11);
-
   @override
   Widget build(BuildContext context) {
     final positive = item.netRp >= 0;
     final color = positive ? AppTheme.green : AppTheme.red;
-    final avg = item.avgRp;
-    const sep = TextSpan(text: '  ·  ');
+    final played = item.playSecs > 0
+        ? ' · ${formatDuration(item.playSecs)}'
+        : '';
 
     return Column(
       children: [
@@ -361,106 +368,57 @@ class _DayHeader extends StatelessWidget {
               top: item.isFirst ? AppTheme.sm : AppTheme.md,
               bottom: 6,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    AnimatedRotation(
-                      turns: collapsed ? -0.25 : 0,
-                      duration: const Duration(milliseconds: 150),
-                      child: const Icon(
-                        Icons.expand_more,
-                        size: 18,
-                        color: AppTheme.muted,
-                      ),
+                AnimatedRotation(
+                  turns: collapsed ? -0.25 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  child: const Icon(
+                    Icons.expand_more,
+                    size: 18,
+                    color: AppTheme.muted,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  _dayLabel(item.day),
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: AppTheme.sm),
+                Expanded(
+                  child: Text(
+                    '${item.games} games$played',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.muted,
+                      fontSize: 12,
                     ),
-                    const SizedBox(width: 2),
-                    Text(
-                      _dayLabel(item.day),
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
+                  ),
+                ),
+                if (item.hasRanked)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(30),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    ),
+                    child: Text(
+                      '${positive ? '+' : ''}${formatNumber(item.netRp)} RP',
+                      style: TextStyle(
+                        color: color,
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: AppTheme.sm),
-                    Text(
-                      '${item.games} games',
-                      style: const TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const Spacer(),
-                    // Plain "Net ±RP" text (no pill) so the day total reads
-                    // differently from the per-match RP pills below it.
-                    if (item.hasRanked) ...[
-                      const Text(
-                        'NET',
-                        style: TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${positive ? '+' : ''}${formatNumber(item.netRp)} RP',
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 3),
-                // Centred under the title row; shrinks a little on a narrow
-                // screen rather than wrapping.
-                SizedBox(
-                  width: double.infinity,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text.rich(
-                      TextSpan(
-                        style: _muted,
-                        children: [
-                          if (item.hasRanked) ...[
-                            TextSpan(
-                              text: '${item.wins}W',
-                              style: const TextStyle(color: AppTheme.green),
-                            ),
-                            const TextSpan(text: '–'),
-                            TextSpan(
-                              text: '${item.losses}L',
-                              style: const TextStyle(color: AppTheme.red),
-                            ),
-                            if (avg != null)
-                              TextSpan(
-                                text:
-                                    '  ·  ${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(1)} avg RP',
-                              ),
-                            sep,
-                          ],
-                          TextSpan(text: '${formatNumber(item.kills)} K'),
-                          sep,
-                          TextSpan(text: '${formatNumber(item.damage)} dmg'),
-                          if (item.avgDamage != null)
-                            TextSpan(
-                              text:
-                                  '  ·  ${formatNumber(item.avgDamage!.round())} avg dmg',
-                            ),
-                          sep,
-                          TextSpan(text: formatDuration(item.playSecs)),
-                        ],
-                      ),
-                      maxLines: 1,
-                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -468,6 +426,97 @@ class _DayHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The day's numbers as equal columns, each a value over a small label, so
+/// they line up from day to day and read without decoding abbreviations:
+/// record, average RP, kills and damage (record and average only on days with
+/// ranked games). Collapsed, only the record remains.
+class _DayStats extends StatelessWidget {
+  final DayHeaderItem item;
+  final bool collapsed;
+  const _DayStats({required this.item, required this.collapsed});
+
+  /// Aligns under the day name, past the chevron.
+  static const _indent = 20.0;
+
+  static const _value = TextStyle(
+    color: AppTheme.textPrimary,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+  );
+
+  TextSpan get _record => TextSpan(
+    style: _value,
+    children: [
+      TextSpan(
+        text: '${item.wins}W',
+        style: const TextStyle(color: AppTheme.green),
+      ),
+      const TextSpan(text: '–'),
+      TextSpan(
+        text: '${item.losses}L',
+        style: const TextStyle(color: AppTheme.red),
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (collapsed) {
+      if (!item.hasRanked) return const SizedBox(height: 4);
+      return Padding(
+        padding: const EdgeInsets.only(left: _indent, bottom: 8),
+        child: Text.rich(
+          TextSpan(
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            children: _record.children,
+          ),
+        ),
+      );
+    }
+
+    final avg = item.avgRp;
+    return Padding(
+      padding: const EdgeInsets.only(left: _indent, bottom: AppTheme.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (item.hasRanked) _stat('Record', _record),
+          if (item.hasRanked && avg != null)
+            _stat(
+              'Avg RP',
+              TextSpan(
+                text: '${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(1)}',
+                style: _value,
+              ),
+            ),
+          _stat(
+            'Kills',
+            TextSpan(text: formatNumber(item.kills), style: _value),
+          ),
+          _stat(
+            'Damage',
+            TextSpan(text: formatNumber(item.damage), style: _value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(String label, TextSpan value) => Expanded(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text.rich(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 1),
+        Text(
+          label,
+          style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+        ),
+      ],
+    ),
+  );
 }
 
 // ── Group header (legend/map drill-down sections) ───────────────────────────

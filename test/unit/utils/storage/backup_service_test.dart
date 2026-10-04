@@ -476,6 +476,40 @@ void main() {
     });
   });
 
+  group('savedBackupName', () {
+    const fallback = 'apexlytics_20261004_101500.json.gz';
+
+    test('reads the real name out of an Android document URI', () {
+      final uri = Uri.parse(
+        'content://com.android.externalstorage.documents/document/'
+        'primary%3ADownload%2Fapexlytics_20261004_101500.json.gz',
+      );
+      expect(savedBackupName(uri, fallback), fallback);
+    });
+
+    test('keeps a name the user changed in the save dialog', () {
+      final uri = Uri.parse(
+        'content://com.android.externalstorage.documents/document/'
+        'primary%3ADocuments%2Fmy%20backup.json.gz',
+      );
+      expect(savedBackupName(uri, fallback), 'my backup.json.gz');
+    });
+
+    test('falls back when the URI is opaque (a provider-assigned id)', () {
+      final uri = Uri.parse(
+        'content://com.android.providers.downloads.documents/document/msf%3A1234',
+      );
+      expect(savedBackupName(uri, fallback), fallback);
+    });
+
+    test('works for a plain file URI too', () {
+      expect(
+        savedBackupName(Uri.file('/home/someone/x.json.gz'), fallback),
+        'x.json.gz',
+      );
+    });
+  });
+
   group('shareBackupFile', () {
     late Directory tmp;
     late File file;
@@ -493,20 +527,6 @@ void main() {
       onShare?.call();
       return ShareResult('', status);
     };
-
-    test('with a cleanup delay the file outlives the share call (the receiving '
-        'app may still be reading it) and is removed afterwards', () async {
-      await shareBackupFile(
-        file,
-        [1, 2, 3],
-        share: answering(ShareResultStatus.unavailable),
-        cleanupDelay: const Duration(milliseconds: 150),
-      );
-      expect(file.existsSync(), isTrue, reason: 'not deleted at once');
-
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-      expect(file.existsSync(), isFalse);
-    });
 
     test('a completed share counts as exported', () async {
       expect(
@@ -530,14 +550,15 @@ void main() {
       );
     });
 
-    test('a platform that cannot tell counts as shared', () async {
+    test('a share the platform cannot confirm is not reported as an export, '
+        'so a cancel never shows "saved"', () async {
       expect(
         await shareBackupFile(
           file,
           [1, 2, 3],
           share: answering(ShareResultStatus.unavailable),
         ),
-        isTrue,
+        isFalse,
       );
     });
 

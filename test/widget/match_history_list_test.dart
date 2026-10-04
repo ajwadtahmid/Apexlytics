@@ -228,6 +228,37 @@ void main() {
       expect(find.text('Axle').evaluate().length, rowsBefore);
     });
 
+    testWidgets('each day shows its numbers as labelled columns, in full words '
+        'rather than a dotted line of abbreviations', (tester) async {
+      await pump(tester, null);
+
+      for (final label in ['Record', 'Avg RP', 'Kills', 'Damage']) {
+        expect(find.text(label), findsWidgets, reason: label);
+      }
+      // Today: three games, all wins (rich text, so searched as such).
+      expect(find.textContaining('3W', findRichText: true), findsWidgets);
+      expect(find.textContaining('3 games'), findsWidgets);
+      // The old header's "NET" label and average-damage figure are gone (the
+      // match rows below still show their own "dmg").
+      expect(find.text('NET'), findsNothing);
+      expect(find.textContaining('avg dmg'), findsNothing);
+    });
+
+    testWidgets('collapsing a day keeps its record but drops the other '
+        'columns', (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await pump(tester, container);
+      final killsBefore = find.text('Kills').evaluate().length;
+
+      await tester.tap(find.text('Today'));
+      await tester.pump();
+
+      expect(find.text('Kills').evaluate().length, killsBefore - 1);
+      // The day's record is still there under its title.
+      expect(find.textContaining('3W', findRichText: true), findsWidgets);
+    });
+
     testWidgets('an auto-excluded match shows the Excluded tag', (tester) async {
       final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
       await tester.pumpWidget(

@@ -226,17 +226,19 @@ class CacheSettingsSection extends ConsumerWidget {
   Future<void> _exportData(BuildContext context, WidgetRef ref) async {
     try {
       final prefs = ref.read(sharedPreferencesProvider);
-      final filePath = await exportBackup(
+      final fileName = await exportBackup(
         prefs,
         rankedStore: ref.read(rankedHistoryStoreProvider),
       );
-      if (filePath == null) return;
+      if (fileName == null) return;
 
       if (context.mounted) {
-        // Mobile only hands the file to the share sheet, so say "shared".
+        // iOS hands the file to the share sheet; everywhere else it is saved
+        // where the user chose. The message names only the file, never its
+        // location.
         context.showMessage(
           'Backup ${backupGoesThroughShareSheet ? 'shared' : 'saved'}: '
-          '${Uri.file(filePath).pathSegments.last}',
+          '$fileName',
           duration: const Duration(seconds: 4),
         );
       }

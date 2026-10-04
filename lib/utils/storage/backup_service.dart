@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:file_picker/file_picker.dart' show FilePicker;
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -331,75 +332,47 @@ Future<({List<int> bytes, int matchCount})> buildBackupBytes({
   return (bytes: sink.bytes, matchCount: matchCount);
 }
 
-/// Whether a backup is handed to the OS share sheet instead of written to a
-/// chosen folder: on iOS, and on Android too. Android's folder picker returns a
-/// document-tree URI that the plugin flattens to a filesystem path, which only
-/// accepts writes in a few public folders — any other folder, an SD card or a
-/// USB drive failed with a permission error after the user had picked it.
-bool get backupGoesThroughShareSheet => Platform.isIOS || Platform.isAndroid;
+/// Whether a backup is handed to the OS share sheet instead of saved: only on
+/// iOS, whose sandbox has no folder to write to (the sheet's "Save to Files"
+/// covers it). Android opens the system "Save as" screen; desktop uses a
+/// folder picker.
+bool get backupGoesThroughShareSheet => Platform.isIOS;
 
-/// How long an Android share leaves its temp file in place. The share future
-/// completes when the chooser closes, but the app that was picked (Files,
-/// Drive) may still be reading the file — deleting at once can truncate it.
-const Duration kAndroidBackupCleanupDelay = Duration(minutes: 10);
-
-/// Writes [bytes] to [file], shares it and deletes it. False if the user dismissed the sheet
-/// (nothing saved); `unavailable` counts as shared. [share] is a test seam.
-///
-/// [cleanupDelay] postpones the deletion (see [kAndroidBackupCleanupDelay]);
-/// zero deletes as soon as the share call returns.
+/// Writes [bytes] to [file], shares it and deletes it. True only when the share
+/// sheet reports the user actually completed an action; a dismissed sheet — and
+/// `unavailable`, which on iOS means "couldn't tell" (e.g. another share
+/// replaced this one) — is not an export, so no "saved" message follows a
+/// cancel. [share] is a test seam.
 @visibleForTesting
 Future<bool> shareBackupFile(
   File file,
   List<int> bytes, {
   Future<ShareResult> Function(ShareParams params)? share,
-  Duration cleanupDelay = Duration.zero,
 }) async {
   await file.writeAsBytes(bytes);
   try {
     final result = await (share ?? SharePlus.instance.share)(
       ShareParams(files: [XFile(file.path, mimeType: 'application/gzip')]),
     );
-    return result.status != ShareResultStatus.dismissed;
+    // The status name only (success/dismissed/unavailable): no file or player
+    // data, and it shows what the platform reported if a cancel is ever
+    // mistaken for an export.
+    log.i('Backup share result: ${result.status.name}');
+    return result.status == ShareResultStatus.success;
   } finally {
     // Don't leave the export (UIDs, names) in the temp directory.
-    if (cleanupDelay == Duration.zero) {
-      await _deleteBackupTempFile(file);
-    } else {
-      // A process that dies first leaves the file for the sweep before the
-      // next export (see [_sweepBackupTempFiles]).
-      Timer(cleanupDelay, () => unawaited(_deleteBackupTempFile(file)));
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      log.w('Backup temp file cleanup failed', error: e);
     }
   }
 }
 
-Future<void> _deleteBackupTempFile(File file) async {
-  try {
-    if (await file.exists()) await file.delete();
-  } catch (e) {
-    log.w('Backup temp file cleanup failed', error: e);
-  }
-}
-
-/// Removes backups an earlier export left in [dir] — one whose delayed delete
-/// never ran because the app was closed first.
-Future<void> _sweepBackupTempFiles(Directory dir) async {
-  try {
-    await for (final entity in dir.list()) {
-      if (entity is! File) continue;
-      final name = entity.uri.pathSegments.last;
-      if (name.startsWith('apexlytics_') && name.endsWith('.json.gz')) {
-        await _deleteBackupTempFile(entity);
-      }
-    }
-  } catch (e) {
-    log.w('Backup temp sweep failed', error: e);
-  }
-}
-
-/// Writes the backup: through the share sheet on iOS and Android
-/// ([backupGoesThroughShareSheet]), to a folder the user picks elsewhere.
-/// Returns the file path, or null if cancelled (including a dismissed share sheet).
+/// Writes the backup. Android opens the system "Save as" screen; iOS the share
+/// sheet ([backupGoesThroughShareSheet]); desktop writes to a folder the user
+/// picks. Returns the saved file's name (never its location), or null if
+/// cancelled (including a dismissed share sheet).
 ///
 /// [rankedStore], when provided, embeds the full ranked match history in the
 /// same file so device migration stays a single-file operation.
@@ -418,15 +391,8 @@ Future<String?> exportBackup(
 
   if (backupGoesThroughShareSheet) {
     final dir = await getTemporaryDirectory();
-    await _sweepBackupTempFiles(dir);
     final filePath = '${dir.path}/$defaultFilename';
-    final shared = await shareBackupFile(
-      File(filePath),
-      compressed,
-      cleanupDelay: Platform.isAndroid
-          ? kAndroidBackupCleanupDelay
-          : Duration.zero,
-    );
+    final shared = await shareBackupFile(File(filePath), compressed);
     if (!shared) {
       // Dismissed: a cancellation, not an export.
       log.i('Backup share dismissed');
@@ -440,7 +406,34 @@ Future<String?> exportBackup(
       '$matchCount ranked matches, '
       '${compressed.length} bytes compressed',
     );
-    return filePath;
+    return defaultFilename;
+  }
+
+  if (Platform.isAndroid) {
+    // The system "Save as" screen (the create-document picker): the user picks
+    // any location, Downloads included, with the name pre-filled, and the app
+    // needs no storage permission. The folder picker this replaces refuses the
+    // Downloads root ("Can't use this folder") on Android 11+.
+    final saved = await FilePicker.saveFile(
+      fileName: defaultFilename,
+      bytes: compressed is Uint8List
+          ? compressed
+          : Uint8List.fromList(compressed),
+      mimeType: 'application/gzip',
+      dialogTitle: 'Save Apexlytics backup',
+    );
+    if (saved == null) {
+      // Cancelled: nothing was saved.
+      log.i('Backup save cancelled');
+      return null;
+    }
+    // The location is omitted for the same reason as the share branch above.
+    log.i(
+      'Backup saved: ${payload.length} keys, '
+      '$matchCount ranked matches, '
+      '${compressed.length} bytes compressed',
+    );
+    return savedBackupName(saved, defaultFilename);
   }
 
   final dirPath = await file_selector.getDirectoryPath();
@@ -455,7 +448,18 @@ Future<String?> exportBackup(
     '$matchCount ranked matches, '
     '${compressed.length} bytes compressed',
   );
-  return filePath;
+  return defaultFilename;
+}
+
+/// The file name to show for a saved backup. [saved] is whatever the picker
+/// returns — a `content://` URI on Android, whose last segment looks like
+/// `primary:Download/apexlytics_….json.gz` — and the user may have renamed the
+/// file, so prefer the real name when it is recognisably ours, else [fallback].
+@visibleForTesting
+String savedBackupName(Uri saved, String fallback) {
+  final last = saved.pathSegments.isEmpty ? '' : saved.pathSegments.last;
+  final name = last.split(RegExp(r'[/:]')).last;
+  return name.endsWith('.gz') || name.endsWith('.json') ? name : fallback;
 }
 
 // Cancellation is a PreviewResult concern now (see previewBackup) -
