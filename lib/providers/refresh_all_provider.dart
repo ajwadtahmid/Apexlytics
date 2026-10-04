@@ -46,6 +46,7 @@ class ProfileRefreshResult {
           ? '+$newMatches new ${newMatches == 1 ? 'match' : 'matches'}'
           : 'History up to date',
     RankedSyncOutcome.queued => 'History queued — try again later',
+    RankedSyncOutcome.busy => 'Server busy — try again in a minute',
     RankedSyncOutcome.notTracked => 'Not tracked yet, so no history to fetch',
     _ => "Couldn't fetch history",
   };

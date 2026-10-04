@@ -29,11 +29,27 @@ class GamesPending extends GamesResult {
   /// How long the server asked us to wait before trying again.
   final Duration retryAfter;
 
-  const GamesPending({required this.status, required this.retryAfter});
+  /// Why the server held the request back (`full`, `rank`, `locked`,
+  /// `client_limit`, `claim_rate`, ...), when it said. Only [isBriefThrottle]
+  /// is acted on; any other value, including one added later, reads as a plain
+  /// queue, so a new reason can never break a sync.
+  final String? reason;
+
+  const GamesPending({
+    required this.status,
+    required this.retryAfter,
+    this.reason,
+  });
 
   /// True when no history is accruing at all — the user has to keep the app
   /// (or an apexlegendsstatus.com tab) open before there is anything to fetch.
   bool get isNotTracked => status == 'not_tracked';
+
+  /// The server's global claim rate (`claim_rate`) was hit: slots are free, but
+  /// too many claims landed in the last minute, so the wait is a minute at
+  /// most. Unlike a plain queue, "N slots free, resets in M min" would be
+  /// the wrong thing to tell the user.
+  bool get isBriefThrottle => reason == 'claim_rate';
 }
 
 /// Whether upstream is currently recording match history for a UID.
@@ -100,6 +116,7 @@ class GamesService {
       final body = response.data is Map ? response.data as Map : const {};
       return GamesPending(
         status: body['status']?.toString() ?? 'queued',
+        reason: body['reason']?.toString(),
         // Defaults to 5 minutes if the server didn't send a retry hint.
         retryAfter: Duration(
           seconds: (body['retryAfterSeconds'] as num?)?.toInt() ?? 300,

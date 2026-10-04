@@ -279,6 +279,49 @@ void main() {
       expect((nextSync - expected).abs() < 3000, isTrue);
     });
 
+    test('a claim_rate throttle returns busy and waits exactly the server\'s '
+        'hint, not the hourly-slot wait', () async {
+      await setUpWith();
+      when(() => gamesService.getMatches(uid)).thenAnswer(
+        (_) async => const GamesPending(
+          status: 'queued',
+          reason: 'claim_rate',
+          retryAfter: Duration(seconds: 25),
+        ),
+      );
+
+      final result = await readOutcome();
+
+      expect(result, RankedSyncOutcome.busy);
+      final prefs = container.read(sharedPreferencesProvider);
+      final nextSync = prefs.getInt(PrefsKeys.gamesNextSync(uid))!;
+      final expected = DateTime.now()
+          .add(const Duration(seconds: 25))
+          .millisecondsSinceEpoch;
+      expect((nextSync - expected).abs() < 3000, isTrue);
+      expect(
+        prefs.getString(PrefsKeys.gamesLastOutcome(uid)),
+        RankedSyncOutcome.busy.name,
+        reason: 'stored, so a rebuild inside the wait replays it',
+      );
+    });
+
+    test('a queue for any other reason, including one not yet invented, '
+        'stays queued', () async {
+      for (final reason in ['full', 'rank', 'client_limit', 'brand_new']) {
+        await setUpWith();
+        when(() => gamesService.getMatches(uid)).thenAnswer(
+          (_) async => GamesPending(
+            status: 'queued',
+            reason: reason,
+            retryAfter: const Duration(seconds: 25),
+          ),
+        );
+
+        expect(await readOutcome(), RankedSyncOutcome.queued, reason: reason);
+      }
+    });
+
     test('GamesPending(not_tracked) returns notTracked', () async {
       await setUpWith();
       when(() => gamesService.getMatches(uid)).thenAnswer(

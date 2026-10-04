@@ -207,6 +207,38 @@ void main() {
     },
   );
 
+  testWidgets(
+    'busy outcome says the server is pacing syncs for a moment, and never '
+    'quotes a slot count that would contradict it',
+    (tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.busy,
+          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          // Slots are free, which is exactly why "N free, resets in M min"
+          // would be wrong here.
+          capacity: (
+            maxPerHour: 15,
+            used: 2,
+            free: 13,
+            windowResetsAt: DateTime.now().add(const Duration(minutes: 40)),
+            waitlistDepth: 0,
+            locked: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Busy for a moment'), findsOneWidget);
+      expect(find.textContaining('pacing new syncs'), findsOneWidget);
+      expect(find.text('Server busy'), findsNothing);
+      expect(find.textContaining('history slots free'), findsNothing);
+    },
+  );
+
   testWidgets('offline outcome shows the offline message', (tester) async {
     final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
     await tester.pumpWidget(

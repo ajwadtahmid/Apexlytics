@@ -258,6 +258,14 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
 
     final (title, icon, statusNote) = switch (outcome) {
       RankedSyncOutcome.queued => _queuedState(),
+      // Slots are free; the server is only pacing new claims. Say that, not
+      // "N slots free, resets in M min", which would contradict itself.
+      RankedSyncOutcome.busy => (
+        'Busy for a moment',
+        Icons.hourglass_top,
+        'The history server is pacing new syncs for a minute. Nothing is '
+            'lost — pull down to try again shortly, or it will retry on its own.',
+      ),
       RankedSyncOutcome.offline => (
         'Offline',
         Icons.cloud_off,

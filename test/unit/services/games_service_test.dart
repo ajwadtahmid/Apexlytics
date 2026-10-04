@@ -120,6 +120,63 @@ void main() {
       expect(pending.retryAfter, const Duration(seconds: 120));
     });
 
+    test('a claim_rate 202 stays a queued, non-error result and keeps the '
+        'server\'s 10 to 60 second hint exactly', () async {
+      // The server's global claim-rate refusal: a slot is free, but too many
+      // claims landed in the last minute. Its hint is 10 to 60 seconds.
+      for (final seconds in [10, 25, 60]) {
+        stubResponse(
+          status: 202,
+          data: {
+            'status': 'queued',
+            'uid': '1000000000001',
+            'position': 1,
+            'reason': 'claim_rate',
+            'retryAfterSeconds': seconds,
+            'windowResetsAt': 1790000000000,
+          },
+        );
+
+        final result = await service.getMatches('uid123');
+
+        expect(result, isA<GamesPending>(), reason: '${seconds}s');
+        final pending = result as GamesPending;
+        expect(pending.status, 'queued');
+        expect(pending.isNotTracked, isFalse);
+        expect(pending.reason, 'claim_rate');
+        expect(pending.isBriefThrottle, isTrue);
+        expect(pending.retryAfter, Duration(seconds: seconds));
+      }
+    });
+
+    test('any other reason, known or not yet invented, is a plain queue and '
+        'never an error', () async {
+      for (final reason in [
+        'full',
+        'rank',
+        'locked',
+        'client_limit',
+        'some_future_reason',
+        null,
+      ]) {
+        stubResponse(
+          status: 202,
+          data: {
+            'status': 'queued',
+            'reason': ?reason,
+            'retryAfterSeconds': 90,
+          },
+        );
+
+        final result = await service.getMatches('uid123');
+
+        final pending = result as GamesPending;
+        expect(pending.isBriefThrottle, isFalse, reason: '$reason');
+        expect(pending.isNotTracked, isFalse, reason: '$reason');
+        expect(pending.retryAfter, const Duration(seconds: 90));
+      }
+    });
+
     test('a 202 without a retry hint falls back to five minutes', () async {
       stubResponse(status: 202, data: {'status': 'queued'});
 

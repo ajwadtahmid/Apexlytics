@@ -66,6 +66,11 @@ enum RankedSyncOutcome {
   /// The server has no slot free right now. Purely a delay.
   queued,
 
+  /// The server's global claim rate was hit: slots are free, but too many
+  /// claims landed in the last minute. A delay of a minute at most, so it reads
+  /// differently from [queued], whose wait is for an hourly slot to free up.
+  busy,
+
   /// Nobody is polling this UID upstream, so no history is being recorded.
   /// The only state that needs the user to *do* something.
   notTracked,
@@ -211,9 +216,19 @@ Future<RankedSyncOutcome> syncRankedHistory({
     return remember(RankedSyncOutcome.offline, _kOfflineRetry);
   }
   switch (result) {
-    case GamesPending(:final retryAfter, :final isNotTracked):
+    case GamesPending(
+      :final retryAfter,
+      :final isNotTracked,
+      :final isBriefThrottle,
+    ):
+      // Waits exactly as long as the server asked (its Retry-After), whatever
+      // the reason: the reason only changes what the user is told.
       return await remember(
-        isNotTracked ? RankedSyncOutcome.notTracked : RankedSyncOutcome.queued,
+        isNotTracked
+            ? RankedSyncOutcome.notTracked
+            : isBriefThrottle
+            ? RankedSyncOutcome.busy
+            : RankedSyncOutcome.queued,
         retryAfter,
       );
     case GamesMatches(:final matches):
