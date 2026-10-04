@@ -164,11 +164,18 @@ final Map<String, Future<List<StatSnapshot>>> _appending = {};
 ///
 /// Returns the updated list. Skips (returning the current list unchanged) when
 /// the reading is an untrustworthy zero or a duplicate of the last one.
+///
+/// [staleAt], when non-null, says [stats] came from the response cache rather
+/// than a live fetch. A cached copy is not a reading: it would be stamped *now*
+/// while holding RP from up to a day ago, planting a fake drop (or gain) in the
+/// series that the graph, the weekly delta and every backup then keep. Such a
+/// call just returns the current list.
 Future<List<StatSnapshot>> appendSnapshot(
   PlayerStats stats,
   RankedHistoryStore store, {
   String? uid,
   bool deduplicateRp = true,
+  DateTime? staleAt,
 }) {
   final key = PrefsKeys.snapshotKeyFor(uid);
   final previous = _appending[key];
@@ -184,6 +191,7 @@ Future<List<StatSnapshot>> appendSnapshot(
       store,
       uid: uid,
       deduplicateRp: deduplicateRp,
+      isStale: staleAt != null,
     ),
   );
   _appending[key] = chained;
@@ -204,6 +212,7 @@ Future<List<StatSnapshot>> _appendSnapshotLocked(
   RankedHistoryStore store, {
   String? uid,
   bool deduplicateRp = true,
+  bool isStale = false,
 }) async {
   final key = PrefsKeys.snapshotKeyFor(uid);
   // Read before any await, so a clear mid-append can't be undone below.
@@ -213,6 +222,10 @@ Future<List<StatSnapshot>> _appendSnapshotLocked(
   final snapshots = _cache.containsKey(key)
       ? _cache[key]!
       : await primeSnapshots(store, uid);
+
+  // A cached copy isn't a reading (see [appendSnapshot]). Still primed above,
+  // so the caller gets the series to draw.
+  if (isStale) return snapshots;
 
   final seasonId = stats.rankedSeason?.id;
 
@@ -260,8 +273,14 @@ Future<List<StatSnapshot>> appendAndLoadSnapshots(
   PlayerStats stats,
   RankedHistoryStore store, {
   bool deduplicateRp = true,
-}) =>
-    appendSnapshot(stats, store, uid: stats.uid, deduplicateRp: deduplicateRp);
+  DateTime? staleAt,
+}) => appendSnapshot(
+  stats,
+  store,
+  uid: stats.uid,
+  deduplicateRp: deduplicateRp,
+  staleAt: staleAt,
+);
 
 /// Loads snapshots and seasons for a player in one call. Used by state
 /// initialization in stats views to populate all snapshot-related data.

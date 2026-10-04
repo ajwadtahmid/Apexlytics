@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/api_constants.dart';
 import '../constants/prefs_keys.dart';
+import '../utils/error_messages.dart' show AppException;
 import 'settings_provider.dart';
 
 /// A reference to a previously searched player, used as both a favorites entry
@@ -80,8 +81,8 @@ class SearchState {
 }
 
 class SearchNotifier extends Notifier<SearchState> {
-  /// Oldest favourites are evicted once the list grows past this — matches
-  /// the spirit of the 5-profile cap, scaled up since favourites are cheaper.
+  /// The most favourites that can be saved. Adding past it is refused (see
+  /// [toggleFavorite]) rather than silently evicting the oldest one.
   static const int maxFavorites = 20;
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
@@ -149,6 +150,9 @@ class SearchNotifier extends Notifier<SearchState> {
     state = state.copyWith(favorites: favorites);
   }
 
+  /// Adds [playerRef] as a favourite, or removes it if already saved. Throws
+  /// an [AppException] when adding would pass [maxFavorites]; removing is
+  /// always allowed.
   Future<void> toggleFavorite(PlayerRef playerRef) async {
     final favorites = List<PlayerRef>.from(state.favorites);
     final idx = favorites.indexWhere((f) {
@@ -164,10 +168,12 @@ class SearchNotifier extends Notifier<SearchState> {
     if (idx >= 0) {
       favorites.removeAt(idx);
     } else {
-      favorites.insert(0, playerRef);
-      if (favorites.length > maxFavorites) {
-        favorites.removeLast();
+      if (favorites.length >= maxFavorites) {
+        throw const AppException(
+          'You can save up to $maxFavorites favorites. Remove one to add another.',
+        );
       }
+      favorites.insert(0, playerRef);
     }
     await _save(PrefsKeys.searchFavorites, favorites);
     state = state.copyWith(favorites: favorites);

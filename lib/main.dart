@@ -19,6 +19,7 @@ import 'services/background_service.dart';
 import 'services/notification_service.dart';
 import 'utils/app_logger.dart';
 import 'utils/crash_report_scrubber.dart';
+import 'utils/provider_retry.dart';
 import 'utils/storage/api_cache_store.dart';
 import 'utils/theme.dart';
 
@@ -54,6 +55,7 @@ void main() async {
   unawaited(apiService.warmup());
 
   final app = ProviderScope(
+    retry: transientProviderRetry,
     overrides: [
       apiServiceProvider.overrideWithValue(apiService),
       sharedPreferencesProvider.overrideWithValue(prefs),

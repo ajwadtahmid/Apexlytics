@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../constants/tracker_constants.dart';
+import '../utils/app_logger.dart';
 
 /// RP swings at or beyond this magnitude are rank-reset artifacts
 /// (end-of-split/season placement drops), not real per-game RP. Such a match
@@ -436,12 +437,32 @@ class RankedMatch {
   }
 
   /// Parses the whole `/games` list response into matches, skipping malformed
-  /// entries instead of throwing on a single bad row.
+  /// entries instead of throwing on a single bad row — including a row that
+  /// is a map but carries a wrongly-typed field (`fromJson` casts, so one such
+  /// row would otherwise discard the entire batch).
   static List<RankedMatch> listFromJson(List<dynamic> json) {
     final out = <RankedMatch>[];
+    var skipped = 0;
     for (final e in json) {
-      if (e is Map<String, dynamic>) out.add(RankedMatch.fromJson(e));
+      if (e is! Map<String, dynamic>) {
+        skipped++;
+        continue;
+      }
+      try {
+        final m = RankedMatch.fromJson(e);
+        // No start timestamp parses as epoch 0, which keys as `<uid>_0`:
+        // every such match would overwrite the same stored row.
+        if (m.startTime.millisecondsSinceEpoch > 0) {
+          out.add(m);
+        } else {
+          skipped++;
+        }
+      } catch (_) {
+        skipped++;
+      }
     }
+    // A count only: the row's contents can carry a player name or UID.
+    if (skipped > 0) log.w('Skipped $skipped unreadable /games rows');
     return out;
   }
 

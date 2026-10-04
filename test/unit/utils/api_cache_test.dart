@@ -197,6 +197,36 @@ void main() {
     );
   });
 
+  group('Decoded-copy bound', () {
+    test('entries beyond the hot set are decoded on demand, not lost', () async {
+      final store = freshStore();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      for (var i = 0; i < 40; i++) {
+        await store.upsert('/player/uid$i', '{"i":$i}', now);
+      }
+      final cache = ApiCache(store);
+      await cache.primeFromDisk();
+
+      // Far more than the cache keeps decoded at once; every one still reads
+      // back, and twice, so the second pass exercises the re-decode of an
+      // entry that fell out of the hot set.
+      for (var pass = 0; pass < 2; pass++) {
+        for (var i = 0; i < 40; i++) {
+          final entry = cache.load('/player/uid$i');
+          expect((entry!.data as Map)['i'], i, reason: 'pass $pass, #$i');
+        }
+      }
+    });
+
+    test('a save replaces a previously decoded copy of the same key', () async {
+      final cache = ApiCache(freshStore());
+      await cache.save('/maps', {'v': 1});
+      expect((cache.load('/maps')!.data as Map)['v'], 1);
+      await cache.save('/maps', {'v': 2});
+      expect((cache.load('/maps')!.data as Map)['v'], 2);
+    });
+  });
+
   group('Eviction cap', () {
     test('keeps the cache size at or under the cap after many saves', () async {
       final store = freshStore();

@@ -148,17 +148,22 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
                 isFav ? Icons.star : Icons.star_border,
                 color: isFav ? AppTheme.accent : AppTheme.muted,
               ),
-              onPressed: () {
-                ref
-                    .read(searchStateProvider.notifier)
-                    .toggleFavorite(
-                      PlayerRef(
-                        query: stats.name,
-                        platform: widget.platform,
-                        uid: stats.uid.isNotEmpty ? stats.uid : null,
-                        searchedByUid: widget.searchByUid,
-                      ),
-                    );
+              onPressed: () async {
+                try {
+                  await ref
+                      .read(searchStateProvider.notifier)
+                      .toggleFavorite(
+                        PlayerRef(
+                          query: stats.name,
+                          platform: widget.platform,
+                          uid: stats.uid.isNotEmpty ? stats.uid : null,
+                          searchedByUid: widget.searchByUid,
+                        ),
+                      );
+                } on AppException catch (e) {
+                  // At the favourites cap: say so rather than do nothing.
+                  if (context.mounted) context.showError(e.message);
+                }
               },
             ),
           ],
@@ -335,6 +340,9 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
       prefs,
       ref.read(rankedHistoryStoreProvider),
       widget.stats,
+      // Search serves the response cache (up to a day old) without a request;
+      // that is not a reading, so it is shown but not recorded.
+      staleAt: widget.staleAt,
     );
     if (changed && mounted) ref.invalidate(rankedSeasonsProvider);
   }
@@ -353,11 +361,16 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
   @override
   void didUpdateWidget(PlayerResultBody old) {
     super.didUpdateWidget(old);
-    if (old.stats.uid != widget.stats.uid) {
-      final prefs = ref.read(sharedPreferencesProvider);
-      initSnapshotFields(prefs, widget.stats.uid);
-      _appendSnapshot(prefs);
-    }
+    final prefs = ref.read(sharedPreferencesProvider);
+    final uidChanged = old.stats.uid != widget.stats.uid;
+    if (uidChanged) initSnapshotFields(prefs, widget.stats.uid);
+    // Cached data that has just been replaced by a live fetch is the first
+    // real reading of this visit (it was skipped while stale). A same-RP one
+    // is dropped by the dedup in appendSnapshot.
+    final becameFresh =
+        widget.staleAt == null &&
+        (old.staleAt != null || old.stats.rankScore != widget.stats.rankScore);
+    if (uidChanged || becameFresh) _appendSnapshot(prefs);
   }
 
   @override

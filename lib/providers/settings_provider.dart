@@ -145,9 +145,29 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   static int limitFor({required bool owner}) =>
       owner ? ownerMaxProfileCount : maxProfileCount;
 
-  bool get _isOwner => _prefs.getBool(PrefsKeys.ownerUnlocked) ?? false;
+  bool get _isOwner => _boolPref(PrefsKeys.ownerUnlocked) ?? false;
 
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
+
+  // Typed reads that treat a value of the wrong type as absent. `SharedPreferences`'
+  // own getters throw a `TypeError` on a mismatch, and [build] is the root of
+  // every screen — one bad value (from a hand-edited or foreign backup that an
+  // older build restored unchecked) would otherwise fail the app at every
+  // launch, including the "Clear all data" screen that could fix it.
+  int? _intPref(String key) {
+    final v = _prefs.get(key);
+    return v is int ? v : null;
+  }
+
+  bool? _boolPref(String key) {
+    final v = _prefs.get(key);
+    return v is bool ? v : null;
+  }
+
+  String? _stringPref(String key) {
+    final v = _prefs.get(key);
+    return v is String ? v : null;
+  }
 
   static List<PlayerProfile> _parseProfiles(String? raw) {
     try {
@@ -177,15 +197,15 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
 
   @override
   PlayerSettings build() {
-    var profiles = _parseProfiles(_prefs.getString(PrefsKeys.profiles));
-    var activeIdx = _prefs.getInt(PrefsKeys.activeProfileIndex) ?? 0;
+    var profiles = _parseProfiles(_stringPref(PrefsKeys.profiles));
+    var activeIdx = _intPref(PrefsKeys.activeProfileIndex) ?? 0;
 
     // Migrate from legacy single-player keys when the profiles key is absent.
     if (profiles.isEmpty && _prefs.containsKey(PrefsKeys.playerName)) {
-      final name = _prefs.getString(PrefsKeys.playerName) ?? '';
-      final uid = _prefs.getString(PrefsKeys.playerUid) ?? '';
+      final name = _stringPref(PrefsKeys.playerName) ?? '';
+      final uid = _stringPref(PrefsKeys.playerUid) ?? '';
       final platform =
-          _prefs.getString(PrefsKeys.playerPlatform) ??
+          _stringPref(PrefsKeys.playerPlatform) ??
           ApiConstants.defaultPlatform;
       if (name.isNotEmpty || uid.isNotEmpty) {
         profiles = [PlayerProfile(name: name, uid: uid, platform: platform)];
@@ -215,7 +235,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     }
 
     // One-time migration: copy legacy global timing to per-mode keys if needed.
-    final legacyMinutes = _prefs.getInt(PrefsKeys.mapNotifyMinutes) ?? 0;
+    final legacyMinutes = _intPref(PrefsKeys.mapNotifyMinutes) ?? 0;
     if (legacyMinutes > 0 &&
         !_prefs.containsKey(PrefsKeys.rankedNotifyMinutes) &&
         !_prefs.containsKey(PrefsKeys.pubsNotifyMinutes) &&
@@ -234,7 +254,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
 
     // Clamp legacy stored intervals (20/30) onto the current options, only
     // rewriting the pref when the value actually changes.
-    final storedRefresh = _prefs.getInt(PrefsKeys.statsRefreshMinutes);
+    final storedRefresh = _intPref(PrefsKeys.statsRefreshMinutes);
     final refreshMinutes = storedRefresh == null
         ? kDefaultStatsRefreshMinutes
         : clampStatsRefreshMinutes(storedRefresh);
@@ -253,29 +273,29 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       profiles: profiles,
       activeProfileIndex: activeIdx,
       statsRefreshMinutes: refreshMinutes,
-      keepScreenOn: _prefs.getBool(PrefsKeys.keepScreenOn) ?? false,
+      keepScreenOn: _boolPref(PrefsKeys.keepScreenOn) ?? false,
       notifyPubsMapRotation:
-          _prefs.getBool(PrefsKeys.notifyPubsMapRotation) ?? false,
+          _boolPref(PrefsKeys.notifyPubsMapRotation) ?? false,
       notifyRankedMapRotation:
-          _prefs.getBool(PrefsKeys.notifyRankedMapRotation) ?? false,
+          _boolPref(PrefsKeys.notifyRankedMapRotation) ?? false,
       notifyMixtapeMapRotation:
-          _prefs.getBool(PrefsKeys.notifyMixtapeMapRotation) ?? false,
+          _boolPref(PrefsKeys.notifyMixtapeMapRotation) ?? false,
       notifyWildcardMapRotation:
-          _prefs.getBool(PrefsKeys.notifyWildcardMapRotation) ?? false,
+          _boolPref(PrefsKeys.notifyWildcardMapRotation) ?? false,
       rankedNotifyMinutesBefore:
-          _prefs.getInt(PrefsKeys.rankedNotifyMinutes) ?? legacyMinutes,
+          _intPref(PrefsKeys.rankedNotifyMinutes) ?? legacyMinutes,
       pubsNotifyMinutesBefore:
-          _prefs.getInt(PrefsKeys.pubsNotifyMinutes) ?? legacyMinutes,
+          _intPref(PrefsKeys.pubsNotifyMinutes) ?? legacyMinutes,
       mixtapeNotifyMinutesBefore:
-          _prefs.getInt(PrefsKeys.mixtapeNotifyMinutes) ?? legacyMinutes,
+          _intPref(PrefsKeys.mixtapeNotifyMinutes) ?? legacyMinutes,
       wildcardNotifyMinutesBefore:
-          _prefs.getInt(PrefsKeys.wildcardNotifyMinutes) ?? 0,
-      defaultTab: _prefs.getInt(PrefsKeys.defaultTab) ?? 0,
+          _intPref(PrefsKeys.wildcardNotifyMinutes) ?? 0,
+      defaultTab: _intPref(PrefsKeys.defaultTab) ?? 0,
       favoriteRankedMapNames: parseStringList(
-        _prefs.getString(PrefsKeys.favoriteRankedMapNames),
+        _stringPref(PrefsKeys.favoriteRankedMapNames),
       ),
       favoritePubsMapNames: parseStringList(
-        _prefs.getString(PrefsKeys.favoritePubsMapNames),
+        _stringPref(PrefsKeys.favoritePubsMapNames),
       ),
     );
   }

@@ -312,6 +312,36 @@ void main() {
       },
     );
 
+    test('an unreadable response is requestError with the long backoff, not '
+        'an offline retry loop', () async {
+      await setUpWith();
+      await store.upsertAll(uid, [_match(uid, 0)]);
+      when(() => gamesService.getMatches(uid)).thenThrow(
+        const MalformedResponseException('Unexpected response.'),
+      );
+
+      final result = await readOutcome();
+
+      expect(result, RankedSyncOutcome.requestError);
+      final nextSync = container
+          .read(sharedPreferencesProvider)
+          .getInt(PrefsKeys.gamesNextSync(uid))!;
+      final expected = DateTime.now()
+          .add(const Duration(hours: 1))
+          .millisecondsSinceEpoch;
+      expect((nextSync - expected).abs() < 3000, isTrue);
+      expect(await store.count(uid), 1, reason: 'history is kept');
+    });
+
+    test('a parse-time TypeError is classified the same way, not as offline',
+        () async {
+      await setUpWith();
+      await store.upsertAll(uid, [_match(uid, 0)]);
+      when(() => gamesService.getMatches(uid)).thenThrow(TypeError());
+
+      expect(await readOutcome(), RankedSyncOutcome.requestError);
+    });
+
     test(
       'a fetch failure with persisted history serves it and returns offline',
       () async {

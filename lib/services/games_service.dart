@@ -89,7 +89,7 @@ class GamesService {
       // caller down the failure path — persisted history plus a retry — rather
       // than the pending path below.
       if (response.data is! List) {
-        throw const AppException(
+        throw const MalformedResponseException(
           'Unexpected response from the history server.',
         );
       }

@@ -19,6 +19,25 @@ Future<ProviderContainer> makeContainer([
 
 void main() {
   group('PlayerSettingsNotifier', () {
+    test('a wrongly-typed stored value reads as absent instead of throwing', () async {
+      // What an older build's unchecked backup restore could leave behind.
+      final container = await makeContainer({
+        PrefsKeys.activeProfileIndex: '0',
+        PrefsKeys.keepScreenOn: 1,
+        PrefsKeys.statsRefreshMinutes: 'ten',
+        PrefsKeys.defaultTab: true,
+        PrefsKeys.profiles: 5,
+      });
+      addTearDown(container.dispose);
+
+      final settings = container.read(playerSettingsProvider);
+      expect(settings.activeProfileIndex, 0);
+      expect(settings.keepScreenOn, isFalse);
+      expect(settings.statsRefreshMinutes, kDefaultStatsRefreshMinutes);
+      expect(settings.defaultTab, 0);
+      expect(settings.profiles, isEmpty);
+    });
+
     test('initial state has no player set', () async {
       final container = await makeContainer();
       addTearDown(container.dispose);

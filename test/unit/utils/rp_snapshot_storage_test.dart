@@ -159,6 +159,37 @@ void main() {
       }
     });
 
+    test('does not record a cached copy as a reading, but still returns the '
+        'series', () async {
+      await appendSnapshot(buildStats(rankScore: 10500), store, uid: 'u');
+
+      // Up to a day old: stamping it "now" would plant a fake 700 RP drop.
+      final result = await appendSnapshot(
+        buildStats(rankScore: 9800),
+        store,
+        uid: 'u',
+        staleAt: DateTime.now().subtract(const Duration(hours: 3)),
+      );
+
+      expect(result.map((s) => s.rp), [10500]);
+      expect(await store.snapshotCount('u'), 1);
+    });
+
+    test('a cached copy of a never-primed UID still primes the series', () async {
+      await store.appendSnapshotsFor('u', [
+        StatSnapshot(timestamp: DateTime(2026, 9, 1), rp: 500),
+      ]);
+      resetSnapshotCache();
+
+      final result = await appendSnapshot(
+        buildStats(rankScore: 100),
+        store,
+        uid: 'u',
+        staleAt: DateTime.now(),
+      );
+      expect(result.map((s) => s.rp), [500]);
+    });
+
     test('appends when RP changes', () async {
       await appendSnapshot(buildStats(rankScore: 2400), store);
       await appendSnapshot(buildStats(rankScore: 2500), store);

@@ -1,4 +1,3 @@
-import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -234,9 +233,9 @@ class CacheSettingsSection extends ConsumerWidget {
       if (filePath == null) return;
 
       if (context.mounted) {
-        // iOS only shares the file, so say "shared".
+        // Mobile only hands the file to the share sheet, so say "shared".
         context.showMessage(
-          'Backup ${Platform.isIOS ? 'shared' : 'saved'}: '
+          'Backup ${backupGoesThroughShareSheet ? 'shared' : 'saved'}: '
           '${Uri.file(filePath).pathSegments.last}',
           duration: const Duration(seconds: 4),
         );

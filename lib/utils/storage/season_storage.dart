@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../constants/prefs_keys.dart';
 import '../../models/season_meta.dart';
 import '../app_logger.dart';
+import '../formatting/season_utils.dart' show kMaxWeeksPerSplit;
 
 Map<String, SeasonMeta> _parseSeasons(String? raw) {
   if (raw == null) return {};
@@ -27,6 +28,30 @@ Map<String, SeasonMeta> _parseSeasons(String? raw) {
     log.w('Season history JSON parse failed — returning empty', error: e);
     return {};
   }
+}
+
+/// Whether [s] spans a believable split: it ends after it starts, and within
+/// the [kMaxWeeksPerSplit] cap [computeWeeks] already applies. A restored window
+/// outside that is corrupt or hostile, and — since a match's split is a one-way
+/// upgrade — would misfile every unclassified match it happened to cover for good.
+bool _isPlausibleWindow(SeasonMeta s) =>
+    s.end.isAfter(s.start) &&
+    s.end.difference(s.start) <= const Duration(days: 7 * kMaxWeeksPerSplit);
+
+/// The `season_history` blob to store when restoring [backupRaw] onto a device
+/// that already holds [deviceRaw]: the backup's valid, plausible windows merged
+/// with the device's, the device winning for a split both know (its window came
+/// from the live API). A backup with none usable leaves the device's seasons.
+String mergeRestoredSeasonHistory({
+  required String backupRaw,
+  String? deviceRaw,
+}) {
+  final merged = <String, SeasonMeta>{
+    for (final e in _parseSeasons(backupRaw).entries)
+      if (_isPlausibleWindow(e.value)) e.key: e.value,
+    ..._parseSeasons(deviceRaw),
+  };
+  return jsonEncode(merged.values.map((s) => s.toJson()).toList());
 }
 
 /// Returns all stored seasons, newest first.

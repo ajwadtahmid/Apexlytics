@@ -1,3 +1,5 @@
+import 'dart:io' show FileSystemException;
+
 import 'package:dio/dio.dart';
 import 'app_logger.dart';
 
@@ -20,8 +22,32 @@ class AppException implements Exception {
   String toString() => message;
 }
 
+/// A message for a failed file write or read that says what to do about it.
+/// Keyed on the OS error code, and never includes the path (it can carry the
+/// user's name). Codes are POSIX (`EPERM` 1, `EACCES` 13, `ENOSPC` 28, `EROFS`
+/// 30) and the Windows equivalents (`ERROR_ACCESS_DENIED` 5,
+/// `ERROR_DISK_FULL` 112, `ERROR_WRITE_PROTECT` 19).
+String _fileSystemMessage(FileSystemException error) {
+  return switch (error.osError?.errorCode) {
+    1 || 13 || 5 || 30 || 19 =>
+      "Couldn't write there — the app doesn't have permission for that "
+          'location. Try a different one.',
+    28 || 112 => 'Not enough storage space. Free some up and try again.',
+    _ => "Couldn't read or write the file. Try a different location.",
+  };
+}
+
+/// The server answered, but not with anything this client can read (a `200`
+/// whose body isn't the expected shape — a captive portal, a proxy's error
+/// page). Distinct from a connectivity failure: retrying on the short offline
+/// interval would fail the same way, and it is worth reporting.
+class MalformedResponseException extends AppException {
+  const MalformedResponseException(super.message);
+}
+
 String friendlyError(Object? error) {
   if (error is AppException) return error.message;
+  if (error is FileSystemException) return _fileSystemMessage(error);
   if (error is DioException) {
     return switch (error.type) {
       DioExceptionType.connectionTimeout || DioExceptionType.receiveTimeout =>

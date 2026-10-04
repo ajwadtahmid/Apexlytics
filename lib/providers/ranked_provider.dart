@@ -6,7 +6,8 @@ import '../models/ranked_match.dart';
 import '../models/season_meta.dart';
 import '../services/games_service.dart';
 import '../utils/app_logger.dart';
-import '../utils/error_messages.dart' show AppException;
+import '../utils/error_messages.dart'
+    show AppException, MalformedResponseException;
 import '../utils/ranked/ranked_aggregates.dart';
 import '../utils/ranked/ranked_period.dart';
 import '../utils/storage/ranked_history_store.dart';
@@ -100,6 +101,10 @@ const _kRequestErrorRetry = Duration(hours: 1);
 /// A fetch failure is swallowed when persisted history exists (graceful
 /// offline/stale) and only rethrown when there's nothing to show, so the view
 /// can surface a retry.
+///
+/// Never retried by Riverpod: it paces itself with the persisted backoff above,
+/// and a retry would re-ask `/games` (a budgeted endpoint) up to several times
+/// in seconds. The 10-minute view timer and the manual refresh are the retry.
 final rankedSyncProvider = FutureProvider.autoDispose
     .family<RankedSyncOutcome, String>(
       (ref, uid) => syncRankedHistory(
@@ -110,6 +115,7 @@ final rankedSyncProvider = FutureProvider.autoDispose
         games: () => ref.watch(gamesServiceProvider),
         seasons: ref.watch(rankedSeasonsProvider),
       ),
+      retry: (_, _) => null,
     );
 
 /// One history sync for [uid], independent of any screen: the body of
@@ -166,7 +172,19 @@ Future<RankedSyncOutcome> syncRankedHistory({
     // Resolved before the first await, while a provider-backed factory's `ref` is live.
     result = await games().getMatches(uid);
   } catch (e) {
+    // Nothing to fall back on: surface the failure so the view can show it with
+    // a retry. Deliberately no backoff is recorded here — it would turn the
+    // error card into a replayed "offline" empty state and make Retry a no-op.
+    // (Riverpod no longer retries this provider, which was the real storm; see
+    // the note on [rankedSyncProvider].)
     if (await store.count(uid) == 0) rethrow;
+    // The server answered with something unreadable (or this client choked on
+    // it): not a connectivity problem, so no 5-minute offline loop, and a type
+    // only is reported — the text of a parse error can quote the payload.
+    if (e is MalformedResponseException || e is Error) {
+      log.e('games response unreadable (${e.runtimeType})');
+      return remember(RankedSyncOutcome.requestError, _kRequestErrorRetry);
+    }
     // A genuine 4xx (AppException.status) means the server rejected
     // this request, not a transient connectivity issue — its own
     // outcome and backoff instead of `offline`'s 5-minute retry loop,
@@ -357,11 +375,18 @@ final rankedLifetimeAggregatesProvider = FutureProvider.autoDispose
     .family<RankedLifetimeAggregates, String>((ref, uid) async {
       await ref.watch(rankedSyncProvider(uid).future);
       final store = ref.watch(rankedHistoryStoreProvider);
-      final time = await store.timeBucketsFor(uid);
+      // Independent reads, issued together rather than one platform-channel
+      // round trip after another.
+      final (time, summary, legends, maps) = await (
+        store.timeBucketsFor(uid),
+        store.summaryFor(uid),
+        store.legendBreakdownsFor(uid),
+        store.mapBreakdownsFor(uid),
+      ).wait;
       return (
-        summary: await store.summaryFor(uid),
-        legends: await store.legendBreakdownsFor(uid),
-        maps: await store.mapBreakdownsFor(uid),
+        summary: summary,
+        legends: legends,
+        maps: maps,
         timeOfDay: time.hours,
         dayOfWeek: time.weekdays,
       );
@@ -398,22 +423,23 @@ final rankedSplitDetailProvider = FutureProvider.autoDispose
     ) async {
       await ref.watch(rankedSyncProvider(arg.uid).future);
       final store = ref.watch(rankedHistoryStoreProvider);
-      final time = await store.timeBucketsFor(arg.uid, seasonId: arg.splitId);
+      final uid = arg.uid;
+      final seasonId = arg.splitId;
+      // Independent reads, issued together (see rankedLifetimeAggregatesProvider).
+      final (time, summary, legends, maps, legendMap, squadBreakdown) = await (
+        store.timeBucketsFor(uid, seasonId: seasonId),
+        store.summaryFor(uid, seasonId: seasonId),
+        store.legendBreakdownsFor(uid, seasonId: seasonId),
+        store.mapBreakdownsFor(uid, seasonId: seasonId),
+        store.legendMapBreakdownsFor(uid, seasonId: seasonId),
+        store.squadBreakdownFor(uid, seasonId: seasonId),
+      ).wait;
       return (
-        summary: await store.summaryFor(arg.uid, seasonId: arg.splitId),
-        legends: await store.legendBreakdownsFor(
-          arg.uid,
-          seasonId: arg.splitId,
-        ),
-        maps: await store.mapBreakdownsFor(arg.uid, seasonId: arg.splitId),
-        legendMap: await store.legendMapBreakdownsFor(
-          arg.uid,
-          seasonId: arg.splitId,
-        ),
-        squadBreakdown: await store.squadBreakdownFor(
-          arg.uid,
-          seasonId: arg.splitId,
-        ),
+        summary: summary,
+        legends: legends,
+        maps: maps,
+        legendMap: legendMap,
+        squadBreakdown: squadBreakdown,
         timeOfDay: time.hours,
         dayOfWeek: time.weekdays,
       );

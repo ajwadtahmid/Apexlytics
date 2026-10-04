@@ -193,6 +193,8 @@ class _OwnerDialogState extends ConsumerState<_OwnerDialog> {
           .read(ownerUnlockedProvider.notifier)
           .unlock(_controller.text);
       if (!ok) error = 'Token not accepted.';
+    } on OwnerTokenStorageException catch (e) {
+      error = e.message;
     } catch (_) {
       error = 'Couldn\'t reach the server. Try again.';
     }

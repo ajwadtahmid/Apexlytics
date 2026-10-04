@@ -448,7 +448,11 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
     super.didUpdateWidget(old);
     if (old.stats.uid != widget.stats.uid ||
         old.stats.rankScore != widget.stats.rankScore ||
-        old.stats.currentLegend != widget.stats.currentLegend) {
+        old.stats.currentLegend != widget.stats.currentLegend ||
+        // The cached copy shown at first wasn't recorded (see
+        // appendSnapshot's staleAt); the live one that replaces it is the
+        // first real reading, even at the same RP.
+        (old.staleAt != null && widget.staleAt == null)) {
       // On player switch, pre-populate the new player's existing snapshots
       // before the async work completes so the graph doesn't go blank.
       if (old.stats.uid != widget.stats.uid) _initSnapshots();
@@ -490,7 +494,8 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
 
     final (snaps, legends, stack) = await (
       // Primes the snapshot cache on first call for this UID.
-      appendAndLoadSnapshots(widget.stats, store),
+      // A cached copy of the stats is shown straight away; it isn't a reading.
+      appendAndLoadSnapshots(widget.stats, store, staleAt: widget.staleAt),
       mergeLegendStats(widget.stats.legendStats, prefs, uid: widget.stats.uid),
       legendChanged && legend.isNotEmpty
           ? pushToLegendStack(legend, prefs, uid: widget.stats.uid)

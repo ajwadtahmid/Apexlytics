@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -391,6 +392,28 @@ void main() {
     },
   );
 
+  test(
+    'rankedSeasonCounts keeps a split whose games are all excluded, so the '
+    'History tab can still reach and restore them',
+    () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+
+      final seasons = {'s1': season('br_ranked_s1_s1', 0, 1000)};
+      final handExcluded = match('1', 100);
+      await store.upsertAll('1', [
+        handExcluded,
+        match('1', 300, rp: -1500), // auto-excluded reset artifact
+      ], seasons: seasons);
+      await store.setExcluded(handExcluded.id, true);
+
+      expect((await store.rankedSeasonCounts('1'))['br_ranked_s1_s1'], 2);
+      // The aggregates still leave both games out.
+      expect((await store.summaryFor('1')).games, 0);
+      expect(await store.getBySeason('1', 'br_ranked_s1_s1'), hasLength(2));
+    },
+  );
+
   test('getBySeason returns one split; Unknown includes NULL rows', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);
@@ -485,6 +508,63 @@ void main() {
     final counts = await store.seasonCounts('1');
     expect(counts['br_ranked_s1_s1'], 1);
     expect(counts[kUnknownSeasonId], isNull);
+  });
+
+  test('backfillSeasonIds leaves a row outside every known window alone, and '
+      'still classifies it once a window covering it is learned', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    // End 100_600_000 ms: far outside the only known window.
+    await store.upsertAll('1', [match('1', 100000), match('1', 300)]);
+    await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 1000)});
+
+    var counts = await store.seasonCounts('1');
+    expect(counts['br_ranked_s1_s1'], 1, reason: 'the covered row is filed');
+    expect(counts.containsKey(kUnknownSeasonId), isFalse);
+    expect(counts.length, 1, reason: 'the uncovered row is not touched');
+
+    // A later split covers it.
+    await store.backfillSeasonIds({
+      's1': season('br_ranked_s1_s1', 0, 1000),
+      's2': season('br_ranked_s2_s1', 99000, 200000),
+    });
+    counts = await store.seasonCounts('1');
+    expect(counts['br_ranked_s2_s1'], 1);
+  });
+
+  test('backfillSeasonIds still re-files a placeholder-id row outside every '
+      'window under Unknown', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    await store.upsertAll(
+      '1',
+      [match('1', 100000)],
+      seasons: {'x': season('__other__', 0, 10000000)},
+    );
+    expect((await store.seasonCounts('1'))['__other__'], 1);
+
+    await store.backfillSeasonIds({'s1': season('br_ranked_s1_s1', 0, 1000)});
+    final counts = await store.seasonCounts('1');
+    expect(counts['__other__'], isNull);
+    expect(counts[kUnknownSeasonId], 1);
+  });
+
+  test('existingIds returns only the ids that are stored', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+    await store.upsertAll('1', [match('1', 100), match('1', 200)]);
+
+    expect(
+      await store.existingIds(['1_100', '1_999', '1_200', '1_100']),
+      {'1_100', '1_200'},
+    );
+    expect(await store.existingIds(const []), isEmpty);
+
+    // More ids than fit in one query's bound variables.
+    final many = [for (var i = 0; i < 1500; i++) '9_$i', '1_100'];
+    expect(await store.existingIds(many), {'1_100'});
   });
 
   test(
@@ -670,6 +750,83 @@ void main() {
     },
   );
 
+  test('upgrading a v10 database lifts the edited flag the v7 repair left on '
+      'a nulled kills/damage, and only that', () async {
+    final dir = await Directory.systemTemp.createTemp('rhs_mig11');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = p.join(dir.path, 'ranked_history.db');
+
+    String blob({int? kills, int? damage}) => jsonEncode([
+      if (kills != null) {'key': 'kills', 'name': 'BR Kills', 'value': kills},
+      if (damage != null)
+        {'key': 'damage', 'name': 'BR Damage', 'value': damage},
+    ]);
+
+    final v10 = await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 10,
+        onCreate: (db, _) async {
+          await db.execute('''
+            CREATE TABLE ranked_matches (
+              id TEXT PRIMARY KEY, uid TEXT NOT NULL, player_name TEXT,
+              legend TEXT, game_mode TEXT, map_key TEXT, rp_change INTEGER,
+              cumulative_rp INTEGER, rank_img TEXT, length_secs INTEGER,
+              start_ms INTEGER, end_ms INTEGER, is_party_full INTEGER,
+              trackers TEXT, season_id TEXT, kills INTEGER, damage INTEGER,
+              edited_fields TEXT, excluded INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          await db.execute(
+            'CREATE TABLE stat_snapshots (uid TEXT NOT NULL, ts_ms INTEGER '
+            'NOT NULL, rp INTEGER NOT NULL, season_id TEXT, '
+            'PRIMARY KEY (uid, ts_ms))',
+          );
+        },
+      ),
+    );
+    Future<void> seed(
+      int start, {
+      int? kills,
+      int? damage,
+      String? flags,
+      String trackers = '[]',
+    }) => v10.insert('ranked_matches', {
+      ...match('1', start).toStoredMap(),
+      'kills': kills,
+      'damage': damage,
+      'edited_fields': flags,
+      'trackers': trackers,
+    });
+
+    // 100: repaired kills (null, flagged, blob still carries 9999).
+    await seed(100, flags: ',kills,', trackers: blob(kills: 9999, damage: 500), damage: 500);
+    // 200: a person nulled a plausible value: flag stays.
+    await seed(200, flags: ',kills,', trackers: blob(kills: 3, damage: 500), damage: 500);
+    // 300: a person set a real value: flag stays.
+    await seed(300, kills: 7, flags: ',kills,', trackers: blob(kills: 9999));
+    // 400: both repaired.
+    await seed(400, flags: ',damage,kills,', trackers: blob(kills: 9999, damage: 99999));
+    // 500: damage repaired, kills hand-edited to a real value.
+    await seed(500, kills: 5, flags: ',damage,kills,', trackers: blob(kills: 9999, damage: 99999));
+    await v10.close();
+
+    final store = RankedHistoryStore(overridePath: path);
+    addTearDown(store.close);
+    final byStart = {
+      for (final r in await store.exportRows()) (r['start_ms'] as int) ~/ 1000: r,
+    };
+
+    expect(byStart[100]!['edited_fields'], isNull);
+    expect(byStart[200]!['edited_fields'], ',kills,');
+    expect(byStart[300]!['edited_fields'], ',kills,');
+    expect(byStart[400]!['edited_fields'], isNull);
+    expect(byStart[500]!['edited_fields'], ',kills,');
+    // Values are untouched: only the protection is lifted.
+    expect(byStart[300]!['kills'], 7);
+    expect(byStart[100]!['kills'], isNull);
+  });
+
   group('importRows hardening (the file comes from the user)', () {
     test('an unknown key does not fail the whole restore', () async {
       final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
@@ -743,8 +900,8 @@ void main() {
       expect((await store.getAll('1')).single.kills, isNull);
     });
 
-    test('a stored id that differs from the dedup key is what edits use',
-        () async {
+    test('a restored row is filed under the id its own uid and start time '
+        'give, whatever id the file claims', () async {
       final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
       addTearDown(store.close);
       final row = Map<String, Object?>.from(match('1', 100).toStoredMap())
@@ -752,9 +909,33 @@ void main() {
       await store.importRows([row]);
 
       final m = (await store.getAll('1')).single;
-      expect(m.id, 'custom-id');
+      expect(m.id, '1_100');
       expect(await store.editMatch(m.id, {'kills': 4}), isTrue);
       expect((await store.getAll('1')).single.kills, 4);
+    });
+
+    test('a row cannot take over another player\'s match by claiming its id, '
+        'nor duplicate its own match under a different one', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('A', [match('A', 100)]);
+      await store.upsertAll('B', [match('B', 100)]);
+
+      // Claims A's id but belongs to B (and to a different instant).
+      final hijack = Map<String, Object?>.from(match('B', 777).toStoredMap())
+        ..['id'] = 'A_100';
+      // The same B match the sync already stored, under an invented id.
+      final dupe = Map<String, Object?>.from(match('B', 100).toStoredMap())
+        ..['id'] = 'invented';
+      await store.importRows([hijack, dupe]);
+
+      expect(await store.count('A'), 1, reason: "A's match was not moved");
+      expect(
+        (await store.getAll('A')).single.startTime.millisecondsSinceEpoch,
+        100000,
+      );
+      expect(await store.count('B'), 2, reason: 'one new match, no duplicate');
+      expect(await store.allIds(), {'A_100', 'B_100', 'B_777'});
     });
 
     test('editMatch applies a value edit and an exclusion together, and '
@@ -1321,12 +1502,14 @@ void main() {
         (await store.legendBreakdownsFor('1')).single.games,
         2,
       );
+      // The picker still counts the reset artifact, so a split holding only
+      // excluded games stays reachable; the aggregates above skip it.
       expect(
         (await store.rankedSeasonCounts('1')).values.fold<int>(
           0,
           (a, b) => a + b,
         ),
-        2,
+        3,
       );
       expect((await store.personalBestGamesFor('1')).bestRpGame?.rpChange, 40);
       expect((await store.mapBreakdownsFor('1')).single.games, 2);

@@ -2,10 +2,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../constants/api_constants.dart';
 import '../constants/prefs_keys.dart';
+import '../utils/app_logger.dart';
 import '../utils/error_messages.dart';
 import '../utils/storage/owner_token_store.dart';
 import 'api_provider.dart';
 import 'settings_provider.dart';
+
+/// The server accepted the owner token, but it couldn't be kept in the
+/// platform's secure storage. Its own type so the UI can say so, instead of
+/// reporting it as a wrong token or a network failure.
+class OwnerTokenStorageException extends AppException {
+  const OwnerTokenStorageException(super.message);
+}
 
 final ownerTokenStoreProvider = Provider<OwnerTokenStore>(
   (ref) => OwnerTokenStore(),
@@ -42,7 +50,20 @@ class OwnerNotifier extends Notifier<bool> {
       if (e.status == 401) return false;
       rethrow;
     }
-    await ref.read(ownerTokenStoreProvider).write(trimmed);
+    try {
+      await ref.read(ownerTokenStoreProvider).write(trimmed);
+    } catch (e) {
+      // The server accepted the token, but the platform's secure store
+      // refused it (no Secret Service on Linux, a locked or corrupted
+      // keystore). Say that, so it isn't mistaken for a wrong token or a
+      // network problem — and don't flag the device as unlocked, since the
+      // token that backs the flag was never kept. Type only: not the text.
+      log.w('owner token write failed (${e.runtimeType})');
+      throw const OwnerTokenStorageException(
+        "The token was accepted, but this device couldn't store it securely. "
+        'Owner mode is not enabled.',
+      );
+    }
     await ref
         .read(sharedPreferencesProvider)
         .setBool(PrefsKeys.ownerUnlocked, true);

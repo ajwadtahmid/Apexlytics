@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -15,6 +16,7 @@ import '../app_logger.dart';
 import 'legend_stats_storage.dart';
 import 'ranked_history_store.dart';
 import 'rp_snapshot_storage.dart';
+import 'season_storage.dart' show mergeRestoredSeasonHistory;
 
 // v1: prefs only. v2 adds `ranked_history`. v3 adds `stat_snapshots` (schema
 // v8 moved these to SQLite); older files still carry them as prefs keys,
@@ -101,6 +103,56 @@ Set<String> prefsKeysTouchedByRestore(
   return {...written, ...cleared};
 }
 
+enum _PrefKind { integer, boolean, text }
+
+const _intKeys = {
+  PrefsKeys.activeProfileIndex,
+  PrefsKeys.statsRefreshMinutes,
+  PrefsKeys.rankedNotifyMinutes,
+  PrefsKeys.pubsNotifyMinutes,
+  PrefsKeys.mixtapeNotifyMinutes,
+  PrefsKeys.wildcardNotifyMinutes,
+  PrefsKeys.defaultTab,
+};
+
+const _boolKeys = {
+  PrefsKeys.keepScreenOn,
+  PrefsKeys.notifyPubsMapRotation,
+  PrefsKeys.notifyRankedMapRotation,
+  PrefsKeys.notifyMixtapeMapRotation,
+  PrefsKeys.notifyWildcardMapRotation,
+};
+
+/// The type the app itself stores under [key]. Every other backed-up key —
+/// profiles, favourites, legend stats, snapshots, season history, the per-UID
+/// blobs — is a JSON-encoded string.
+_PrefKind _kindOf(String key) {
+  if (_intKeys.contains(key) || key.startsWith(PrefsKeys.rankGoalPrefix)) {
+    return _PrefKind.integer;
+  }
+  if (_boolKeys.contains(key)) return _PrefKind.boolean;
+  return _PrefKind.text;
+}
+
+/// [v] as the type the app stores under [key], or null when it can't be one.
+///
+/// A restore used to write whatever JSON type the file held. `SharedPreferences`'
+/// typed getters throw a `TypeError` on a mismatch, so a hand-edited or
+/// foreign file with `"keep_screen_on": 1` or `"active_profile_index": "0"`
+/// made the app's root settings provider throw on every launch. A whole
+/// number that arrived as a double (`30.0`) is accepted as the int it means.
+@visibleForTesting
+Object? coerceRestoredPref(String key, Object? v) => switch (_kindOf(key)) {
+  _PrefKind.integer =>
+    v is int
+        ? v
+        : (v is double && v.isFinite && v == v.truncateToDouble()
+              ? v.toInt()
+              : null),
+  _PrefKind.boolean => v is bool ? v : null,
+  _PrefKind.text => v is String ? v : null,
+};
+
 Future<void> _setTyped(SharedPreferences prefs, String key, Object? v) async {
   if (v is String) {
     await prefs.setString(key, v);
@@ -186,15 +238,23 @@ Future<void> restorePrefsData(
         );
         continue;
       }
-      final v = entry.value;
-      if (v is String || v is int || v is bool || v is double || v is List) {
-        await _setTyped(prefs, entry.key, v);
-      } else {
+      var v = coerceRestoredPref(entry.key, entry.value);
+      if (v == null) {
         log.w(
-          'Backup import: skipping unsupported type for '
-          '"${_redactUid(entry.key)}": ${v.runtimeType}',
+          'Backup import: skipping wrong-typed value for '
+          '"${_redactUid(entry.key)}": ${entry.value.runtimeType}',
+        );
+        continue;
+      }
+      // The windows are checked and merged with what this device already
+      // learned, not trusted: a bogus one would misfile matches permanently.
+      if (entry.key == PrefsKeys.seasonHistory) {
+        v = mergeRestoredSeasonHistory(
+          backupRaw: v as String,
+          deviceRaw: prefs.getString(PrefsKeys.seasonHistory),
         );
       }
+      await _setTyped(prefs, entry.key, v);
     }
     for (final key in toClear) {
       await prefs.remove(key);
@@ -235,7 +295,7 @@ class _ByteCollector implements Sink<List<int>> {
 Future<({List<int> bytes, int matchCount})> buildBackupBytes({
   required Map<String, Object?> prefs,
   required Stream<List<Map<String, Object?>>> matchPages,
-  required List<Map<String, Object?>> snapshotRows,
+  required Stream<List<Map<String, Object?>>> snapshotPages,
   DateTime? exportedAt,
 }) async {
   final sink = _ByteCollector();
@@ -257,18 +317,43 @@ Future<({List<int> bytes, int matchCount})> buildBackupBytes({
     write('${matchCount == 0 ? '' : ','}${json.substring(1, json.length - 1)}');
     matchCount += page.length;
   }
-  write('],"stat_snapshots":${jsonEncode(snapshotRows)}}');
+  write('],"stat_snapshots":[');
+  var snapshotCount = 0;
+  await for (final page in snapshotPages) {
+    final json = jsonEncode(page);
+    write(
+      '${snapshotCount == 0 ? '' : ','}${json.substring(1, json.length - 1)}',
+    );
+    snapshotCount += page.length;
+  }
+  write(']}');
   out.close();
   return (bytes: sink.bytes, matchCount: matchCount);
 }
 
+/// Whether a backup is handed to the OS share sheet instead of written to a
+/// chosen folder: on iOS, and on Android too. Android's folder picker returns a
+/// document-tree URI that the plugin flattens to a filesystem path, which only
+/// accepts writes in a few public folders — any other folder, an SD card or a
+/// USB drive failed with a permission error after the user had picked it.
+bool get backupGoesThroughShareSheet => Platform.isIOS || Platform.isAndroid;
+
+/// How long an Android share leaves its temp file in place. The share future
+/// completes when the chooser closes, but the app that was picked (Files,
+/// Drive) may still be reading the file — deleting at once can truncate it.
+const Duration kAndroidBackupCleanupDelay = Duration(minutes: 10);
+
 /// Writes [bytes] to [file], shares it and deletes it. False if the user dismissed the sheet
 /// (nothing saved); `unavailable` counts as shared. [share] is a test seam.
+///
+/// [cleanupDelay] postpones the deletion (see [kAndroidBackupCleanupDelay]);
+/// zero deletes as soon as the share call returns.
 @visibleForTesting
 Future<bool> shareBackupFile(
   File file,
   List<int> bytes, {
   Future<ShareResult> Function(ShareParams params)? share,
+  Duration cleanupDelay = Duration.zero,
 }) async {
   await file.writeAsBytes(bytes);
   try {
@@ -278,16 +363,43 @@ Future<bool> shareBackupFile(
     return result.status != ShareResultStatus.dismissed;
   } finally {
     // Don't leave the export (UIDs, names) in the temp directory.
-    try {
-      if (await file.exists()) await file.delete();
-    } catch (e) {
-      log.w('Backup temp file cleanup failed', error: e);
+    if (cleanupDelay == Duration.zero) {
+      await _deleteBackupTempFile(file);
+    } else {
+      // A process that dies first leaves the file for the sweep before the
+      // next export (see [_sweepBackupTempFiles]).
+      Timer(cleanupDelay, () => unawaited(_deleteBackupTempFile(file)));
     }
   }
 }
 
-/// Shows a save dialog and writes backup JSON to the user's selected location.
-/// Returns the file path, or null if cancelled (including a dismissed iOS share sheet).
+Future<void> _deleteBackupTempFile(File file) async {
+  try {
+    if (await file.exists()) await file.delete();
+  } catch (e) {
+    log.w('Backup temp file cleanup failed', error: e);
+  }
+}
+
+/// Removes backups an earlier export left in [dir] — one whose delayed delete
+/// never ran because the app was closed first.
+Future<void> _sweepBackupTempFiles(Directory dir) async {
+  try {
+    await for (final entity in dir.list()) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      if (name.startsWith('apexlytics_') && name.endsWith('.json.gz')) {
+        await _deleteBackupTempFile(entity);
+      }
+    }
+  } catch (e) {
+    log.w('Backup temp sweep failed', error: e);
+  }
+}
+
+/// Writes the backup: through the share sheet on iOS and Android
+/// ([backupGoesThroughShareSheet]), to a folder the user picks elsewhere.
+/// Returns the file path, or null if cancelled (including a dismissed share sheet).
 ///
 /// [rankedStore], when provided, embeds the full ranked match history in the
 /// same file so device migration stays a single-file operation.
@@ -296,21 +408,25 @@ Future<String?> exportBackup(
   RankedHistoryStore? rankedStore,
 }) async {
   final payload = _collect(prefs);
-  final statSnapshots = rankedStore == null
-      ? const <Map<String, Object?>>[]
-      : await rankedStore.exportSnapshotRows();
   final (bytes: compressed, :matchCount) = await buildBackupBytes(
     prefs: payload,
     matchPages: rankedStore?.exportRowPages() ?? const Stream.empty(),
-    snapshotRows: statSnapshots,
+    snapshotPages: rankedStore?.exportSnapshotRowPages() ?? const Stream.empty(),
   );
   final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
   final defaultFilename = 'apexlytics_$stamp.json.gz';
 
-  if (Platform.isIOS) {
+  if (backupGoesThroughShareSheet) {
     final dir = await getTemporaryDirectory();
+    await _sweepBackupTempFiles(dir);
     final filePath = '${dir.path}/$defaultFilename';
-    final shared = await shareBackupFile(File(filePath), compressed);
+    final shared = await shareBackupFile(
+      File(filePath),
+      compressed,
+      cleanupDelay: Platform.isAndroid
+          ? kAndroidBackupCleanupDelay
+          : Duration.zero,
+    );
     if (!shared) {
       // Dismissed: a cancellation, not an export.
       log.i('Backup share dismissed');
@@ -333,7 +449,7 @@ Future<String?> exportBackup(
   final filePath = [dirPath, defaultFilename].join(Platform.pathSeparator);
   await File(filePath).writeAsBytes(compressed);
 
-  // Path omitted for the same reason as the iOS branch above.
+  // Path omitted for the same reason as the share-sheet branch above.
   log.i(
     'Backup exported: ${payload.length} keys, '
     '$matchCount ranked matches, '
@@ -658,8 +774,18 @@ Future<int> _countNewMatches(
   RankedHistoryStore? rankedStore,
 ) async {
   if (rows is! List || rows.isEmpty || rankedStore == null) return 0;
-  final existing = await rankedStore.allIds();
-  return rows.where((r) => r is Map && !existing.contains(r['id'])).length;
+  // Only the ids the file carries are looked up (in chunks), so this stays
+  // bounded by the file rather than by however much history is stored.
+  // By the id a restore would file each row under, not the one the file claims.
+  final existing = await rankedStore.existingIds([
+    for (final r in rows)
+      if (r is Map) ?RankedHistoryStore.canonicalIdOf(r),
+  ]);
+  return rows.where((r) {
+    if (r is! Map) return false;
+    final id = RankedHistoryStore.canonicalIdOf(r);
+    return id == null || !existing.contains(id);
+  }).length;
 }
 
 /// Restores a previously-[previewBackup]'d file. [rankedStore], when

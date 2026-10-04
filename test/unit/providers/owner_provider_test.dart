@@ -26,6 +26,20 @@ class FakeOwnerTokenStore implements OwnerTokenStore {
   Future<void> clear() async => token = null;
 }
 
+/// A secure store whose platform backend refuses writes (no Secret Service, a
+/// locked keystore).
+class _RefusingTokenStore implements OwnerTokenStore {
+  @override
+  Future<String?> read() async => null;
+
+  @override
+  Future<void> write(String value) =>
+      Future.error(StateError('platform store unavailable'));
+
+  @override
+  Future<void> clear() async {}
+}
+
 void main() {
   late MockApiService api;
   late FakeOwnerTokenStore store;
@@ -106,6 +120,24 @@ void main() {
         expect(container.read(ownerUnlockedProvider), isFalse);
       },
     );
+
+    test('a token the secure store cannot keep is reported as that, and does '
+        'not unlock the device', () async {
+      await setUpContainer();
+      container.updateOverrides([
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        apiServiceProvider.overrideWithValue(api),
+        ownerTokenStoreProvider.overrideWithValue(_RefusingTokenStore()),
+      ]);
+      stubVerify().thenAnswer((_) async => (status: 204, data: null));
+
+      await expectLater(
+        container.read(ownerUnlockedProvider.notifier).unlock('secret'),
+        throwsA(isA<OwnerTokenStorageException>()),
+      );
+      expect(container.read(ownerUnlockedProvider), isFalse);
+      expect(prefs.getBool(PrefsKeys.ownerUnlocked), isNull);
+    });
 
     test('an empty token is refused without calling the server', () async {
       await setUpContainer();

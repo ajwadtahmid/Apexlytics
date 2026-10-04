@@ -44,18 +44,27 @@ mixin SnapshotStateMixin {
   /// Returns whether a new/changed season was learned, so a
   /// [ConsumerState] caller can invalidate anything caching the season
   /// list elsewhere (e.g. the ranked breakdown's split picker).
+  ///
+  /// [staleAt] marks [stats] as a cached copy, which is not recorded as a new
+  /// reading (see [appendSnapshot]); the graph still loads.
   Future<bool> appendSnapshotState(
     SharedPreferences prefs,
     RankedHistoryStore store,
-    PlayerStats stats,
-  ) async {
+    PlayerStats stats, {
+    DateTime? staleAt,
+  }) async {
     if (!mounted) return false;
     final season = stats.rankedSeason;
     final seasonChanged = season != null
         ? await upsertSeason(season, prefs)
         : false;
     if (!mounted) return seasonChanged;
-    final snaps = await appendSnapshot(stats, store, uid: stats.uid);
+    final snaps = await appendSnapshot(
+      stats,
+      store,
+      uid: stats.uid,
+      staleAt: staleAt,
+    );
     if (!mounted) return seasonChanged;
     setState(() {
       snapshots = snaps;

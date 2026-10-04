@@ -126,22 +126,80 @@ void main() {
   });
 
   group('restorePrefsData', () {
-    test('restores a native string-list value instead of dropping it', () async {
-      // Every backed-up list pref today is stored as a JSON-encoded string, so
-      // this simulates the type a future setStringList-backed pref would
-      // round-trip as — the exact case that used to hit the "unsupported
-      // type" branch and vanish silently.
+    test('skips a value whose type is not the one the app stores, rather than '
+        'writing something the settings reader would throw on', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
 
       await restorePrefsData(prefs, {
+        // Favourites are stored as a JSON-encoded string; a native list would
+        // make `getString` throw on every launch.
         PrefsKeys.favoriteRankedMapNames: ['Olympus', "World's Edge"],
+        PrefsKeys.activeProfileIndex: '0',
+        PrefsKeys.keepScreenOn: 1,
+        PrefsKeys.statsRefreshMinutes: 'ten',
+        PrefsKeys.playerName: 42,
+        // A fine value alongside them still lands.
+        PrefsKeys.defaultTab: 2,
       });
 
-      expect(prefs.getStringList(PrefsKeys.favoriteRankedMapNames), [
-        'Olympus',
-        "World's Edge",
-      ]);
+      expect(prefs.containsKey(PrefsKeys.favoriteRankedMapNames), isFalse);
+      expect(prefs.containsKey(PrefsKeys.activeProfileIndex), isFalse);
+      expect(prefs.containsKey(PrefsKeys.keepScreenOn), isFalse);
+      expect(prefs.containsKey(PrefsKeys.statsRefreshMinutes), isFalse);
+      expect(prefs.containsKey(PrefsKeys.playerName), isFalse);
+      expect(prefs.getInt(PrefsKeys.defaultTab), 2);
+    });
+
+    test('coerceRestoredPref accepts a whole-number double as an int, and '
+        'nothing that merely looks similar', () {
+      expect(coerceRestoredPref(PrefsKeys.defaultTab, 2.0), 2);
+      expect(coerceRestoredPref(PrefsKeys.defaultTab, 2.5), isNull);
+      expect(coerceRestoredPref(PrefsKeys.defaultTab, double.nan), isNull);
+      expect(coerceRestoredPref(PrefsKeys.defaultTab, '2'), isNull);
+      expect(coerceRestoredPref(PrefsKeys.keepScreenOn, true), true);
+      expect(coerceRestoredPref(PrefsKeys.keepScreenOn, 'true'), isNull);
+      expect(coerceRestoredPref(PrefsKeys.profiles, '[]'), '[]');
+      expect(coerceRestoredPref(PrefsKeys.profiles, []), isNull);
+      // Per-UID keys follow their prefix: a goal is an int, stats are text.
+      expect(coerceRestoredPref(PrefsKeys.rankGoalKeyFor('1'), 7), 7);
+      expect(coerceRestoredPref(PrefsKeys.rankGoalKeyFor('1'), '7'), isNull);
+      expect(coerceRestoredPref(PrefsKeys.legendStatsKeyFor('1'), '{}'), '{}');
+    });
+
+    test('a restored season history is validated and merged with the device\'s '
+        'own seasons', () async {
+      const day = 86400000;
+      final good = {'id': 'br_ranked_s30_s1', 'start': 0, 'end': 60 * day};
+      final device = {'id': 'br_ranked_s29_s2', 'start': 100 * day, 'end': 150 * day};
+      // Same split as `good`, but the device's window must win.
+      final deviceSame = {'id': 'br_ranked_s30_s1', 'start': 1, 'end': 2 * day};
+
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.seasonHistory: jsonEncode([device, deviceSame]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await restorePrefsData(prefs, {
+        PrefsKeys.seasonHistory: jsonEncode([
+          good,
+          // Ends before it starts.
+          {'id': 'br_ranked_s31_s1', 'start': 90 * day, 'end': 10 * day},
+          // A 2,000-day "split" would swallow every match that ever ended.
+          {'id': 'br_ranked_s32_s1', 'start': 0, 'end': 2000 * day},
+          // Not a split id at all.
+          {'id': '__other__', 'start': 0, 'end': 50 * day},
+        ]),
+      });
+
+      final stored = (jsonDecode(prefs.getString(PrefsKeys.seasonHistory)!) as List)
+          .cast<Map<String, dynamic>>();
+      expect({for (final s in stored) s['id']}, {
+        'br_ranked_s30_s1',
+        'br_ranked_s29_s2',
+      });
+      final s30 = stored.firstWhere((s) => s['id'] == 'br_ranked_s30_s1');
+      expect(s30['end'], 2 * day, reason: "the device's own window wins");
     });
 
     test('still restores string/int/bool/double values', () async {
@@ -358,14 +416,22 @@ void main() {
       final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
       addTearDown(source.close);
       await source.upsertAll(uid, [for (var i = 0; i < 7; i++) game(uid, i * 1000)]);
+      // Two UIDs, 5 readings: pages of 2 cross both a page seam and a UID seam.
+      for (final owner in [uid, '1000000000002']) {
+        await source.appendSnapshotsFor(owner, [
+          for (var i = 0; i < (owner == uid ? 3 : 2); i++)
+            StatSnapshot(
+              timestamp: DateTime.fromMillisecondsSinceEpoch(5000 + i),
+              rp: 1000 + i,
+            ),
+        ]);
+      }
 
       final built = await buildBackupBytes(
         prefs: {PrefsKeys.playerName: 'Aceu'},
         // Pages of 3: 3 + 3 + 1, so the page seams are exercised.
         matchPages: source.exportRowPages(pageSize: 3),
-        snapshotRows: [
-          {'uid': uid, 'ts_ms': 5000, 'rp': 1020, 'season_id': null},
-        ],
+        snapshotPages: source.exportSnapshotRowPages(pageSize: 2),
       );
 
       await source.close(); // the in-memory path is shared while it stays open
@@ -374,7 +440,13 @@ void main() {
       expect(envelope['version'], 3);
       expect(envelope['prefs'], {PrefsKeys.playerName: 'Aceu'});
       expect((envelope['ranked_history'] as List), hasLength(7));
-      expect((envelope['stat_snapshots'] as List), hasLength(1));
+      final snapshots = (envelope['stat_snapshots'] as List)
+          .cast<Map<String, dynamic>>();
+      expect(snapshots, hasLength(5), reason: 'every reading, once');
+      expect(
+        {for (final s in snapshots) '${s['uid']}:${s['ts_ms']}'},
+        hasLength(5),
+      );
 
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
@@ -394,7 +466,7 @@ void main() {
       final built = await buildBackupBytes(
         prefs: const {},
         matchPages: const Stream.empty(),
-        snapshotRows: const [],
+        snapshotPages: const Stream.empty(),
       );
 
       final envelope = decode(built.bytes);
@@ -421,6 +493,20 @@ void main() {
       onShare?.call();
       return ShareResult('', status);
     };
+
+    test('with a cleanup delay the file outlives the share call (the receiving '
+        'app may still be reading it) and is removed afterwards', () async {
+      await shareBackupFile(
+        file,
+        [1, 2, 3],
+        share: answering(ShareResultStatus.unavailable),
+        cleanupDelay: const Duration(milliseconds: 150),
+      );
+      expect(file.existsSync(), isTrue, reason: 'not deleted at once');
+
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(file.existsSync(), isFalse);
+    });
 
     test('a completed share counts as exported', () async {
       expect(

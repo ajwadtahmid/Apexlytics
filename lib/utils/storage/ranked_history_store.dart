@@ -31,7 +31,7 @@ class RankedHistoryStore {
   /// lifecycle, backup envelope and per-UID scoping.
   static const snapshotTable = 'stat_snapshots';
 
-  static const _version = 10;
+  static const _version = 11;
 
   /// How long a favourite's RP snapshots are kept (see [pruneSnapshots]).
   static const favoriteSnapshotMaxAge = Duration(days: 90);
@@ -210,6 +210,13 @@ class RankedHistoryStore {
             'ALTER TABLE $table ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0',
           );
         }
+        // v10 → v11: the v6 → v7 repair above flagged every kills/damage value
+        // it nulled as hand-edited, which also froze the column against a
+        // later *corrected* value from upstream. Lift that flag again where it
+        // can only have come from the repair.
+        if (oldVersion < 11) {
+          await _unfreezeRepairedStats(db);
+        }
       },
     );
     return _db!;
@@ -307,6 +314,58 @@ class RankedHistoryStore {
       );
     }
     await batch.commit(noResult: true);
+  }
+
+  /// Clears the `kills`/`damage` edited flag on rows where the flagged column is
+  /// NULL *and* the untouched `trackers` blob still carries an implausible value
+  /// for it — the signature of [_repairImplausibleStats], not of a person.
+  /// A user who nulled a value by hand almost never has an out-of-range tracker
+  /// behind it, so their flag is left alone.
+  ///
+  /// Unflagging is safe in both directions: if upstream still serves the same
+  /// bad value, `withPlausibleStats` nulls it again on the next sync; if it has
+  /// corrected it, the corrected value now lands.
+  Future<void> _unfreezeRepairedStats(Database db) async {
+    await forEachRowInBatches(
+      db,
+      table,
+      columns: ['trackers', 'kills', 'damage', 'edited_fields'],
+      where:
+          "(kills IS NULL AND instr(COALESCE(edited_fields, ''), ',kills,') > 0)"
+          " OR (damage IS NULL AND instr(COALESCE(edited_fields, ''), ',damage,') > 0)",
+      apply: (batch, row) {
+        final flags = decodeEditedFields(row['edited_fields']);
+        final trackers = RankedMatch.fromStoredMap({
+          'trackers': row['trackers'],
+        }).trackers;
+        final rawKills = RankedMatch.killsFrom(trackers);
+        final rawDamage = RankedMatch.damageFrom(trackers);
+        final repairedKills =
+            row['kills'] == null &&
+            flags.contains('kills') &&
+            rawKills != null &&
+            (rawKills < 0 || rawKills > kMaxPlausibleKills);
+        final repairedDamage =
+            row['damage'] == null &&
+            flags.contains('damage') &&
+            rawDamage != null &&
+            (rawDamage < 0 || rawDamage > kMaxPlausibleDamage);
+        if (!repairedKills && !repairedDamage) return;
+        batch.update(
+          table,
+          {
+            'edited_fields': encodeEditedFields({
+              for (final f in flags)
+                if (!(f == 'kills' && repairedKills) &&
+                    !(f == 'damage' && repairedDamage))
+                  f,
+            }),
+          },
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      },
+    );
   }
 
   /// Runs [apply] over every row of [table] (projected to [columns] plus
@@ -533,14 +592,36 @@ class RankedHistoryStore {
   /// every row already matches its correct id, so it's safe to call often;
   /// skipped entirely until season metadata exists.
   Future<void> backfillSeasonIds(Map<String, SeasonMeta> seasons) async {
-    if (seasons.isEmpty) return;
+    // A row can only gain a real id from a window containing its end time, so
+    // a NULL/unknown row outside every known window is left out of the query
+    // instead of being read back and re-derived to the same answer on every
+    // sync. A placeholder-id row is always included: it needs re-filing under
+    // Unknown or a real split either way.
+    final windows = [
+      for (final s in seasons.values)
+        if (s.end.isAfter(s.start)) s,
+    ];
+    if (windows.isEmpty) return;
     final db = await _open();
-    // Uses [_needsSeasonId] verbatim so SQLite can serve it from the matching
-    // partial index instead of scanning every row.
+    final inWindow = List.filled(
+      windows.length,
+      '(end_ms >= ? AND end_ms < ?)',
+    ).join(' OR ');
+    // [_needsSeasonId] stays verbatim (parenthesised as one term) so SQLite can
+    // still serve it from the matching partial index.
     final rows = await db.query(
       table,
       columns: ['id', 'end_ms', 'season_id'],
-      where: _needsSeasonId,
+      where:
+          '($_needsSeasonId) AND '
+          '((season_id IS NOT NULL AND season_id != ?) OR $inWindow)',
+      whereArgs: [
+        kUnknownSeasonId,
+        for (final s in windows) ...[
+          s.start.millisecondsSinceEpoch,
+          s.end.millisecondsSinceEpoch,
+        ],
+      ],
     );
     if (rows.isEmpty) return;
     final batch = db.batch();
@@ -708,12 +789,17 @@ class RankedHistoryStore {
   /// so a split that holds only pubs never shows in the picker. Drives the split
   /// dropdown without hydrating a single match — the core of scoping loads to
   /// one split at a time.
+  ///
+  /// Deliberately counts hand-excluded and auto-excluded games too, unlike the
+  /// aggregates: the History tab (the only place to un-exclude a match) lives
+  /// inside a split, so a split whose every game is excluded must stay
+  /// reachable. Its aggregates just read as empty.
   Future<Map<String, int>> rankedSeasonCounts(String uid) async {
     final db = await _open();
     final rows = await db.rawQuery(
       'SELECT COALESCE(season_id, ?) AS sid, COUNT(*) AS c FROM $table '
       "WHERE uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0 "
-      'AND excluded = 0 AND $kSqlPlausibleRpChange GROUP BY sid',
+      'GROUP BY sid',
       [kUnknownSeasonId, uid],
     );
     return {for (final r in rows) r['sid'] as String: (r['c'] as num).toInt()};
@@ -1114,10 +1200,38 @@ class RankedHistoryStore {
   /// which needs to say how many of a backup file's rows are actually new
   /// before the user commits to restoring it — a plain `id`-only projection
   /// avoids hydrating any [RankedMatch].
+  ///
+  /// Test-only now: loading every id is O(history). The preview uses
+  /// [existingIds], which is bounded by the backup file instead.
+  @visibleForTesting
   Future<Set<String>> allIds() async {
     final db = await _open();
     final rows = await db.query(table, columns: ['id']);
     return {for (final r in rows) r['id'] as String};
+  }
+
+  /// The subset of [ids] already stored, looked up in chunks so only the ids a
+  /// backup file actually carries are ever bound or returned, however large
+  /// the stored history is.
+  Future<Set<String>> existingIds(Iterable<String> ids) async {
+    final db = await _open();
+    final found = <String>{};
+    final pending = ids.toSet().toList();
+    // SQLite caps bound variables (999 on older builds).
+    const chunk = 500;
+    for (var i = 0; i < pending.length; i += chunk) {
+      final part = pending.sublist(i, (i + chunk).clamp(0, pending.length));
+      final rows = await db.query(
+        table,
+        columns: ['id'],
+        where: 'id IN (${List.filled(part.length, '?').join(', ')})',
+        whereArgs: part,
+      );
+      for (final r in rows) {
+        found.add(r['id'] as String);
+      }
+    }
+    return found;
   }
 
   // ── RP snapshots ───────────────────────────────────────────────────────────
@@ -1224,11 +1338,31 @@ class RankedHistoryStore {
     return (rows.first['c'] as num?)?.toInt() ?? 0;
   }
 
-  /// Every snapshot row across all UIDs - the export counterpart of
-  /// [exportRows].
-  Future<List<Map<String, Object?>>> exportSnapshotRows() async {
+  /// Every snapshot row across all UIDs, [pageSize] at a time - the export
+  /// counterpart of [exportRowPages]. Paged by the `(uid, ts_ms)` primary key,
+  /// not `OFFSET`, so a concurrent append can't shift rows past the cursor.
+  /// (Spelled out rather than as a row-value comparison, which older Android
+  /// SQLite builds don't support.)
+  Stream<List<Map<String, Object?>>> exportSnapshotRowPages({
+    int pageSize = 500,
+  }) async* {
     final db = await _open();
-    return db.query(snapshotTable, orderBy: 'uid ASC, ts_ms ASC');
+    String? lastUid;
+    int? lastTs;
+    while (true) {
+      final page = await db.query(
+        snapshotTable,
+        where: lastUid == null ? null : 'uid > ? OR (uid = ? AND ts_ms > ?)',
+        whereArgs: lastUid == null ? null : [lastUid, lastUid, lastTs],
+        orderBy: 'uid ASC, ts_ms ASC',
+        limit: pageSize,
+      );
+      if (page.isEmpty) return;
+      yield page;
+      if (page.length < pageSize) return;
+      lastUid = page.last['uid'] as String;
+      lastTs = (page.last['ts_ms'] as num).toInt();
+    }
   }
 
   /// Restores snapshot rows from an export. Idempotent. Returns how many
@@ -1420,6 +1554,16 @@ class RankedHistoryStore {
     return skipped;
   }
 
+  /// The stored id a backup row [r] belongs under — [RankedMatch.dedupKey]
+  /// (`uid_startSecond`) computed from its own columns — or null when it has no
+  /// usable `uid` or `start_ms`.
+  static String? canonicalIdOf(Map<dynamic, dynamic> r) {
+    final uid = r['uid'];
+    final start = r['start_ms'];
+    if (uid is! String || uid.isEmpty || start is! num) return null;
+    return '${uid}_${start.toInt() ~/ 1000}';
+  }
+
   /// [r] as a row [importRows] can queue, or null when it isn't usable —
   /// see [importRows] for the rules.
   ///
@@ -1455,6 +1599,13 @@ class RankedHistoryStore {
     }
     // NOT NULL in the table; absent means "not excluded".
     row['excluded'] = (row['excluded'] as int? ?? 0) != 0 ? 1 : 0;
+
+    // The id is derived from the row's own uid and start time, never trusted
+    // from the file. `ON CONFLICT(id)` lets a restored row overwrite `uid` and
+    // `start_ms` on whatever it matches, so an id that doesn't belong to the
+    // row could move one player's match onto another, or sit beside the same
+    // match under its real key and double-count it in every aggregate.
+    row['id'] = canonicalIdOf(r)!;
 
     // The stored GLOB is looser than [SeasonMeta.isSplitId] and never demotes
     // an id, so drop anything Dart wouldn't accept.

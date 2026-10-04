@@ -107,6 +107,24 @@ void main() {
       final list = RankedMatch.listFromJson([brMatch(), 'garbage', 42]);
       expect(list.length, 1);
     });
+
+    test('listFromJson skips a map row with a wrongly-typed field, keeping '
+        'the rest of the batch', () {
+      final list = RankedMatch.listFromJson([
+        brMatch(),
+        {...brMatch(), 'isPartyFull': 0},
+        {...brMatch(), 'name': 12345},
+        brMatch(),
+      ]);
+      expect(list.length, 2);
+    });
+
+    test('listFromJson skips a match with no start timestamp, which would '
+        'otherwise all key as uid_0', () {
+      final noStart = {...brMatch()}..remove('gameStartTimestamp');
+      final list = RankedMatch.listFromJson([noStart, brMatch(), noStart]);
+      expect(list.length, 1);
+    });
   });
 
   group('storage serialization', () {

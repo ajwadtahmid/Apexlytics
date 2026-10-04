@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:apexlytics/providers/search_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
+import 'package:apexlytics/utils/error_messages.dart' show AppException;
 
 void main() {
   late SharedPreferences prefs;
@@ -88,18 +89,37 @@ void main() {
       },
     );
 
-    test('the favorites list is capped, evicting the oldest first', () async {
+    test('adding past the cap is refused, keeping every saved favorite', () async {
       final notifier = container.read(searchStateProvider.notifier);
-      for (var i = 0; i < SearchNotifier.maxFavorites + 1; i++) {
+      for (var i = 0; i < SearchNotifier.maxFavorites; i++) {
         await notifier.toggleFavorite(
           PlayerRef(query: 'Player$i', platform: 'PC', uid: '$i'),
         );
       }
 
+      await expectLater(
+        notifier.toggleFavorite(
+          const PlayerRef(query: 'OneTooMany', platform: 'PC', uid: '999'),
+        ),
+        throwsA(isA<AppException>()),
+      );
+
       final favorites = container.read(searchStateProvider).favorites;
       expect(favorites, hasLength(SearchNotifier.maxFavorites));
-      expect(favorites.any((f) => f.uid == '0'), isFalse);
-      expect(favorites.first.uid, '${SearchNotifier.maxFavorites}');
+      expect(favorites.any((f) => f.uid == '0'), isTrue);
+      expect(favorites.any((f) => f.uid == '999'), isFalse);
+
+      // Removing is still allowed at the cap, which frees a slot.
+      await notifier.toggleFavorite(
+        const PlayerRef(query: 'Player0', platform: 'PC', uid: '0'),
+      );
+      await notifier.toggleFavorite(
+        const PlayerRef(query: 'OneTooMany', platform: 'PC', uid: '999'),
+      );
+      expect(
+        container.read(searchStateProvider).favorites.first.uid,
+        '999',
+      );
     });
 
     test('deduplicates by UID when both entries have UIDs', () async {
