@@ -48,8 +48,8 @@ String friendlyError(Object? error) {
     };
   }
   if (error == null) return 'Unknown error';
-  // Unrecognized error shape (e.g. FormatException, DB/cast error). Log the
-  // real error for diagnosis but never surface its raw toString() to the UI.
-  log.w('Unhandled error type in friendlyError', error: error);
+  // Unrecognized error shape. Never show its toString(); log only the type, since the
+  // text can carry paths or query data.
+  log.w('Unhandled error type in friendlyError (${error.runtimeType})');
   return 'Something went wrong. Please try again.';
 }

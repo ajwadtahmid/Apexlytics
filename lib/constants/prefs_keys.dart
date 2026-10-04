@@ -40,7 +40,18 @@ class PrefsKeys {
   static const onboardingVersion = 'onboarding_version';
 
   static const legendStats = 'legend_stats';
+
+  /// Legacy global legend stack; seeds the first profile that loads, then is removed.
   static const legendVisitStack = 'legend_visit_stack';
+
+  /// Prefix of the per-UID legend stack (for backup matching).
+  static const legendVisitStackPrefix = 'legend_visit_stack_';
+
+  /// Per-UID legend stack key; the legacy global key without a UID.
+  static String legendVisitStackKeyFor(String? uid) => uid?.isNotEmpty == true
+      ? '$legendVisitStackPrefix$uid'
+      : legendVisitStack;
+
   static const seasonHistory = 'season_history';
 
   // Legacy global snapshot key — kept for backup compatibility only.

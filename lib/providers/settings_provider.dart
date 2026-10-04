@@ -330,10 +330,14 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     state = state.copyWith(activeProfileIndex: index);
   }
 
-  /// Appends a new profile and switches to it. Throws if [uid] is already
-  /// saved — see [_assertUidNotTaken].
+  /// Appends a profile and switches to it. Throws at the profile limit or if [uid] is saved.
   Future<void> addProfile(String name, String uid, String platform) async {
-    if (state.profiles.length >= limitFor(owner: _isOwner)) return;
+    final limit = limitFor(owner: _isOwner);
+    if (state.profiles.length >= limit) {
+      throw AppException(
+        'You can save up to $limit profiles. Remove one to add another.',
+      );
+    }
     _assertUidNotTaken(uid);
     final profiles = [
       ...state.profiles,
@@ -540,12 +544,19 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
   /// A survivor allowlist can't rot the same way: a new key is cleared by
   /// default unless kept on purpose.
   ///
+  /// [keepOwnerUnlock] spares [PrefsKeys.ownerUnlocked] for an owner keeping their token,
+  /// so the UI doesn't lock while the token stays active.
+  ///
   /// Callers must also clear the ranked match database, the API cache, and any
   /// provider holding derived state (see `CacheSettingsSection`).
-  Future<void> clearAll() async {
+  Future<void> clearAll({bool keepOwnerUnlock = false}) async {
     final doomed = _prefs
         .getKeys()
-        .where((k) => !survivesClearAll.contains(k))
+        .where(
+          (k) =>
+              !survivesClearAll.contains(k) &&
+              !(keepOwnerUnlock && k == PrefsKeys.ownerUnlocked),
+        )
         .toList();
     await Future.wait(doomed.map(_prefs.remove));
     state = const PlayerSettings();

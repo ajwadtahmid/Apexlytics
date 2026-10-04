@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/api_constants.dart';
+import '../../constants/ui_strings.dart';
 import '../../providers/search_provider.dart';
+import '../../utils/lookup_drafts.dart';
 import '../../utils/navigation_utils.dart';
 import '../../utils/theme.dart';
 import '../../utils/uid_warning_dialog.dart';
@@ -18,8 +20,12 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
+  final _drafts = LookupDrafts();
   String _platform = ApiConstants.defaultPlatform;
   bool _searchByUid = false;
+
+  /// UID search is on only because Switch is selected; leaving Switch turns it off again.
+  bool _uidForcedBySwitch = false;
 
   @override
   void dispose() {
@@ -27,17 +33,48 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     super.dispose();
   }
 
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _toggleUidSearch(bool value) async {
+    if (value == _searchByUid) return;
+    if (!value && ApiConstants.isUidOnly(_platform)) {
+      // Switch is UID-only.
+      _showSnack(switchNeedsUidWarning);
+      return;
+    }
+    await _setSearchByUid(value);
+  }
+
+  /// Swaps the bar between its name and UID drafts.
+  Future<void> _setSearchByUid(bool value) async {
     if (value && !_searchByUid) {
       await showUidWarningIfNeeded(context, ref);
     }
     if (!mounted) return;
-    setState(() => _searchByUid = value);
-    // Flags an existing non-digit value rather than clearing it.
-    if (value && !isDigitsOnly(_controller.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('UID must contain digits only.')),
+    setState(() {
+      setFieldText(
+        _controller,
+        _drafts.swapTo(uid: value, current: _controller.text),
       );
+      _searchByUid = value;
+    });
+  }
+
+  Future<void> _selectPlatform(String platform) async {
+    setState(() => _platform = platform);
+    if (ApiConstants.isUidOnly(platform)) {
+      if (_searchByUid) return;
+      _uidForcedBySwitch = true;
+      await _setSearchByUid(true);
+      if (mounted) _showSnack(switchAutoUidNotice);
+    } else if (_uidForcedBySwitch) {
+      // Leaving Switch: restore the toggle.
+      _uidForcedBySwitch = false;
+      await _setSearchByUid(false);
     }
   }
 
@@ -46,9 +83,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (q.isEmpty) return;
     if (_searchByUid && !isDigitsOnly(q)) {
       // Formatters should already guarantee this — belt and suspenders.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('UID must contain digits only.')),
-      );
+      _showSnack('UID must contain digits only.');
       return;
     }
     context.pushPage(
@@ -62,8 +97,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _pickFavorite(PlayerRef fav) {
     final byUid = fav.hasUid;
-    _controller.text = fav.query;
-    setState(() => _platform = fav.platform);
+    // Show the favourite as it would be searched: by name, or by UID on a UID-only platform.
+    final barByUid = ApiConstants.isUidOnly(fav.platform);
+    setState(() {
+      _platform = fav.platform;
+      // Forced only if UID mode wasn't already on by choice.
+      _uidForcedBySwitch =
+          barByUid && (!_searchByUid || _uidForcedBySwitch);
+      _drafts.stash(uid: _searchByUid, text: _controller.text);
+      _searchByUid = barByUid;
+      setFieldText(_controller, barByUid ? (fav.uid ?? '') : fav.query);
+    });
     context.pushPage(
       PlayerResultPage(
         query: byUid ? fav.uid! : fav.query,
@@ -83,7 +127,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             controller: _controller,
             platform: _platform,
             searchByUid: _searchByUid,
-            onPlatformChanged: (p) => setState(() => _platform = p),
+            onPlatformChanged: _selectPlatform,
             onSearchByUidChanged: _toggleUidSearch,
             onSearch: _search,
           ),

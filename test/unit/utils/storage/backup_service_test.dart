@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/models/ranked_match.dart';
+import 'package:apexlytics/utils/formatting/snapshot_types.dart';
 import 'package:apexlytics/utils/storage/backup_service.dart';
 import 'package:apexlytics/utils/storage/ranked_history_store.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -67,6 +69,7 @@ void main() {
       expect(backupIncludesKey(PrefsKeys.snapshotKeyFor(uid)), isTrue);
       expect(backupIncludesKey(PrefsKeys.legendStatsKeyFor(uid)), isTrue);
       expect(backupIncludesKey(PrefsKeys.rankGoalKeyFor(uid)), isTrue);
+      expect(backupIncludesKey(PrefsKeys.legendVisitStackKeyFor(uid)), isTrue);
       // ...versus transient sync bookkeeping, which must not be restored: a
       // stale deadline would open a fresh install inside a 6 h cooldown.
       expect(backupIncludesKey(PrefsKeys.gamesNextSync(uid)), isFalse);
@@ -331,6 +334,154 @@ void main() {
     );
   });
 
+  group('buildBackupBytes', () {
+    RankedMatch game(String uid, int start) => RankedMatch.fromJson({
+      'uid': uid,
+      'name': 'Tester',
+      'legendPlayed': 'Axle',
+      'gameMode': 'BATTLE_ROYALE',
+      'gameLengthSecs': 600,
+      'gameStartTimestamp': start,
+      'gameEndTimestamp': start + 600,
+      'gameData': const [],
+      'BRScoreChange': 10,
+      'BRScore': 1000,
+      'map': 'olympus_rotation',
+    });
+
+    Map<String, dynamic> decode(List<int> bytes) =>
+        jsonDecode(utf8.decode(decompressIfGzipped(bytes)))
+            as Map<String, dynamic>;
+
+    test('streams every page into one valid, restorable envelope', () async {
+      const uid = '1006838015507';
+      final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(source.close);
+      await source.upsertAll(uid, [for (var i = 0; i < 7; i++) game(uid, i * 1000)]);
+
+      final built = await buildBackupBytes(
+        prefs: {PrefsKeys.playerName: 'Aceu'},
+        // Pages of 3: 3 + 3 + 1, so the page seams are exercised.
+        matchPages: source.exportRowPages(pageSize: 3),
+        snapshotRows: [
+          {'uid': uid, 'ts_ms': 5000, 'rp': 1020, 'season_id': null},
+        ],
+      );
+
+      await source.close(); // the in-memory path is shared while it stays open
+      expect(built.matchCount, 7);
+      final envelope = decode(built.bytes);
+      expect(envelope['version'], 3);
+      expect(envelope['prefs'], {PrefsKeys.playerName: 'Aceu'});
+      expect((envelope['ranked_history'] as List), hasLength(7));
+      expect((envelope['stat_snapshots'] as List), hasLength(1));
+
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final target = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(target.close);
+      final result = await commitBackupImport(
+        BackupPreview.forTesting(version: 3, envelope: envelope),
+        prefs,
+        rankedStore: target,
+      );
+
+      expect(result, isA<ImportSuccess>());
+      expect(await target.count(uid), 7);
+    });
+
+    test('an empty history is still a valid envelope', () async {
+      final built = await buildBackupBytes(
+        prefs: const {},
+        matchPages: const Stream.empty(),
+        snapshotRows: const [],
+      );
+
+      final envelope = decode(built.bytes);
+      expect(built.matchCount, 0);
+      expect(envelope['ranked_history'], isEmpty);
+      expect(envelope['stat_snapshots'], isEmpty);
+    });
+  });
+
+  group('shareBackupFile', () {
+    late Directory tmp;
+    late File file;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('apx_share_');
+      file = File('${tmp.path}/backup.json.gz');
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    Future<ShareResult> Function(ShareParams) answering(
+      ShareResultStatus status, {
+      void Function()? onShare,
+    }) => (params) async {
+      onShare?.call();
+      return ShareResult('', status);
+    };
+
+    test('a completed share counts as exported', () async {
+      expect(
+        await shareBackupFile(
+          file,
+          [1, 2, 3],
+          share: answering(ShareResultStatus.success),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a dismissed share sheet is not an export', () async {
+      expect(
+        await shareBackupFile(
+          file,
+          [1, 2, 3],
+          share: answering(ShareResultStatus.dismissed),
+        ),
+        isFalse,
+      );
+    });
+
+    test('a platform that cannot tell counts as shared', () async {
+      expect(
+        await shareBackupFile(
+          file,
+          [1, 2, 3],
+          share: answering(ShareResultStatus.unavailable),
+        ),
+        isTrue,
+      );
+    });
+
+    test('the file exists while sharing and is gone afterwards, '
+        'whatever the outcome', () async {
+      for (final status in ShareResultStatus.values) {
+        var existedDuringShare = false;
+        await shareBackupFile(
+          file,
+          [1, 2, 3],
+          share: answering(status, onShare: () => existedDuringShare = file.existsSync()),
+        );
+        expect(existedDuringShare, isTrue, reason: '$status');
+        expect(file.existsSync(), isFalse, reason: '$status');
+      }
+    });
+
+    test('a failing share still removes the file and rethrows', () async {
+      await expectLater(
+        shareBackupFile(
+          file,
+          [1, 2, 3],
+          share: (_) async => throw StateError('share failed'),
+        ),
+        throwsStateError,
+      );
+      expect(file.existsSync(), isFalse);
+    });
+  });
+
   group('decompressIfGzipped', () {
     test('decompresses real gzip bytes back to the original JSON', () {
       final original = jsonEncode({'hello': 'world', 'n': 1500});
@@ -428,6 +579,53 @@ void main() {
     );
   });
 
+  group('commitBackupImport when the legacy snapshot drain fails', () {
+    test('still reports success: rows and prefs both committed, the legacy '
+        'keys stay for the next launch', () async {
+      const uid = '1006838015507';
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.playerName: 'OriginalName',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final store = _SnapshotDrainFails(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+
+      final preview = BackupPreview.forTesting(
+        version: 2, // v2 files carry RP snapshots as prefs keys
+        envelope: {
+          'version': 2,
+          'prefs': {
+            PrefsKeys.playerName: 'RestoredName',
+            'stat_snapshots_$uid': jsonEncode([
+              {'ts': 1000, 'rp': 1500},
+            ]),
+          },
+          'ranked_history': [
+            {
+              'id': '${uid}_1000',
+              'uid': uid,
+              'start_ms': 1000000,
+              'end_ms': 1600000,
+              'game_mode': 'BATTLE_ROYALE',
+              'rp_change': 10,
+            },
+          ],
+        },
+      );
+
+      final result = await commitBackupImport(preview, prefs, rankedStore: store);
+
+      expect(result, isA<ImportSuccess>());
+      expect(prefs.getString(PrefsKeys.playerName), 'RestoredName');
+      expect(await store.count(uid), 1);
+      expect(
+        prefs.containsKey('stat_snapshots_$uid'),
+        isTrue,
+        reason: 'left in place so the startup drain can retry it',
+      );
+    });
+  });
+
   group('profilesReplacedBy', () {
     String profiles(List<(String, String)> ps) => jsonEncode([
       for (final (name, uid) in ps) {'name': name, 'uid': uid, 'platform': 'PC'},
@@ -475,4 +673,15 @@ class _CommitFailsAfterPrefsRestore extends RankedHistoryStore {
     if (restorePrefs != null) await restorePrefs();
     throw Exception('simulated transaction commit failure');
   }
+}
+
+/// A store whose legacy-snapshot drain fails after an otherwise real restore.
+class _SnapshotDrainFails extends RankedHistoryStore {
+  _SnapshotDrainFails({super.overridePath});
+
+  @override
+  Future<void> appendSnapshotsFor(
+    String uid,
+    List<StatSnapshot> snapshots,
+  ) async => throw Exception('simulated drain failure');
 }

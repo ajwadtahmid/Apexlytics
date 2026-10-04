@@ -23,6 +23,42 @@ void main() {
     overridePath: 'file:api_cache_test_${dbCounter++}?mode=memory&cache=shared',
   );
 
+  group('ApiCache.save after a clear', () {
+    test('a save tied to an earlier generation is dropped', () async {
+      final store = freshStore();
+      final cache = ApiCache(store);
+      final before = cache.generation;
+
+      await cache.clear(); // the user erased everything mid-request
+      await cache.save('late', {'name': 'Someone'}, ifGeneration: before);
+
+      expect(cache.loadStale('late'), isNull);
+      expect(await store.loadAll(), isEmpty);
+    });
+
+    test('a save tied to the current generation still lands', () async {
+      final store = freshStore();
+      final cache = ApiCache(store);
+
+      await cache.save('ok', {'n': 1}, ifGeneration: cache.generation);
+
+      expect(cache.loadStale('ok'), isNotNull);
+      expect(await store.loadAll(), contains('ok'));
+    });
+
+    test('a clear during the disk write leaves nothing behind', () async {
+      final store = freshStore();
+      final cache = ApiCache(store);
+
+      final saving = cache.save('racing', {'n': 1});
+      await cache.clear();
+      await saving;
+
+      expect(cache.loadStale('racing'), isNull);
+      expect(await store.loadAll(), isEmpty);
+    });
+  });
+
   group('ApiCache.save / load', () {
     test('load returns null when nothing stored', () async {
       final cache = ApiCache(freshStore());

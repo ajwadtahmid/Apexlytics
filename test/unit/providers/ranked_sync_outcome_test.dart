@@ -216,6 +216,35 @@ void main() {
       expect(prefs.getString(PrefsKeys.gamesLastOutcome(uid)), isNull);
     });
 
+    test('a sync whose provider was disposed mid-flight still finishes '
+        'its bookkeeping', () async {
+      // A profile switch drops the last listener mid-fetch; the late response must still
+      // stamp its split ids and arm the cooldown.
+      await setUpWith();
+      final response = Completer<GamesResult>();
+      when(
+        () => gamesService.getMatches(uid),
+      ).thenAnswer((_) => response.future);
+      final prefs = container.read(sharedPreferencesProvider);
+
+      final sub = container.listen(rankedSyncProvider(uid), (_, _) {});
+      await Future<void>.delayed(Duration.zero); // the fetch is now pending
+      sub.close();
+      await Future<void>.delayed(Duration.zero); // provider disposed
+
+      response.complete(GamesMatches([_match(uid, 0)]));
+      for (var i = 0; i < 100; i++) {
+        if (prefs.getString(PrefsKeys.gamesLastOutcome(uid)) != null) break;
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+
+      expect(await store.count(uid), 1);
+      expect(
+        prefs.getString(PrefsKeys.gamesLastOutcome(uid)),
+        RankedSyncOutcome.synced.name,
+      );
+    });
+
     test('an empty GamesMatches list still counts as synced', () async {
       await setUpWith();
       when(

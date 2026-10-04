@@ -38,3 +38,31 @@ String rankAssetPathByTier(bool isPredator, int tierIndex) {
   if (isPredator) return 'assets/ranks/apex_predator.webp';
   return kRankLadder[tierIndex.clamp(0, kRankLadder.length - 1)].assetPath;
 }
+
+/// Tiers bundled as `assets/ranks/<tier>.webp`.
+const _bundledRankTiers = {
+  'bronze',
+  'silver',
+  'gold',
+  'platinum',
+  'diamond',
+  'master',
+};
+
+/// The bundled badge for a rank image URL (`…/platinum3.png`), or null for an unbundled
+/// tier or unusable URL. Only the file name is read, so nothing is fetched; the division
+/// is dropped.
+String? rankAssetPathFromImageUrl(String url) {
+  final segments = Uri.tryParse(url)?.pathSegments ?? const <String>[];
+  if (segments.isEmpty) return null;
+  final file = segments.last;
+  final dot = file.lastIndexOf('.');
+  // `platinum3.png` → `platinum`; `apex_predator.png` → `apexpredator`.
+  final tier = (dot > 0 ? file.substring(0, dot) : file)
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z]'), '');
+  if (tier == 'apexpredator' || tier == 'predator') {
+    return 'assets/ranks/apex_predator.webp';
+  }
+  return _bundledRankTiers.contains(tier) ? 'assets/ranks/$tier.webp' : null;
+}

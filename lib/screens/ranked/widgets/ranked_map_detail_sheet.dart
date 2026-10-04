@@ -38,7 +38,7 @@ Future<void> showMapDetailSheet(
 /// Detail sheet for a map: the full stat set the Maps tab shows per row, plus
 /// a "View all history" button that resolves this map's matches and pushes
 /// the same [RankedEntityHistoryScreen] drill-down the Maps tab uses.
-class _MapDetailSheet extends StatelessWidget {
+class _MapDetailSheet extends StatefulWidget {
   final MapBreakdown map;
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
@@ -49,8 +49,23 @@ class _MapDetailSheet extends StatelessWidget {
     required this.onRefresh,
   });
 
+  @override
+  State<_MapDetailSheet> createState() => _MapDetailSheetState();
+}
+
+class _MapDetailSheetState extends State<_MapDetailSheet> {
+  MapBreakdown get map => widget.map;
+  Future<void> Function() get onRefresh => widget.onRefresh;
+
+  /// The map's matches and their trends, loaded once (not per rebuild).
+  late final Future<({List<RankedMatch> matches, EntityTrends trends})> _loaded =
+      widget.matchesFor(map.mapKey).then(
+        (matches) => (matches: matches, trends: entityTrends(matches)),
+      );
+
   Future<void> _viewHistory(BuildContext context) async {
-    final games = await matchesFor(map.mapKey)
+    // Copy: keep the loaded list in the order the trends used.
+    final games = [...(await _loaded).matches]
       ..sort((a, b) => b.endTime.compareTo(a.endTime));
     if (!context.mounted) return;
     Navigator.of(context).push(
@@ -156,16 +171,15 @@ class _MapDetailSheet extends StatelessWidget {
                 ),
               ],
             ),
-            FutureBuilder<List<RankedMatch>>(
-              future: matchesFor(map.mapKey),
+            FutureBuilder<({List<RankedMatch> matches, EntityTrends trends})>(
+              future: _loaded,
               builder: (context, snapshot) {
-                final matches = snapshot.data;
-                if (matches == null) return const SizedBox.shrink();
-                final trends = entityTrends(matches);
+                final loaded = snapshot.data;
+                if (loaded == null) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TrendLines(trends: trends),
+                    TrendLines(trends: loaded.trends),
                     const TrendFootnote(),
                   ],
                 );

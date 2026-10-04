@@ -22,7 +22,7 @@ void main() {
     ],
     'BRScoreChange': 44,
     'BRScore': 12203,
-    'BRRankImg': 'https://api.mozambiquehe.re/assets/ranks/diamond4.png',
+    'BRRankImg': 'https://api.apexlegendsstatus.com/assets/ranks/diamond4.png',
     'isPartyFull': false,
     'map': 'broken_moon_rotation',
   };

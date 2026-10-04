@@ -85,6 +85,20 @@ bool isUnknownMapKey(String mapKey) {
 BattleRoyaleMapInfo? battleRoyaleMapInfo(String mapKey) =>
     kBattleRoyaleMaps[_baseKey(mapKey)];
 
+/// Lowercased letters and digits only, so display names match the catalog.
+String _nameKey(String name) =>
+    name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+/// The catalog entry for a rotation display name, or null if not bundled.
+BattleRoyaleMapInfo? battleRoyaleMapInfoByName(String displayName) {
+  final key = _nameKey(displayName);
+  if (key.isEmpty) return null;
+  for (final info in kBattleRoyaleMaps.values) {
+    if (_nameKey(info.name) == key) return info;
+  }
+  return null;
+}
+
 /// Display name from the const, falling back to a title-cased key.
 String battleRoyaleMapName(String mapKey) =>
     battleRoyaleMapInfo(mapKey)?.name ?? formatRotationMapName(mapKey);

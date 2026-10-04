@@ -1,10 +1,22 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../../../constants/map_constants.dart';
 import '../../../utils/theme.dart';
+import '../../../widgets/map_asset_image.dart';
 
+/// Home map card image: bundled art for known Battle Royale maps, else the rotation
+/// API's [assetUrl] (e.g. Mixtape maps).
 class MapHeroImage extends StatelessWidget {
+  /// Display name from the rotation API.
+  final String mapName;
+
+  /// API image; used only when no bundled one exists.
   final String assetUrl;
-  const MapHeroImage({super.key, required this.assetUrl});
+  const MapHeroImage({
+    super.key,
+    required this.mapName,
+    required this.assetUrl,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18,10 +30,13 @@ class MapHeroImage extends StatelessWidget {
     final cacheHeight =
         (AppTheme.mapCardImageHeight * MediaQuery.devicePixelRatioOf(context))
             .ceil();
+    final bundled = battleRoyaleMapInfoByName(mapName)?.asset;
     return SizedBox(
       height: AppTheme.mapCardImageHeight,
       width: double.infinity,
-      child: assetUrl.isNotEmpty
+      child: bundled != null
+          ? MapAssetImage(asset: bundled)
+          : assetUrl.isNotEmpty
           ? CachedNetworkImage(
               imageUrl: assetUrl,
               fit: BoxFit.cover,

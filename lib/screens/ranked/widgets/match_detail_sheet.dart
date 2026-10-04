@@ -1,8 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
+import '../../../utils/formatting/rank_utils.dart'
+    show rankAssetPathFromImageUrl;
 import '../../../utils/formatting/format.dart'
     show formatDuration, formatNumber;
 import '../../../utils/ranked/legend_baseline.dart';
@@ -223,14 +224,14 @@ class _RpBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        if (match.rankImg.isNotEmpty) ...[
-          CachedNetworkImage(
-            imageUrl: match.rankImg,
+        if (rankAssetPathFromImageUrl(match.rankImg) case final badge?) ...[
+          Image.asset(
+            badge,
             width: 34,
             height: 34,
             fit: BoxFit.contain,
-            memCacheWidth: (34 * MediaQuery.devicePixelRatioOf(context)).ceil(),
-            errorWidget: (_, _, _) => const SizedBox(width: 34),
+            cacheWidth: (34 * MediaQuery.devicePixelRatioOf(context)).ceil(),
+            errorBuilder: (_, _, _) => const SizedBox(width: 34),
           ),
           const SizedBox(width: AppTheme.sm),
         ],

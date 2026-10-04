@@ -96,6 +96,12 @@ void main() {
       expect(scrubbed.breadcrumbs!.single.data!['error'], 'DatabaseException(x)');
     });
 
+    test('scrubSentryEvent drops the event user', () {
+      final event = SentryEvent(user: SentryUser(id: 'per-install-id'));
+
+      expect(scrubSentryEvent(event, Hint()).user, isNull);
+    });
+
     test('scrubSentryBreadcrumb scrubs the message and string data only', () {
       final crumb = scrubSentryBreadcrumb(
         Breadcrumb(

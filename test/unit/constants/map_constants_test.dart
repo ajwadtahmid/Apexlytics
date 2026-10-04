@@ -27,6 +27,29 @@ void main() {
     });
   });
 
+  group('battleRoyaleMapInfoByName', () {
+    test('finds a map by the display name the rotation API reports', () {
+      expect(battleRoyaleMapInfoByName('Kings Canyon')?.id, '1');
+      expect(battleRoyaleMapInfoByName("World's Edge")?.id, '2');
+      expect(battleRoyaleMapInfoByName('Olympus')?.id, '3');
+      expect(battleRoyaleMapInfoByName('Storm Point')?.id, '4');
+      expect(battleRoyaleMapInfoByName('Broken Moon')?.id, '5');
+      expect(battleRoyaleMapInfoByName('E-District')?.id, '6');
+    });
+
+    test('ignores case, punctuation and spacing', () {
+      expect(battleRoyaleMapInfoByName("worlds edge")?.name, "World's Edge");
+      expect(battleRoyaleMapInfoByName('  e district ')?.name, 'E-District');
+      expect(battleRoyaleMapInfoByName("WORLD'S EDGE")?.name, "World's Edge");
+    });
+
+    test('is null for a map that is not bundled, e.g. a Mixtape map', () {
+      expect(battleRoyaleMapInfoByName('Overflow'), isNull);
+      expect(battleRoyaleMapInfoByName('Unknown'), isNull);
+      expect(battleRoyaleMapInfoByName(''), isNull);
+    });
+  });
+
   group('battleRoyaleMapAsset', () {
     test('resolves bundled assets including E-District', () {
       expect(

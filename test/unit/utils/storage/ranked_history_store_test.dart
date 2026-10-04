@@ -116,6 +116,196 @@ void main() {
     expect(await store.count('1'), 3); // 100, 200, 300 — no duplicate
   });
 
+  test('a match carrying another uid is not filed under the requested one', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+
+    await store.upsertAll('1', [
+      match('1', 100),
+      match('2', 200), // not the requested player
+      match('', 300), // upstream left the uid out
+    ]);
+
+    expect(await store.count('1'), 1);
+    expect(await store.count('2'), 0);
+    expect(await store.count(''), 0);
+  });
+
+  test('exportRowPages walks every row once, whatever the page size', () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+    await store.upsertAll('1', [for (var i = 0; i < 10; i++) match('1', i * 1000)]);
+
+    for (final size in [1, 3, 5, 10, 50]) {
+      final pages = await store.exportRowPages(pageSize: size).toList();
+      final ids = [for (final p in pages) for (final r in p) r['id']];
+
+      expect(ids.length, 10, reason: 'page size $size');
+      expect(ids.toSet().length, 10, reason: 'page size $size');
+      expect(pages.every((p) => p.length <= size), isTrue);
+    }
+  });
+
+  group('restore leaves out implausible values', () {
+    Future<Map<String, Object?>> restoredRow(
+      Map<String, Object?> overrides,
+    ) async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final skipped = await store.importRows([
+        {...match('1', 100).toStoredMap(), ...overrides},
+      ]);
+      expect(skipped, 0, reason: 'the row itself is still imported');
+      return (await store.exportRows()).single;
+    }
+
+    test('an absurd or negative running RP is dropped, not stored', () async {
+      expect((await restoredRow({'cumulative_rp': 5000000}))['cumulative_rp'], isNull);
+    });
+
+    test('a negative running RP is dropped too', () async {
+      expect((await restoredRow({'cumulative_rp': -40}))['cumulative_rp'], isNull);
+    });
+
+    test('a real running RP is kept', () async {
+      expect((await restoredRow({'cumulative_rp': 24500}))['cumulative_rp'], 24500);
+    });
+
+    test('rank badges are kept only from the API hosts over https', () async {
+      for (final url in [
+        'https://api.apexlegendsstatus.com/assets/ranks/diamond4.png',
+        'https://api.mozambiquehe.re/assets/ranks/diamond4.png',
+      ]) {
+        expect((await restoredRow({'rank_img': url}))['rank_img'], url);
+      }
+    });
+
+    test('a rank badge pointing anywhere else is dropped', () async {
+      for (final url in [
+        'http://api.apexlegendsstatus.com/assets/ranks/diamond4.png',
+        'https://evil.example/tracker.png',
+        'https://api.apexlegendsstatus.com.evil.example/x.png',
+        'file:///etc/passwd',
+        'not a url',
+      ]) {
+        expect((await restoredRow({'rank_img': url}))['rank_img'], isNull, reason: url);
+      }
+    });
+
+    test('a dropped value never overwrites what is already stored', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100)]);
+      final before = (await store.exportRows()).single;
+
+      await store.importRows([
+        {
+          ...match('1', 100).toStoredMap(),
+          'cumulative_rp': 9999999,
+          'rank_img': 'https://evil.example/x.png',
+        },
+      ]);
+
+      final after = (await store.exportRows()).single;
+      expect(after['cumulative_rp'], before['cumulative_rp']);
+      expect(after['rank_img'], before['rank_img']);
+    });
+  });
+
+  test('a restore larger than one commit chunk lands every row', () async {
+    final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(source.close);
+    await source.upsertAll('1', [for (var i = 0; i < 1250; i++) match('1', i * 1000)]);
+    final rows = await source.exportRows();
+    await source.close(); // the in-memory path is shared while it stays open
+
+    final target = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(target.close);
+    final skipped = await target.importRows(rows);
+
+    expect(skipped, 0);
+    expect(await target.count('1'), 1250);
+  });
+
+  group('pruneSnapshots', () {
+    final now = DateTime(2026, 10, 3);
+    StatSnapshot reading(int daysOld) =>
+        StatSnapshot(timestamp: now.subtract(Duration(days: daysOld)), rp: 100);
+
+    Future<Map<String, int>> remainingDays(
+      RankedHistoryStore store,
+      String uid,
+    ) async => {
+      for (final s in await store.snapshotsFor(uid))
+        '${now.difference(s.timestamp).inDays}': s.rp,
+    };
+
+    test('keeps profiles forever, favourites 90 days, everyone else 14', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      for (final uid in ['profile', 'fav', 'other']) {
+        await store.appendSnapshotsFor(uid, [
+          reading(400),
+          reading(100),
+          reading(80),
+          reading(20),
+          reading(10),
+        ]);
+      }
+
+      final removed = await store.pruneSnapshots(
+        profileUids: {'profile'},
+        favoriteUids: {'fav'},
+        now: now,
+      );
+
+      expect((await remainingDays(store, 'profile')).keys, [
+        '400',
+        '100',
+        '80',
+        '20',
+        '10',
+      ]);
+      expect((await remainingDays(store, 'fav')).keys, ['80', '20', '10']);
+      expect((await remainingDays(store, 'other')).keys, ['10']);
+      expect(removed, 6); // favourite loses 2, the stranger 4
+    });
+
+    test('a player the store holds match history for is never trimmed', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      // A profile the user removed: its match history stays, so its RP graph does.
+      await store.upsertAll('gone', [match('gone', 100)]);
+      await store.appendSnapshotsFor('gone', [reading(400)]);
+      await store.appendSnapshotsFor('stranger', [reading(400)]);
+      await store.appendSnapshotsFor('', [reading(400)]); // legacy UID-less bucket
+
+      await store.pruneSnapshots(
+        profileUids: const {},
+        favoriteUids: const {},
+        now: now,
+      );
+
+      expect(await store.snapshotCount('gone'), 1);
+      expect(await store.snapshotCount(''), 1);
+      expect(await store.snapshotCount('stranger'), 0);
+    });
+
+    test('with nothing saved, only the 14-day rule applies', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.appendSnapshotsFor('x', [reading(30), reading(1)]);
+
+      await store.pruneSnapshots(
+        profileUids: const {},
+        favoriteUids: const {},
+        now: now,
+      );
+
+      expect((await remainingDays(store, 'x')).keys, ['1']);
+    });
+  });
+
   test('allIds returns every stored id, across all UIDs', () async {
     // Backs the backup-import preview, which needs to tell a restored row
     // from an already-known one by id.

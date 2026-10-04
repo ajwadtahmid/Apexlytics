@@ -12,6 +12,8 @@ import 'package:apexlytics/services/api_service.dart';
 import 'package:apexlytics/utils/storage/api_cache_store.dart';
 import 'package:apexlytics/widgets/player_lookup_form.dart';
 
+import 'helpers.dart';
+
 /// Prefs with the one-time UID-search warning dialog already dismissed, so
 /// tapping the toggle in a test doesn't need to also handle that dialog.
 Future<SharedPreferences> _prefsUidWarningSeen() async {
@@ -28,11 +30,12 @@ Future<SharedPreferences> _prefsUidWarningSeen() async {
 var _apiCacheDbCounter = 0;
 
 /// A fresh, isolated ApiService for one test — its cache store is an
-/// in-memory sqlite db (see setUpAll below), not the real api_cache.db.
-ApiService _buildApiService() => ApiService(
+/// in-memory sqlite db (see setUpAll), not the real api_cache.db, and its transport is [adapter].
+ApiService _buildApiService([FakeHttpAdapter? adapter]) => ApiService(
   ApiCacheStore(
     overridePath: 'file:widget_test_api_cache_${_apiCacheDbCounter++}?mode=memory&cache=shared',
   ),
+  httpClientAdapter: adapter ?? FakeHttpAdapter(),
 );
 
 /// Wraps [widget] in the minimal scaffolding needed for Riverpod + Material.
@@ -64,7 +67,8 @@ void main() {
 
   group('App smoke test', () {
     testWidgets('renders MaterialApp without exception', (tester) async {
-      final apiService = _buildApiService();
+      final adapter = FakeHttpAdapter();
+      final apiService = _buildApiService(adapter);
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
@@ -86,6 +90,11 @@ void main() {
       await tester.pump(const Duration(seconds: 60));
 
       expect(find.byType(MaterialApp), findsOneWidget);
+      // The startup prefetch went to the fake transport, and only there.
+      expect(
+        adapter.paths,
+        containsAll(['/maprotation', '/predator', '/servers']),
+      );
     });
   });
 
@@ -155,8 +164,8 @@ void main() {
     });
 
     testWidgets(
-      'switching to UID mode with an existing name keeps the text and '
-      'shows an error',
+      'switching to UID mode clears the field, and switching back restores '
+      'the name',
       (tester) async {
         final uidPrefs = await _prefsUidWarningSeen();
         await tester.pumpWidget(
@@ -175,38 +184,17 @@ void main() {
         await tester.tap(find.byType(Switch));
         await tester.pump();
 
-        // An accidental tap on the toggle must not wipe out a typed name.
-        final field = tester.widget<TextField>(find.byType(TextField));
+        var field = tester.widget<TextField>(find.byType(TextField));
+        expect(field.controller!.text, isEmpty);
+        expect(find.text('UID must contain digits only.'), findsNothing);
+
+        await tester.tap(find.byType(Switch));
+        await tester.pump();
+
+        field = tester.widget<TextField>(find.byType(TextField));
         expect(field.controller!.text, 'Aceu');
-        expect(find.text('UID must contain digits only.'), findsOneWidget);
       },
     );
-
-    testWidgets('the digits-only error clears once the user edits the field', (
-      tester,
-    ) async {
-      final uidPrefs = await _prefsUidWarningSeen();
-      await tester.pumpWidget(
-        _wrap(
-          const PlayerLookupForm(
-            submitLabel: 'Update',
-            initialName: 'Aceu',
-            initialPlatform: 'PC',
-          ),
-          uidPrefs,
-        ),
-      );
-      await tester.pump();
-
-      await tester.tap(find.byType(Switch));
-      await tester.pump();
-      expect(find.text('UID must contain digits only.'), findsOneWidget);
-
-      await tester.enterText(find.byType(TextField), '123');
-      await tester.pump();
-
-      expect(find.text('UID must contain digits only.'), findsNothing);
-    });
   });
 
   group('SearchScreen', () {
@@ -301,8 +289,8 @@ void main() {
       expect(field.controller!.text, '123');
     });
 
-    testWidgets('switching to UID mode with existing text keeps it and shows a '
-        'digits-only message', (tester) async {
+    testWidgets('switching to UID mode clears the bar, and switching back '
+        'restores the typed name', (tester) async {
       final uidPrefs = await _prefsUidWarningSeen();
       final apiService = _buildApiService();
       final container = ProviderContainer(
@@ -331,9 +319,15 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      final field = tester.widget<TextField>(find.byType(TextField));
+      var field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.controller!.text, isEmpty);
+      expect(find.text('UID must contain digits only.'), findsNothing);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+
+      field = tester.widget<TextField>(find.byType(TextField));
       expect(field.controller!.text, 'Aceu');
-      expect(find.text('UID must contain digits only.'), findsOneWidget);
     });
   });
 }

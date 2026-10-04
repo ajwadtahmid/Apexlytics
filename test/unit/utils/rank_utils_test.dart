@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/constants/rank_constants.dart';
 import 'package:apexlytics/models/player_stats.dart';
@@ -89,6 +91,56 @@ void main() {
     test('omits division for Master', () {
       final master = kRankLadder.firstWhere((r) => r.tier == 'Master');
       expect(master.label, 'Master');
+    });
+  });
+
+  group('rankAssetPathFromImageUrl', () {
+    test('maps every division of a tier onto that tier\'s bundled badge', () {
+      for (final n in [1, 2, 3, 4]) {
+        expect(
+          rankAssetPathFromImageUrl(
+            'https://api.apexlegendsstatus.com/assets/ranks/platinum$n.png',
+          ),
+          'assets/ranks/platinum.webp',
+        );
+      }
+      expect(
+        rankAssetPathFromImageUrl('https://x.example/ranks/Diamond4.png'),
+        'assets/ranks/diamond.webp',
+      );
+    });
+
+    test('reads the legacy host the same way — only the file name matters', () {
+      expect(
+        rankAssetPathFromImageUrl(
+          'https://api.mozambiquehe.re/assets/ranks/gold2.png',
+        ),
+        'assets/ranks/gold.webp',
+      );
+    });
+
+    test('recognises the predator badge however it is spelled', () {
+      for (final name in ['apex_predator.png', 'apexpredator.png', 'predator.png']) {
+        expect(
+          rankAssetPathFromImageUrl('https://x.example/ranks/$name'),
+          'assets/ranks/apex_predator.webp',
+          reason: name,
+        );
+      }
+    });
+
+    test('every path it returns is a real bundled badge', () {
+      for (final tier in ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master']) {
+        final path = rankAssetPathFromImageUrl('https://x.example/ranks/${tier}1.png')!;
+        expect(File(path).existsSync(), isTrue, reason: path);
+      }
+    });
+
+    test('is null for a tier with no bundled badge, or no usable URL', () {
+      expect(rankAssetPathFromImageUrl('https://x.example/ranks/rookie2.png'), isNull);
+      expect(rankAssetPathFromImageUrl(''), isNull);
+      expect(rankAssetPathFromImageUrl('not a url'), isNull);
+      expect(rankAssetPathFromImageUrl('https://x.example/'), isNull);
     });
   });
 }

@@ -25,7 +25,7 @@ import 'match_tags.dart';
 ///
 /// Day-grouped mode paginates in increments of [kHistoryPageSize], loading the
 /// next page automatically as the user scrolls near the bottom, extended to a
-/// session boundary (see [buildDayItems]) — grouped mode shows everything,
+/// day boundary (see [buildDayItems]) — grouped mode shows everything,
 /// since it's already a filtered, RP-sorted subset rather than a long
 /// chronological feed.
 class MatchHistoryList extends ConsumerStatefulWidget {
@@ -86,6 +86,13 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   int _pageLimit = kHistoryPageSize;
   final _scrollController = ScrollController();
 
+  // Flattened list, rebuilt only when matches, page limit or grouping change.
+  List<RankedMatch>? _builtFrom;
+  int _builtLimit = -1;
+  MatchGrouping? _builtGrouping;
+  List<_Section> _sections = const [];
+  List<RankedMatch> _ordered = const [];
+
   @override
   void initState() {
     super.initState();
@@ -117,9 +124,14 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   String? _headKey(List<RankedMatch> matches) =>
       matches.isEmpty ? null : matches.first.id;
 
-  void _onScroll() {
-    if (widget.grouping != null) return; // pagination is day-mode only
+  void _onScroll() => _loadMoreIfNeeded();
+
+  /// Loads the next page near the end of the list. Also run after each build: a list too
+  /// short to scroll never fires a scroll event.
+  void _loadMoreIfNeeded() {
+    if (!mounted || widget.grouping != null) return; // day-mode only
     if (_pageLimit >= widget.matches.length) return;
+    if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
     if (pos.pixels >= pos.maxScrollExtent - _kLoadMoreThreshold) {
       setState(() => _pageLimit += kHistoryPageSize);
@@ -152,22 +164,37 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
     if (updated != null) widget.onMatchUpdated?.call(updated);
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// Rebuilds [_sections] and [_ordered] only if matches (by identity), limit or grouping changed.
+  void _refreshItems() {
     final g = widget.grouping;
+    if (identical(_builtFrom, widget.matches) &&
+        _builtLimit == _pageLimit &&
+        identical(_builtGrouping, g)) {
+      return;
+    }
     final items = g == null
         ? buildDayItems(widget.matches, limit: _pageLimit)
         : buildGroupedItems(widget.matches, g);
-    final sections = _sectionsOf(items);
-    final collapsed = ref.watch(collapsedHistoryDaysProvider);
+    _sections = _sectionsOf(items);
     // What prev/next in the detail sheet walks: the full list in display
     // order, not just the page currently rendered.
-    final ordered = g == null
+    _ordered = g == null
         ? widget.matches
         : [
             for (final item in items)
               if (item is MatchItem) item.match,
           ];
+    _builtFrom = widget.matches;
+    _builtLimit = _pageLimit;
+    _builtGrouping = g;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _refreshItems();
+    final sections = _sections;
+    // After layout; each page loaded rebuilds and re-checks until the viewport is full.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMoreIfNeeded());
 
     return Column(
       children: [
@@ -176,7 +203,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
           child: RefreshIndicator(
             color: AppTheme.accent,
             onRefresh: widget.onRefresh,
-            child: items.isEmpty
+            child: sections.isEmpty
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
@@ -208,7 +235,12 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
                         sliver: SliverMainAxisGroup(
                           slivers: [
                             for (final section in sections)
-                              _buildSection(section, collapsed, ordered),
+                              _SectionSliver(
+                                section: section,
+                                collapseScope: widget.collapseScope,
+                                ordered: _ordered,
+                                onOpen: _openDetail,
+                              ),
                           ],
                         ),
                       ),
@@ -219,17 +251,33 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
       ],
     );
   }
+}
 
-  Widget _buildSection(
-    _Section section,
-    Set<String> collapsed,
-    List<RankedMatch> ordered,
-  ) {
+/// A header and its rows; watches only its own day's collapsed state.
+class _SectionSliver extends ConsumerWidget {
+  final _Section section;
+  final String collapseScope;
+  final List<RankedMatch> ordered;
+  final Future<void> Function(List<RankedMatch> ordered, RankedMatch m) onOpen;
+
+  const _SectionSliver({
+    required this.section,
+    required this.collapseScope,
+    required this.ordered,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final header = section.header;
     final dayKey = header is DayHeaderItem
-        ? historyDayKey(widget.collapseScope, header.day)
+        ? historyDayKey(collapseScope, header.day)
         : null;
-    final isCollapsed = dayKey != null && collapsed.contains(dayKey);
+    final isCollapsed =
+        dayKey != null &&
+        ref.watch(
+          collapsedHistoryDaysProvider.select((days) => days.contains(dayKey)),
+        );
 
     final Widget headerWidget = switch (header) {
       final DayHeaderItem h => _DayHeader(
@@ -255,7 +303,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
               final SessionBreakItem s => _SessionBreak(gapSecs: s.gapSecs),
               final MatchItem m => _MatchRow(
                 match: m.match,
-                onTap: () => _openDetail(ordered, m.match),
+                onTap: () => onOpen(ordered, m.match),
               ),
               _ => const SizedBox.shrink(),
             },

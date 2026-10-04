@@ -101,109 +101,123 @@ const _kRequestErrorRetry = Duration(hours: 1);
 /// offline/stale) and only rethrown when there's nothing to show, so the view
 /// can surface a retry.
 final rankedSyncProvider = FutureProvider.autoDispose
-    .family<RankedSyncOutcome, String>((ref, uid) async {
-      final store = ref.watch(rankedHistoryStoreProvider);
-      final seasons = ref.watch(rankedSeasonsProvider);
-      final prefs = ref.watch(sharedPreferencesProvider);
-      // Read before the network call, so a "Clear all data" that lands while
-      // it's in flight isn't undone by this sync's writes (see dataEpoch).
-      final epoch = store.dataEpoch;
-      bool cleared() => store.dataEpoch != epoch;
+    .family<RankedSyncOutcome, String>(
+      (ref, uid) => syncRankedHistory(
+        uid: uid,
+        store: ref.watch(rankedHistoryStoreProvider),
+        prefs: ref.watch(sharedPreferencesProvider),
+        // A factory: a replayed outcome shouldn't need the network layer.
+        games: () => ref.watch(gamesServiceProvider),
+        seasons: ref.watch(rankedSeasonsProvider),
+      ),
+    );
 
-      Future<RankedSyncOutcome> remember(
-        RankedSyncOutcome outcome,
-        Duration wait,
-      ) async {
-        if (cleared()) return outcome;
-        await prefs.setInt(
-          PrefsKeys.gamesNextSync(uid),
-          DateTime.now().add(wait).millisecondsSinceEpoch,
-        );
-        await prefs.setString(PrefsKeys.gamesLastOutcome(uid), outcome.name);
-        return outcome;
-      }
+/// One history sync for [uid], independent of any screen: the body of
+/// [rankedSyncProvider], also run by "Refresh all" for off-screen profiles.
+///
+/// [force] skips the backoff check and always asks `/games`; the outcome is still recorded,
+/// so the next normal sync replays it. Only for explicit user actions. Holds no `Ref`, so a
+/// disposed provider can't break it.
+Future<RankedSyncOutcome> syncRankedHistory({
+  required String uid,
+  required RankedHistoryStore store,
+  required SharedPreferences prefs,
+  required GamesService Function() games,
+  required Map<String, SeasonMeta> seasons,
+  bool force = false,
+}) async {
+  // Read before the network call, so a "Clear all data" that lands while
+  // it's in flight isn't undone by this sync's writes (see dataEpoch).
+  final epoch = store.dataEpoch;
+  bool cleared() => store.dataEpoch != epoch;
 
-      if (!rankedSyncDue(prefs, uid)) {
-        // Inside the backoff window: replay the outcome the last real fetch
-        // recorded, falling back to a plain cooldown when nothing is stored.
-        final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
-        return RankedSyncOutcome.values.firstWhere(
-          (o) => o.name == last,
-          orElse: () => RankedSyncOutcome.cooldown,
-        );
-      }
+  Future<RankedSyncOutcome> remember(
+    RankedSyncOutcome outcome,
+    Duration wait,
+  ) async {
+    if (cleared()) return outcome;
+    await prefs.setInt(
+      PrefsKeys.gamesNextSync(uid),
+      DateTime.now().add(wait).millisecondsSinceEpoch,
+    );
+    await prefs.setString(PrefsKeys.gamesLastOutcome(uid), outcome.name);
+    return outcome;
+  }
 
-      // Scoped to just the network call. A local write failure
-      // (store.upsertAll, backfillSeasonIds, a prefs write) used to be
-      // caught by the same handler and misreported as `offline`, which is
-      // specifically the wrong diagnosis for the class of failure
-      // that most needs an accurate one. Only a fetch failure gets the
-      // graceful "serve persisted history" treatment; a write failure now
-      // propagates as a real error.
-      final GamesResult result;
-      try {
-        result = await ref.watch(gamesServiceProvider).getMatches(uid);
-      } catch (e) {
-        if (await store.count(uid) == 0) rethrow;
-        // A genuine 4xx (AppException.status) means the server rejected
-        // this request, not a transient connectivity issue — its own
-        // outcome and backoff instead of `offline`'s 5-minute retry loop,
-        // which would just fail the same way every time.
-        final status = e is AppException ? e.status : null;
-        // A 429 is rate limiting, not a rejection — it clears on its own, so
-        // it reads as "busy" (waiting the server's Retry-After), not
-        // requestError's hour-long "needs attention".
-        if (status == 429) {
-          log.w('games fetch rate-limited; serving persisted history');
-          return remember(
-            RankedSyncOutcome.queued,
-            (e as AppException).retryAfter ?? _kOfflineRetry,
-          );
-        }
-        if (status != null && status >= 400 && status < 500) {
-          log.w(
-            'games fetch rejected by server; serving persisted history',
-            error: e,
-          );
-          return remember(
-            RankedSyncOutcome.requestError,
-            _kRequestErrorRetry,
-          );
-        }
-        log.w('games fetch failed; serving persisted history', error: e);
-        return remember(RankedSyncOutcome.offline, _kOfflineRetry);
-      }
-      switch (result) {
-        case GamesPending(:final retryAfter, :final isNotTracked):
-          return await remember(
-            isNotTracked
-                ? RankedSyncOutcome.notTracked
-                : RankedSyncOutcome.queued,
-            retryAfter,
-          );
-        case GamesMatches(:final matches):
-          // An empty list is a valid answer — tracking is live, nothing recorded
-          // yet — so it still counts as a successful sync.
-          await store.upsertAll(
-            uid,
-            matches,
-            seasons: seasons,
-            onlyIfEpoch: epoch,
-          );
-      }
-      // Re-read from prefs rather than reusing the watched `seasons` above: other
-      // screens (e.g. the stats tab) call upsertSeason() directly against prefs
-      // without going through this provider, so a season learned there during
-      // the same session wouldn't otherwise be reflected here until relaunch.
-      final latestSeasons = loadAllSeasonsSync(
-        ref.read(sharedPreferencesProvider),
+  if (!force && !rankedSyncDue(prefs, uid)) {
+    // Inside the backoff window: replay the outcome the last real fetch
+    // recorded, falling back to a plain cooldown when nothing is stored.
+    final last = prefs.getString(PrefsKeys.gamesLastOutcome(uid));
+    return RankedSyncOutcome.values.firstWhere(
+      (o) => o.name == last,
+      orElse: () => RankedSyncOutcome.cooldown,
+    );
+  }
+
+  // Scoped to just the network call. A local write failure
+  // (store.upsertAll, backfillSeasonIds, a prefs write) used to be
+  // caught by the same handler and misreported as `offline`, which is
+  // specifically the wrong diagnosis for the class of failure
+  // that most needs an accurate one. Only a fetch failure gets the
+  // graceful "serve persisted history" treatment; a write failure now
+  // propagates as a real error.
+  final GamesResult result;
+  try {
+    // Resolved before the first await, while a provider-backed factory's `ref` is live.
+    result = await games().getMatches(uid);
+  } catch (e) {
+    if (await store.count(uid) == 0) rethrow;
+    // A genuine 4xx (AppException.status) means the server rejected
+    // this request, not a transient connectivity issue — its own
+    // outcome and backoff instead of `offline`'s 5-minute retry loop,
+    // which would just fail the same way every time.
+    final status = e is AppException ? e.status : null;
+    // A 429 is rate limiting, not a rejection — it clears on its own, so
+    // it reads as "busy" (waiting the server's Retry-After), not
+    // requestError's hour-long "needs attention".
+    if (status == 429) {
+      log.w('games fetch rate-limited; serving persisted history');
+      return remember(
+        RankedSyncOutcome.queued,
+        (e as AppException).retryAfter ?? _kOfflineRetry,
       );
-      await store.backfillSeasonIds(latestSeasons);
-      // Committed only after backfillSeasonIds succeeds, so a write failure
-      // there can't get recorded as a successful sync and lock the user out
-      // of retrying for the whole cooldown.
-      return remember(RankedSyncOutcome.synced, ApiConstants.gamesSyncCooldown);
-    });
+    }
+    if (status != null && status >= 400 && status < 500) {
+      log.w(
+        'games fetch rejected by server; serving persisted history',
+        error: e,
+      );
+      return remember(RankedSyncOutcome.requestError, _kRequestErrorRetry);
+    }
+    log.w('games fetch failed; serving persisted history', error: e);
+    return remember(RankedSyncOutcome.offline, _kOfflineRetry);
+  }
+  switch (result) {
+    case GamesPending(:final retryAfter, :final isNotTracked):
+      return await remember(
+        isNotTracked ? RankedSyncOutcome.notTracked : RankedSyncOutcome.queued,
+        retryAfter,
+      );
+    case GamesMatches(:final matches):
+      // An empty list is a valid answer — tracking is live, nothing recorded
+      // yet — so it still counts as a successful sync.
+      await store.upsertAll(
+        uid,
+        matches,
+        seasons: seasons,
+        onlyIfEpoch: epoch,
+      );
+  }
+  // Re-read from prefs, not [seasons]: other screens call upsertSeason() directly, so a
+  // season learned this session wouldn't otherwise show here. Uses [prefs], not a `ref`,
+  // which a disposed provider would throw on.
+  final latestSeasons = loadAllSeasonsSync(prefs);
+  await store.backfillSeasonIds(latestSeasons);
+  // Committed only after backfillSeasonIds succeeds, so a write failure
+  // there can't get recorded as a successful sync and lock the user out
+  // of retrying for the whole cooldown.
+  return remember(RankedSyncOutcome.synced, ApiConstants.gamesSyncCooldown);
+}
 
 /// Whether [rankedSyncProvider] for [uid] would hit the network if rebuilt
 /// now, rather than replay its stored outcome from inside the backoff window.

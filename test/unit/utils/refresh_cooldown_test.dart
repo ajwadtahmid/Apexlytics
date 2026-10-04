@@ -59,4 +59,24 @@ void main() {
       expect(cooldown.tryFire('a'), isTrue);
     });
   });
+
+  test('release lets the next fire through immediately', () {
+    final cooldown = RefreshCooldown(duration: const Duration(hours: 1));
+    expect(cooldown.tryFire('a'), isTrue);
+    expect(cooldown.tryFire('a'), isFalse);
+
+    cooldown.release('a');
+
+    expect(cooldown.tryFire('a'), isTrue);
+  });
+
+  test('release only affects its own key', () {
+    final cooldown = RefreshCooldown(duration: const Duration(hours: 1));
+    cooldown.tryFire('a');
+    cooldown.tryFire('b');
+
+    cooldown.release('a');
+
+    expect(cooldown.tryFire('b'), isFalse);
+  });
 }

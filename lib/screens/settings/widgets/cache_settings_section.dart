@@ -1,7 +1,9 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/api_provider.dart';
+import '../../../providers/owner_provider.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../providers/search_provider.dart';
 import '../../../providers/settings_provider.dart';
@@ -82,7 +84,20 @@ class CacheSettingsSection extends ConsumerWidget {
                           'backup first if you might want it back.\n\n'
                           'Permanently erase all data?',
                       confirmLabel: 'Erase everything',
-                      onConfirm: () => _clearAll(context, ref),
+                      onConfirm: () async {
+                        // Only an owner device has a token to decide on.
+                        final removeOwnerToken = ref.read(ownerUnlockedProvider)
+                            ? await _askRemoveOwnerToken(context)
+                            : true;
+                        if (removeOwnerToken == null || !context.mounted) {
+                          return;
+                        }
+                        await _clearAll(
+                          context,
+                          ref,
+                          removeOwnerToken: removeOwnerToken,
+                        );
+                      },
                     );
                   },
                 ),
@@ -106,8 +121,39 @@ class CacheSettingsSection extends ConsumerWidget {
     }
   }
 
+  /// Third "Clear all data" question, owner devices only: true removes the owner token,
+  /// false keeps it, null if dismissed.
+  Future<bool?> _askRemoveOwnerToken(BuildContext context) => showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: const Text('Keep owner mode?'),
+      content: const Text(
+        'This device is unlocked as the owner. Keep the owner token so it '
+        'stays unlocked after the erase, or remove it too.',
+        style: TextStyle(color: AppTheme.muted),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text(
+            'Remove token',
+            style: TextStyle(color: AppTheme.red),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text(
+            'Keep token',
+            style: TextStyle(color: AppTheme.green),
+          ),
+        ),
+      ],
+    ),
+  );
+
   /// Erases every persisted surface: prefs (bar first-run state), the ranked
-  /// match database, and the API response cache.
+  /// match database, and the API cache. The owner token goes only if [removeOwnerToken].
   ///
   /// Every step runs even if an earlier one fails, and the message names
   /// whatever didn't clear. Match history goes first on purpose: clearing
@@ -115,7 +161,11 @@ class CacheSettingsSection extends ConsumerWidget {
   /// that shows it while the history stayed on disk, unseen. This order
   /// fails the other way — data still visible, profile still there, and a
   /// retry finishes the job.
-  Future<void> _clearAll(BuildContext context, WidgetRef ref) async {
+  Future<void> _clearAll(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool removeOwnerToken,
+  }) async {
     final failed = <String>[];
     Future<void> step(String what, Future<void> Function() run) async {
       try {
@@ -134,8 +184,17 @@ class CacheSettingsSection extends ConsumerWidget {
     );
     await step('profiles, favorites & settings', () async {
       await ref.read(searchStateProvider.notifier).clearFavorites();
-      await ref.read(playerSettingsProvider.notifier).clearAll();
+      await ref
+          .read(playerSettingsProvider.notifier)
+          .clearAll(keepOwnerUnlock: !removeOwnerToken);
     });
+    // clearAll() only sweeps prefs; the token lives in secure storage. lock() also resets the flag.
+    if (removeOwnerToken) {
+      await step(
+        'owner token',
+        () => ref.read(ownerUnlockedProvider.notifier).lock(),
+      );
+    }
     await step(
       'cached responses',
       () => ref.read(apiServiceProvider).clearCache(),
@@ -175,8 +234,10 @@ class CacheSettingsSection extends ConsumerWidget {
       if (filePath == null) return;
 
       if (context.mounted) {
+        // iOS only shares the file, so say "shared".
         context.showMessage(
-          'Backup saved: ${Uri.file(filePath).pathSegments.last}',
+          'Backup ${Platform.isIOS ? 'shared' : 'saved'}: '
+          '${Uri.file(filePath).pathSegments.last}',
           duration: const Duration(seconds: 4),
         );
       }

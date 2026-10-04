@@ -30,8 +30,10 @@ String scrubForCrashReport(String text) {
 
 /// Sentry `beforeSend`: scrubs every free-text field of an outgoing event
 /// that app or error text can reach — exception values, the message, and
-/// the breadcrumb trail attached to it.
+/// the breadcrumb trail attached to it. Also drops the event's user, which the SDK
+/// can fill with a per-install id.
 SentryEvent scrubSentryEvent(SentryEvent event, Hint hint) {
+  event.user = null;
   for (final exception in event.exceptions ?? const <SentryException>[]) {
     final value = exception.value;
     if (value != null) exception.value = scrubForCrashReport(value);

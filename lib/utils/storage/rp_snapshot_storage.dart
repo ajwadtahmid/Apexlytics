@@ -21,7 +21,20 @@ const String snapshotKeyPrefix = 'stat_snapshots_';
 /// copy, but the RP graph renders on frame 1 and SQLite is async, so reads
 /// are served from here. [primeSnapshots] fills it, [loadSnapshotsSync] reads
 /// it, [appendSnapshot] keeps both in step. Keyed like [PrefsKeys.snapshotKeyFor].
+///
+/// Bounded to [_maxCachedUids] entries, least recently used first; an evicted entry is
+/// re-read from the table on demand ([_appendSnapshotLocked] primes on a miss).
 final Map<String, List<StatSnapshot>> _cache = {};
+const int _maxCachedUids = 25;
+
+/// Stores [snaps] under [key] as the most recently used entry.
+void _remember(String key, List<StatSnapshot> snaps) {
+  _cache.remove(key);
+  _cache[key] = snaps;
+  while (_cache.length > _maxCachedUids) {
+    _cache.remove(_cache.keys.first);
+  }
+}
 
 /// Notifies after every [resetSnapshotCache], so a view holding its own copy
 /// of the snapshot list (the RP graph) knows to re-read after a backup
@@ -124,15 +137,20 @@ Future<List<StatSnapshot>> primeSnapshots(
   String? uid,
 ) async {
   final snaps = await store.snapshotsFor(uid ?? '');
-  _cache[PrefsKeys.snapshotKeyFor(uid)] = snaps;
+  _remember(PrefsKeys.snapshotKeyFor(uid), snaps);
   return snaps;
 }
 
 /// Synchronous read, served from the cache filled by [primeSnapshots].
 /// Returns empty for a UID that has not been primed yet - the graph fills in
 /// on the frame after priming completes rather than blocking the first one.
-List<StatSnapshot> loadSnapshotsSync({String? uid}) =>
-    _cache[PrefsKeys.snapshotKeyFor(uid)] ?? const [];
+List<StatSnapshot> loadSnapshotsSync({String? uid}) {
+  final key = PrefsKeys.snapshotKeyFor(uid);
+  final snaps = _cache[key];
+  if (snaps == null) return const [];
+  _remember(key, snaps); // a read counts as use
+  return snaps;
+}
 
 /// Per-UID chain of in-flight [appendSnapshot] calls, so two interleaved
 /// appends for the same UID can't both read the same pre-append list and
@@ -233,7 +251,7 @@ Future<List<StatSnapshot>> _appendSnapshotLocked(
   // One row appended, one list element appended - no full re-encode of the
   // series, which is what made the old prefs blob O(n) on every poll tick.
   final updated = [...snapshots, snapshot];
-  _cache[key] = updated;
+  _remember(key, updated);
   return updated;
 }
 

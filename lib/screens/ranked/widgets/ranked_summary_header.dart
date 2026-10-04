@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../constants/rank_constants.dart';
@@ -6,7 +5,8 @@ import '../../../providers/predator_provider.dart';
 import '../../../providers/rank_goal_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/formatting/format.dart' show formatNumber;
-import '../../../utils/formatting/rank_utils.dart' show rankAssetPathByTier;
+import '../../../utils/formatting/rank_utils.dart'
+    show rankAssetPathByTier, rankAssetPathFromImageUrl;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
@@ -73,15 +73,16 @@ class RankedSummaryHeader extends ConsumerWidget {
                   errorBuilder: (_, _, _) => const SizedBox(width: 36),
                 ),
                 const SizedBox(width: AppTheme.sm),
-              ] else if (summary.latestRankImg.isNotEmpty) ...[
-                CachedNetworkImage(
-                  imageUrl: summary.latestRankImg,
+              ] else if (rankAssetPathFromImageUrl(summary.latestRankImg)
+                  case final badge?) ...[
+                Image.asset(
+                  badge,
                   width: 36,
                   height: 36,
                   fit: BoxFit.contain,
-                  memCacheWidth: (36 * MediaQuery.devicePixelRatioOf(context))
+                  cacheWidth: (36 * MediaQuery.devicePixelRatioOf(context))
                       .ceil(),
-                  errorWidget: (_, _, _) => const SizedBox(width: 36),
+                  errorBuilder: (_, _, _) => const SizedBox(width: 36),
                 ),
                 const SizedBox(width: AppTheme.sm),
               ],

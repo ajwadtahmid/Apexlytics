@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/player_stats.dart';
+import '../../providers/owner_provider.dart';
 import '../../providers/player_provider.dart';
 import '../../providers/ranked_provider.dart';
+import '../../providers/refresh_all_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/error_messages.dart';
@@ -19,6 +21,7 @@ import '../ranked/ranked_breakdown_body.dart';
 import '../ranked/widgets/ranked_info_sheet.dart';
 import '../ranked/widgets/ranked_period_selector.dart'
     show RankedSplitDropdown, RankedWeekStrip;
+import 'refresh_all_sheet.dart';
 
 /// My Stats — the app's default tab. Hosts the player's own snapshot info
 /// plus the full Ranked Breakdown (rank header, RP graph, and every Ranked
@@ -170,6 +173,32 @@ class _StatsViewState extends ConsumerState<_StatsView> {
     await Future.wait(futures);
   }
 
+  /// Owner-only: refreshes every saved profile (pull-down still refreshes just this one).
+  Future<void> _refreshAll() async {
+    final report = await ref.read(refreshAllProvider.notifier).run();
+    if (report == null || !mounted) return;
+
+    // Everything on screen derives from what the run just wrote.
+    invalidateMatchDerivedProviders(ref);
+    // Re-reading each sync outcome is free (new backoff window) and clears stale "queued" notes.
+    ref.invalidate(rankedSyncProvider);
+    ref.invalidate(myPlayerStatsProvider);
+    if (report.seasonsChanged) ref.invalidate(rankedSeasonsProvider);
+
+    // Cleared mid-run: nothing to report.
+    if (report.aborted) return;
+    if (report.hasProblems) {
+      await showRefreshAllSheet(context, report);
+    } else {
+      final n = report.results.length;
+      context.showMessage(
+        report.newMatches > 0
+            ? 'Refreshed $n profiles · +${report.newMatches} new matches'
+            : 'Refreshed $n profiles',
+      );
+    }
+  }
+
   Future<void> _openOnALS(
     BuildContext context,
     String uid,
@@ -213,8 +242,20 @@ class _StatsViewState extends ConsumerState<_StatsView> {
       playerSettingsProvider.select((s) => s.platform),
     );
     final statsAsync = ref.watch(myPlayerStatsProvider);
+    final refreshAll = ref.watch(refreshAllProvider);
     final isSyncing =
-        statsAsync.isLoading || ref.watch(rankedSyncProvider(uid)).isLoading;
+        statsAsync.isLoading ||
+        ref.watch(rankedSyncProvider(uid)).isLoading ||
+        refreshAll.running;
+    // Owners with several profiles get "Refresh all" here; pull-down refreshes just this one.
+    final refreshAllMode =
+        ref.watch(ownerUnlockedProvider) &&
+        ref.watch(
+              playerSettingsProvider.select(
+                (s) => s.profiles.where((p) => p.isSet).length,
+              ),
+            ) >=
+            2;
 
     // Built purely for the AppBar's split dropdown + week strip — the actual
     // Ranked content (including its own loading/error handling) lives in
@@ -288,9 +329,9 @@ class _StatsViewState extends ConsumerState<_StatsView> {
                   ),
                 )
               : IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Sync',
-                  onPressed: _sync,
+                  icon: Icon(refreshAllMode ? Icons.sync : Icons.refresh),
+                  tooltip: refreshAllMode ? 'Refresh all profiles' : 'Sync',
+                  onPressed: refreshAllMode ? _refreshAll : _sync,
                 ),
         ],
         // Split + week selection get their own row so they don't compete with
@@ -430,6 +471,9 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
     if (legendChanged) _lastLegend = legend;
 
     final prefs = ref.read(sharedPreferencesProvider);
+    final store = ref.read(rankedHistoryStoreProvider);
+    // "Clear all data" bumps the epoch first; later writes would restore erased data.
+    final epoch = store.dataEpoch;
 
     // Upsert the current season before parallel work so loadAllSeasonsSync sees it.
     final season = widget.stats.rankedSeason;
@@ -441,16 +485,16 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
     // split picker picks it up this session too.
     if (seasonChanged && mounted) ref.invalidate(rankedSeasonsProvider);
 
+    // The three writers below persist immediately, in this same turn, so one check covers them.
+    if (store.dataEpoch != epoch) return;
+
     final (snaps, legends, stack) = await (
       // Primes the snapshot cache on first call for this UID.
-      appendAndLoadSnapshots(
-        widget.stats,
-        ref.read(rankedHistoryStoreProvider),
-      ),
+      appendAndLoadSnapshots(widget.stats, store),
       mergeLegendStats(widget.stats.legendStats, prefs, uid: widget.stats.uid),
       legendChanged && legend.isNotEmpty
-          ? pushToLegendStack(legend, prefs)
-          : loadLegendStack(prefs),
+          ? pushToLegendStack(legend, prefs, uid: widget.stats.uid)
+          : loadLegendStack(prefs, uid: widget.stats.uid),
     ).wait;
     // A newer load superseded us while we were awaiting - its data is the
     // current profile's, ours may not be.

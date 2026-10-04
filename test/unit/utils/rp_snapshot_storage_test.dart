@@ -70,6 +70,52 @@ void main() {
     });
   });
 
+  group('cache bound', () {
+    Future<void> prime(String uid) async {
+      await store.appendSnapshotsFor(uid, [
+        StatSnapshot(timestamp: DateTime(2026, 9, 1), rp: 100),
+      ]);
+      await primeSnapshots(store, uid);
+    }
+
+    test('evicts the least recently used player past the cap', () async {
+      for (var i = 0; i < 26; i++) {
+        await prime('u$i');
+      }
+
+      expect(loadSnapshotsSync(uid: 'u0'), isEmpty, reason: 'oldest evicted');
+      expect(loadSnapshotsSync(uid: 'u1'), isNotEmpty);
+      expect(loadSnapshotsSync(uid: 'u25'), isNotEmpty);
+    });
+
+    test('a read keeps a player from being evicted', () async {
+      for (var i = 0; i < 25; i++) {
+        await prime('u$i');
+      }
+      expect(loadSnapshotsSync(uid: 'u0'), isNotEmpty); // touches u0
+      await prime('u25');
+
+      expect(loadSnapshotsSync(uid: 'u0'), isNotEmpty);
+      expect(loadSnapshotsSync(uid: 'u1'), isEmpty, reason: 'now the oldest');
+    });
+
+    test('an evicted player is re-read from the table on the next append', () async {
+      for (var i = 0; i < 26; i++) {
+        await prime('u$i');
+      }
+      expect(loadSnapshotsSync(uid: 'u0'), isEmpty);
+
+      final updated = await appendSnapshot(
+        buildStats(rankScore: 900),
+        store,
+        uid: 'u0',
+      );
+
+      // The stored reading survives eviction and the new one follows it.
+      expect(updated.map((s) => s.rp), [100, 900]);
+    });
+  });
+
   group('appendSnapshot', () {
     test('appends a new snapshot', () async {
       await appendSnapshot(buildStats(rankScore: 2400), store);

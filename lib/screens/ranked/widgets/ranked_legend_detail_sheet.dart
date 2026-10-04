@@ -55,7 +55,7 @@ Future<void> showLegendDetailSheet(
 /// stat exists. Labeled "Trackers" (not "All Trackers", the Overview button
 /// that opens every legend's trackers) since this one is scoped to a single
 /// legend.
-class _LegendDetailSheet extends ConsumerWidget {
+class _LegendDetailSheet extends ConsumerStatefulWidget {
   final LegendBreakdown breakdown;
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
@@ -66,8 +66,23 @@ class _LegendDetailSheet extends ConsumerWidget {
     required this.onRefresh,
   });
 
+  @override
+  ConsumerState<_LegendDetailSheet> createState() => _LegendDetailSheetState();
+}
+
+class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
+  LegendBreakdown get breakdown => widget.breakdown;
+  Future<void> Function() get onRefresh => widget.onRefresh;
+
+  /// The legend's matches and their trends, loaded once (not per rebuild).
+  late final Future<({List<RankedMatch> matches, EntityTrends trends})> _loaded =
+      widget.matchesFor(breakdown.legend).then(
+        (matches) => (matches: matches, trends: entityTrends(matches)),
+      );
+
   Future<void> _viewHistory(BuildContext context) async {
-    final games = await matchesFor(breakdown.legend)
+    // Copy: keep the loaded list in the order the trends used.
+    final games = [...(await _loaded).matches]
       ..sort((a, b) => b.endTime.compareTo(a.endTime));
     if (!context.mounted) return;
     Navigator.of(context).push(
@@ -96,7 +111,7 @@ class _LegendDetailSheet extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final info = kLegendsByName[breakdown.legend.toLowerCase()];
     final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
     final prefs = ref.watch(sharedPreferencesProvider);
@@ -205,16 +220,15 @@ class _LegendDetailSheet extends ConsumerWidget {
                 ),
               ],
             ),
-            FutureBuilder<List<RankedMatch>>(
-              future: matchesFor(breakdown.legend),
+            FutureBuilder<({List<RankedMatch> matches, EntityTrends trends})>(
+              future: _loaded,
               builder: (context, snapshot) {
-                final matches = snapshot.data;
-                if (matches == null) return const SizedBox.shrink();
-                final trends = entityTrends(matches);
+                final loaded = snapshot.data;
+                if (loaded == null) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TrendLines(trends: trends),
+                    TrendLines(trends: loaded.trends),
                     const TrendFootnote(),
                   ],
                 );

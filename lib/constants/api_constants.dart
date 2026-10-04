@@ -26,6 +26,11 @@ class ApiConstants {
       'https://apexlegendsstatus.com/profile/search/';
   static const List<String> platforms = ['PC', 'PS4', 'X1', 'SWITCH'];
 
+  /// Platforms with no upstream name lookup; UID only.
+  static const Set<String> uidOnlyPlatforms = {'SWITCH'};
+
+  static bool isUidOnly(String platform) => uidOnlyPlatforms.contains(platform);
+
   static const String mapRotationPath = '/maprotation';
   static const String mapRotationVersion = '2';
 

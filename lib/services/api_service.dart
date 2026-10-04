@@ -15,8 +15,8 @@ import '../utils/storage/api_cache_store.dart';
 export '../utils/api_cache.dart' show ApiResult;
 
 /// HTTP client wrapping Dio with a write-through disk cache.
-/// On network failure, [get] and [getList] transparently fall back to the
-/// most-recent cached response (stale data) rather than throwing.
+/// On a transient failure (offline, timeout, 5xx, 429), [get]/[getList] fall back to the
+/// cached response (stale); a definite answer like 404 is still thrown.
 class ApiService {
   late final Dio _dio;
   late final ApiCache _cache;
@@ -94,8 +94,9 @@ class ApiService {
     );
   }
 
-  /// Fetches [endpoint] and caches the result. On [DioException], returns stale
-  /// cached data if available; otherwise re-throws a user-friendly message.
+  /// Fetches [endpoint] and caches the result. On a transient failure returns stale cached
+  /// data if available; a definite answer (404, 401…) is thrown. Otherwise re-throws a
+  /// friendly message.
   /// Pass [noCache] = true to skip both read and write (e.g. search-by-name).
   Future<ApiResult<Map<String, dynamic>>> get(
     String endpoint, {
@@ -117,7 +118,7 @@ class ApiService {
   );
 
   /// Fetches [endpoint] expecting a list response and caches the result.
-  /// On [DioException], returns stale cached data if available; otherwise re-throws.
+  /// Falls back to stale cache on the same failures as [get].
   /// Pass [noCache] = true to skip both read and write.
   Future<ApiResult<List<dynamic>>> getList(
     String endpoint, {
@@ -211,6 +212,8 @@ class ApiService {
     required T Function(dynamic) cacheNormalizer,
   }) async {
     final key = _buildCacheKey(endpoint, params);
+    // Read before the request: a clear while it's in flight must not get this written back.
+    final cacheGeneration = _cache.generation;
     try {
       final response = await withOverallDeadline(
         _overallDeadline,
@@ -222,14 +225,14 @@ class ApiService {
         // Best-effort: a cache-write failure (e.g. disk full) must not turn
         // an already-successful fetch into a thrown error.
         try {
-          await _cache.save(key, data);
+          await _cache.save(key, data, ifGeneration: cacheGeneration);
         } catch (e) {
           log.w('API cache save failed', error: e);
         }
       }
       return ApiResult(data);
     } on DioException catch (e) {
-      if (!noCache) {
+      if (!noCache && _canServeStale(e)) {
         final cached = _cache.loadStale(key);
         if (cached != null) {
           return ApiResult(
@@ -245,6 +248,17 @@ class ApiService {
         retryAfter: _retryAfter(e.response),
       );
     }
+  }
+
+  /// Definite answers (bad token, refused, unknown player or platform); old data would hide
+  /// the problem, e.g. a vanished player loading from cache.
+  static const _definitiveStatuses = {401, 403, 404, 410};
+
+  /// Whether a failed request may fall back to stale cache: no answer, or anything but
+  /// [_definitiveStatuses].
+  static bool _canServeStale(DioException e) {
+    final status = e.response?.statusCode;
+    return status == null || !_definitiveStatuses.contains(status);
   }
 
   String _buildCacheKey(String endpoint, Map<String, dynamic>? params) {

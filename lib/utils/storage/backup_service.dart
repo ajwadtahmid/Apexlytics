@@ -60,6 +60,7 @@ const _dynamicBackupPrefixes = [
   // Deliberate user input, and the second setting to escape backups by being
   // a UID-scoped key nobody added here. See the exhaustiveness test.
   PrefsKeys.rankGoalPrefix,
+  PrefsKeys.legendVisitStackPrefix,
 ];
 
 bool _include(String key) {
@@ -214,26 +215,79 @@ Map<String, dynamic> _collect(SharedPreferences prefs) {
   return result;
 }
 
-/// JSON-encodes then gzip-compresses [envelope] — the CPU-bound half of
-/// [exportBackup], run via [Isolate.run] rather than inline so it doesn't
-/// block the UI isolate. A top-level function with no captured instance
-/// state, so it's safe to send to the spawned isolate; [envelope] is plain
-/// JSON-safe types throughout, which cross the isolate boundary fine.
-List<int> _encodeAndCompress(Map<String, Object?> envelope) {
-  // No indentation — this file is never hand-read, and pretty-printing
-  // roughly doubles its size for no benefit.
-  final json = jsonEncode(envelope);
-  // Gzipped on top of that: the JSON is highly repetitive (same column names
-  // on every row), so this compresses very well. previewBackup's file picker
-  // accepts `.gz` directly (see decompressIfGzipped) via the app's own
-  // document picker, so restoring stays one step as long as the user goes
-  // through "Restore backup" rather than opening the file from a system file
-  // manager (which may try to extract `.gz` first).
-  return gzip.encode(utf8.encode(json));
+/// Collects the gzip encoder's output.
+class _ByteCollector implements Sink<List<int>> {
+  final BytesBuilder _builder = BytesBuilder(copy: false);
+
+  @override
+  void add(List<int> chunk) => _builder.add(chunk);
+
+  @override
+  void close() {}
+
+  List<int> get bytes => _builder.takeBytes();
+}
+
+/// The gzipped backup envelope, built page by page: the history is encoded and compressed
+/// as it streams in from [matchPages], so no whole-history object or string is held and no
+/// step does more than a page of work on the UI isolate. [matchCount] is the match rows written.
+@visibleForTesting
+Future<({List<int> bytes, int matchCount})> buildBackupBytes({
+  required Map<String, Object?> prefs,
+  required Stream<List<Map<String, Object?>>> matchPages,
+  required List<Map<String, Object?>> snapshotRows,
+  DateTime? exportedAt,
+}) async {
+  final sink = _ByteCollector();
+  final out = gzip.encoder.startChunkedConversion(sink);
+  void write(String text) => out.add(utf8.encode(text));
+
+  // Compact JSON (never hand-read), gzipped since it's very repetitive. The picker accepts `.gz`
+  // directly, so restore stays one step via "Restore backup" (a file manager may extract it first).
+  final head = jsonEncode({
+    'version': _kBackupVersion,
+    'exported_at': (exportedAt ?? DateTime.now()).toIso8601String(),
+    'prefs': prefs,
+  });
+  // `head` ends in the object's closing brace; reopen it for the arrays.
+  write('${head.substring(0, head.length - 1)},"ranked_history":[');
+  var matchCount = 0;
+  await for (final page in matchPages) {
+    final json = jsonEncode(page);
+    write('${matchCount == 0 ? '' : ','}${json.substring(1, json.length - 1)}');
+    matchCount += page.length;
+  }
+  write('],"stat_snapshots":${jsonEncode(snapshotRows)}}');
+  out.close();
+  return (bytes: sink.bytes, matchCount: matchCount);
+}
+
+/// Writes [bytes] to [file], shares it and deletes it. False if the user dismissed the sheet
+/// (nothing saved); `unavailable` counts as shared. [share] is a test seam.
+@visibleForTesting
+Future<bool> shareBackupFile(
+  File file,
+  List<int> bytes, {
+  Future<ShareResult> Function(ShareParams params)? share,
+}) async {
+  await file.writeAsBytes(bytes);
+  try {
+    final result = await (share ?? SharePlus.instance.share)(
+      ShareParams(files: [XFile(file.path, mimeType: 'application/gzip')]),
+    );
+    return result.status != ShareResultStatus.dismissed;
+  } finally {
+    // Don't leave the export (UIDs, names) in the temp directory.
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      log.w('Backup temp file cleanup failed', error: e);
+    }
+  }
 }
 
 /// Shows a save dialog and writes backup JSON to the user's selected location.
-/// Returns the file path on success, null if user cancelled.
+/// Returns the file path, or null if cancelled (including a dismissed iOS share sheet).
 ///
 /// [rankedStore], when provided, embeds the full ranked match history in the
 /// same file so device migration stays a single-file operation.
@@ -242,50 +296,32 @@ Future<String?> exportBackup(
   RankedHistoryStore? rankedStore,
 }) async {
   final payload = _collect(prefs);
-  final rankedHistory = rankedStore == null
-      ? const <Map<String, Object?>>[]
-      : await rankedStore.exportRows();
   final statSnapshots = rankedStore == null
       ? const <Map<String, Object?>>[]
       : await rankedStore.exportSnapshotRows();
-  final envelope = {
-    'version': _kBackupVersion,
-    'exported_at': DateTime.now().toIso8601String(),
-    'prefs': payload,
-    'ranked_history': rankedHistory,
-    'stat_snapshots': statSnapshots,
-  };
-
-  // Off the UI isolate (see [_encodeAndCompress]) — a multi-thousand-match
-  // history is real CPU work, and doing it inline would freeze the UI on
-  // exactly the operation (device migration) where a freeze is most alarming.
-  final compressed = await Isolate.run(() => _encodeAndCompress(envelope));
+  final (bytes: compressed, :matchCount) = await buildBackupBytes(
+    prefs: payload,
+    matchPages: rankedStore?.exportRowPages() ?? const Stream.empty(),
+    snapshotRows: statSnapshots,
+  );
   final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
   final defaultFilename = 'apexlytics_$stamp.json.gz';
 
   if (Platform.isIOS) {
     final dir = await getTemporaryDirectory();
     final filePath = '${dir.path}/$defaultFilename';
-    final file = File(filePath);
-    await file.writeAsBytes(compressed);
-    try {
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(filePath, mimeType: 'application/gzip')]),
-      );
-    } finally {
-      // Don't leave the export (UIDs, names) in the temp directory.
-      try {
-        if (await file.exists()) await file.delete();
-      } catch (e) {
-        log.w('Backup temp file cleanup failed', error: e);
-      }
+    final shared = await shareBackupFile(File(filePath), compressed);
+    if (!shared) {
+      // Dismissed: a cancellation, not an export.
+      log.i('Backup share dismissed');
+      return null;
     }
     // Path deliberately omitted: on desktop it can embed the OS username,
     // and log.i reaches Sentry as a breadcrumb in release builds — see the
     // privacy rule in app_logger.dart.
     log.i(
       'Backup shared: ${payload.length} keys, '
-      '${rankedHistory.length} ranked matches, '
+      '$matchCount ranked matches, '
       '${compressed.length} bytes compressed',
     );
     return filePath;
@@ -300,7 +336,7 @@ Future<String?> exportBackup(
   // Path omitted for the same reason as the iOS branch above.
   log.i(
     'Backup exported: ${payload.length} keys, '
-    '${rankedHistory.length} ranked matches, '
+    '$matchCount ranked matches, '
     '${compressed.length} bytes compressed',
   );
   return filePath;
@@ -687,7 +723,17 @@ Future<ImportResult> commitBackupImport(
       // A v1/v2 file restores its snapshots as prefs keys; drain them now
       // rather than leaving the graph empty until the next launch. No-op for
       // a v3 file, which carries no legacy keys.
-      await migrateSnapshotsFromPrefs(prefs, rankedStore);
+      //
+      // Must not fail the import: rows and prefs have already committed, and the catch below
+      // would roll back only prefs. The legacy keys stay for the next launch's drain.
+      try {
+        await migrateSnapshotsFromPrefs(prefs, rankedStore);
+      } catch (e) {
+        log.w(
+          'Backup restore: RP snapshot drain deferred to next launch '
+          '(${e.runtimeType})',
+        );
+      }
     }
     resetSnapshotCache();
 

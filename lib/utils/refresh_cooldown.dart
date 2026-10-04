@@ -7,6 +7,9 @@ class RefreshCooldown {
 
   RefreshCooldown({this.duration = const Duration(seconds: 3)});
 
+  /// Forgets [key] so its next [tryFire] passes; for a fire whose action failed.
+  void release(String key) => _lastFiredAt.remove(key);
+
   /// Records [key] as fired and returns true if it's outside its cooldown
   /// window. Returns false, leaving the previous timestamp in place, if
   /// still cooling down.

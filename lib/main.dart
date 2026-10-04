@@ -84,6 +84,8 @@ void main() async {
       options.dist = packageInfo.buildNumber;
       // Never send IP addresses, device identifiers, or user identity.
       options.sendDefaultPii = false;
+      // Sessions carry a per-install id, i.e. a device identifier.
+      options.enableAutoSessionTracking = false;
       options.maxBreadcrumbs = 50;
       // sentry_dio is not used, so Dio requests are not auto-instrumented —
       // no player names or UIDs can leak through HTTP breadcrumbs.

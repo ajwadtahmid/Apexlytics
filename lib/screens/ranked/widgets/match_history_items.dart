@@ -79,18 +79,19 @@ class MatchItem extends HistoryItem {
 /// match history stays cheap to flatten and lay out.
 const int kHistoryPageSize = 50;
 
-/// Extends [limit] forward through [matches] (newest first) until a gap larger
-/// than [kSessionGap] is found, so a page cut never lands mid-session — the
-/// same rule [buildDayItems] uses to place [SessionBreakItem]s.
-List<RankedMatch> _extendToSessionBoundary(
-  List<RankedMatch> matches,
-  int limit,
-) {
+/// The local calendar day [m] is listed under (as in [buildDayItems]).
+DateTime _dayOf(RankedMatch m) {
+  final lm = m.endTime.toLocal();
+  return DateTime(lm.year, lm.month, lm.day);
+}
+
+/// Extends [limit] to the end of the day the cut lands in, so a day header's totals cover
+/// all its games. Session breaks only sit within a day, so none is split either.
+List<RankedMatch> _extendToDayBoundary(List<RankedMatch> matches, int limit) {
   if (limit >= matches.length) return matches;
+  final day = _dayOf(matches[limit - 1]);
   var end = limit;
-  while (end < matches.length) {
-    final gap = matches[end - 1].startTime.difference(matches[end].endTime);
-    if (gap > kSessionGap) break;
+  while (end < matches.length && _dayOf(matches[end]) == day) {
     end++;
   }
   return matches.sublist(0, end);
@@ -99,12 +100,11 @@ List<RankedMatch> _extendToSessionBoundary(
 /// Flattens matches (newest first) into day headers, session breaks and rows.
 ///
 /// When [limit] is set, only the first [limit] matches are shown — extended to
-/// the end of whatever session they land in, so a session is never split
-/// across a page boundary.
+/// the end of whatever day they land in, so a day's header totals are complete.
 List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
   final visible = limit == null
       ? matches
-      : _extendToSessionBoundary(matches, limit);
+      : _extendToDayBoundary(matches, limit);
   final items = <HistoryItem>[];
   DateTime? curDay;
   final dayBuckets = <List<RankedMatch>>[];

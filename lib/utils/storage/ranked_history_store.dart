@@ -10,6 +10,7 @@ import '../../constants/map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
 import '../formatting/season_utils.dart';
+import '../app_logger.dart';
 import '../formatting/snapshot_types.dart';
 import '../ranked/ranked_aggregates.dart';
 
@@ -31,6 +32,12 @@ class RankedHistoryStore {
   static const snapshotTable = 'stat_snapshots';
 
   static const _version = 10;
+
+  /// How long a favourite's RP snapshots are kept (see [pruneSnapshots]).
+  static const favoriteSnapshotMaxAge = Duration(days: 90);
+
+  /// How long anyone else's are kept; nothing records new readings for them, so they age.
+  static const otherSnapshotMaxAge = Duration(days: 14);
 
   /// SQL `GLOB` shape of a real split id (`br_ranked_s29_s1`) — the SQL side
   /// of [SeasonMeta.isSplitId]. NULL, [kUnknownSeasonId], and any placeholder
@@ -420,7 +427,49 @@ class RankedHistoryStore {
     ].join(',\n          ');
   }
 
+  /// Upsert columns in bind order; a restore also carries `excluded`.
+  static const _upsertColumns = [
+    'id',
+    'uid',
+    'player_name',
+    'legend',
+    'game_mode',
+    'map_key',
+    'rp_change',
+    'cumulative_rp',
+    'rank_img',
+    'length_secs',
+    'start_ms',
+    'end_ms',
+    'is_party_full',
+    'trackers',
+    'season_id',
+    'kills',
+    'damage',
+    'edited_fields',
+  ];
+
+  static const _restoreColumns = [..._upsertColumns, 'excluded'];
+
+  /// The upsert SQL for [upsertAll] (sync) or [importRows] (restore), built once, not per row.
+  static String _upsertSql({required bool restore}) {
+    final columns = restore ? _restoreColumns : _upsertColumns;
+    return '''
+        INSERT INTO $table (${columns.join(', ')})
+        VALUES (${List.filled(columns.length, '?').join(', ')})
+        ON CONFLICT(id) DO UPDATE SET
+        ${_conflictUpdateSet(restore: restore)}
+        ''';
+  }
+
+  static final _syncUpsertSql = _upsertSql(restore: false);
+  static final _restoreUpsertSql = _upsertSql(restore: true);
+
+  /// Rows per restore batch; one batch for a large history is a huge platform-channel message.
+  static const _importBatchSize = 500;
+
   /// Inserts/updates [matches] for [uid]. Idempotent via the primary key.
+  /// A match whose own uid isn't [uid] is skipped (and counted in a warning).
   ///
   /// Three groups of columns behave differently on conflict:
   ///
@@ -444,45 +493,30 @@ class RankedHistoryStore {
     Map<String, SeasonMeta> seasons = const {},
     int? onlyIfEpoch,
   }) async {
-    if (matches.isEmpty) return;
+    // Rows are filed under the match's own uid, so a missing or different one would land under
+    // another player (or '') and never show for [uid]. Skipped instead.
+    final own = [
+      for (final m in matches)
+        if (m.uid == uid) m,
+    ];
+    if (own.length != matches.length) {
+      log.w(
+        'History sync skipped ${matches.length - own.length} of '
+        '${matches.length} matches that did not carry the requested uid',
+      );
+    }
+    if (own.isEmpty) return;
     final db = await _open();
     final batch = db.batch();
-    for (final m in matches) {
+    for (final m in own) {
       final row = m.withPlausibleStats().toStoredMap();
       final derivedSeasonId = seasons.isNotEmpty
           ? seasonIdForEndTime(m.endTime, seasons.values)
           : null;
-      batch.rawInsert(
-        '''
-        INSERT INTO $table (
-          id, uid, player_name, legend, game_mode, map_key, rp_change,
-          cumulative_rp, rank_img, length_secs, start_ms, end_ms,
-          is_party_full, trackers, season_id, kills, damage, edited_fields
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-        ${_conflictUpdateSet(restore: false)}
-        ''',
-        [
-          row['id'],
-          row['uid'],
-          row['player_name'],
-          row['legend'],
-          row['game_mode'],
-          row['map_key'],
-          row['rp_change'],
-          row['cumulative_rp'],
-          row['rank_img'],
-          row['length_secs'],
-          row['start_ms'],
-          row['end_ms'],
-          row['is_party_full'],
-          row['trackers'],
-          derivedSeasonId,
-          row['kills'],
-          row['damage'],
-          row['edited_fields'],
-        ],
-      );
+      batch.rawInsert(_syncUpsertSql, [
+        for (final column in _upsertColumns)
+          column == 'season_id' ? derivedSeasonId : row[column],
+      ]);
     }
     // Checked right before the commit is queued: sqflite runs operations in
     // order, so a deleteAll() after this check still clears what it wrote.
@@ -1150,6 +1184,34 @@ class RankedHistoryStore {
     await batch.commit(noResult: true);
   }
 
+  /// Trims RP snapshots, returning how many rows went. Never trimmed: [profileUids], any UID
+  /// with stored match history (e.g. a removed profile) and the legacy UID-less bucket.
+  /// [favoriteUids] keep [favoriteSnapshotMaxAge]; everyone else [otherSnapshotMaxAge].
+  Future<int> pruneSnapshots({
+    required Set<String> profileUids,
+    required Set<String> favoriteUids,
+    DateTime? now,
+  }) async {
+    final db = await _open();
+    final nowMs = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    String marks(Set<String> s) => List.filled(s.length, '?').join(', ');
+    return db.rawDelete(
+      '''
+      DELETE FROM $snapshotTable
+      WHERE uid != ''
+        AND uid NOT IN (${marks(profileUids)})
+        AND NOT EXISTS (SELECT 1 FROM $table m WHERE m.uid = $snapshotTable.uid)
+        AND ts_ms < CASE WHEN uid IN (${marks(favoriteUids)}) THEN ? ELSE ? END
+      ''',
+      [
+        ...profileUids,
+        ...favoriteUids,
+        nowMs - favoriteSnapshotMaxAge.inMilliseconds,
+        nowMs - otherSnapshotMaxAge.inMilliseconds,
+      ],
+    );
+  }
+
   /// Snapshot rows stored for [uid]. Test-only — production reads go through
   /// [snapshotsFor], which the RP graph needs the rows from anyway.
   @visibleForTesting
@@ -1216,6 +1278,28 @@ class RankedHistoryStore {
     return db.query(table, orderBy: 'start_ms DESC');
   }
 
+  /// Every row, [pageSize] at a time, paged by primary key (not `OFFSET`) so a concurrent sync
+  /// can't shift rows past the cursor. Lets the export avoid holding the whole history.
+  Stream<List<Map<String, Object?>>> exportRowPages({
+    int pageSize = 250,
+  }) async* {
+    final db = await _open();
+    String? lastId;
+    while (true) {
+      final page = await db.query(
+        table,
+        where: lastId == null ? null : 'id > ?',
+        whereArgs: lastId == null ? null : [lastId],
+        orderBy: 'id',
+        limit: pageSize,
+      );
+      if (page.isEmpty) return;
+      yield page;
+      if (page.length < pageSize) return;
+      lastId = page.last['id'] as String;
+    }
+  }
+
   /// Columns [importRows] will accept from a backup file. Anything else in the
   /// JSON is dropped rather than passed to SQLite as a column name.
   static const _importableColumns = {
@@ -1257,7 +1341,8 @@ class RankedHistoryStore {
   /// how many rows were skipped as unusable.
   ///
   /// The file comes from the user, so a bad row is skipped and counted
-  /// rather than failing the whole batch. A row is skipped unless: it's
+  /// rather than failing the whole batch. A row with an implausible `cumulative_rp` or
+  /// untrusted `rank_img` is imported without that value (count logged). A row is skipped unless: it's
   /// filtered to [_importableColumns] (an unknown key would reach SQLite as
   /// a column name); it has a non-empty `id` and `uid`, and numeric
   /// `start_ms`/`end_ms`; and every value is bindable (null, number, or
@@ -1282,7 +1367,13 @@ class RankedHistoryStore {
     List<dynamic> rows, {
     DatabaseExecutor? executor,
   }) async {
-    final db = executor ?? await _open();
+    if (executor != null) return _importRowsOn(executor, rows);
+    // Chunked commits need their own transaction to stay all-or-nothing.
+    final db = await _open();
+    return db.transaction((txn) => _importRowsOn(txn, rows));
+  }
+
+  Future<int> _importRowsOn(DatabaseExecutor db, List<dynamic> rows) async {
     // Flags already on this device, keyed by id — a small set regardless of
     // history size. Updated as rows are queued, so a backup listing the same
     // id twice still keeps both rows' flags.
@@ -1294,10 +1385,14 @@ class RankedHistoryStore {
       ))
         r['id'] as String: decodeEditedFields(r['edited_fields']),
     };
-    final batch = db.batch();
+    var batch = db.batch();
+    var queued = 0;
     var skipped = 0;
+    var corrected = 0;
     for (final r in rows) {
-      final row = r is Map ? _importableRow(r) : null;
+      final row = r is Map
+          ? _importableRow(r, onCorrected: () => corrected++)
+          : null;
       if (row == null) {
         skipped++;
         continue;
@@ -1309,46 +1404,30 @@ class RankedHistoryStore {
       };
       flagsById[id] = flags;
       row['edited_fields'] = encodeEditedFields(flags);
-      batch.rawInsert(
-        '''
-        INSERT INTO $table (
-          id, uid, player_name, legend, game_mode, map_key, rp_change,
-          cumulative_rp, rank_img, length_secs, start_ms, end_ms,
-          is_party_full, trackers, season_id, kills, damage, edited_fields, excluded
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-        ${_conflictUpdateSet(restore: true)}
-        ''',
-        [
-          row['id'],
-          row['uid'],
-          row['player_name'],
-          row['legend'],
-          row['game_mode'],
-          row['map_key'],
-          row['rp_change'],
-          row['cumulative_rp'],
-          row['rank_img'],
-          row['length_secs'],
-          row['start_ms'],
-          row['end_ms'],
-          row['is_party_full'],
-          row['trackers'],
-          row['season_id'],
-          row['kills'],
-          row['damage'],
-          row['edited_fields'],
-          row['excluded'],
-        ],
-      );
+      batch.rawInsert(_restoreUpsertSql, [
+        for (final column in _restoreColumns) row[column],
+      ]);
+      if (++queued >= _importBatchSize) {
+        await batch.commit(noResult: true);
+        batch = db.batch();
+        queued = 0;
+      }
     }
-    await batch.commit(noResult: true);
+    if (queued > 0) await batch.commit(noResult: true);
+    if (corrected > 0) {
+      log.w('Backup import: $corrected implausible values were left out');
+    }
     return skipped;
   }
 
   /// [r] as a row [importRows] can queue, or null when it isn't usable —
   /// see [importRows] for the rules.
-  static Map<String, Object?>? _importableRow(Map<dynamic, dynamic> r) {
+  ///
+  /// [onCorrected] is called per value dropped as implausible; the row is still imported.
+  static Map<String, Object?>? _importableRow(
+    Map<dynamic, dynamic> r, {
+    void Function()? onCorrected,
+  }) {
     final id = r['id'];
     final uid = r['uid'];
     if (id is! String || id.isEmpty) return null;
@@ -1382,6 +1461,22 @@ class RankedHistoryStore {
     final seasonId = row['season_id'];
     if (seasonId is! String || !SeasonMeta.isSplitId(seasonId)) {
       row['season_id'] = null;
+    }
+
+    // Running RP feeds "current RP" and the badge is fetched, so neither is trusted. A dropped
+    // value restores as missing (the stored one is kept), not 0.
+    final cumulativeRp = row['cumulative_rp'] as int?;
+    if (cumulativeRp != null &&
+        (cumulativeRp < 0 || cumulativeRp > kMaxPlausibleCumulativeRp)) {
+      row['cumulative_rp'] = null;
+      onCorrected?.call();
+    }
+    final rankImg = row['rank_img'] as String?;
+    if (rankImg != null &&
+        rankImg.isNotEmpty &&
+        !isTrustedRankImageUrl(rankImg)) {
+      row['rank_img'] = null;
+      onCorrected?.call();
     }
 
     // The same range check a sync and a hand edit apply.

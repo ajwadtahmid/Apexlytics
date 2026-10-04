@@ -31,6 +31,25 @@ const int kMinPlausibleRpChange = -250;
 const int kMaxPlausibleKills = 200;
 const int kMaxPlausibleDamage = 20000;
 
+/// Upper bound for a plausible [RankedMatch.cumulativeRp]; larger restored values are
+/// dropped, since the newest row's value is shown as current RP.
+const int kMaxPlausibleCumulativeRp = 100000;
+
+/// Hosts a rank badge URL may use: the current API host and the legacy one in older backups.
+const Set<String> kRankImageHosts = {
+  'api.apexlegendsstatus.com',
+  'api.mozambiquehe.re',
+};
+
+/// Whether [url] is `https` on a [kRankImageHosts] host; a restored file must not make
+/// the app fetch arbitrary addresses.
+bool isTrustedRankImageUrl(String url) {
+  final uri = Uri.tryParse(url);
+  return uri != null &&
+      uri.scheme == 'https' &&
+      kRankImageHosts.contains(uri.host);
+}
+
 /// Whether [rpChange] is a reset artifact or bad upstream value rather than
 /// RP the player actually moved. Plausible range is `[kMinPlausibleRpChange,
 /// kImplausibleRpThreshold)`, i.e. -250..=999.

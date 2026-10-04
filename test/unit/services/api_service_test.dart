@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:apexlytics/services/api_service.dart';
@@ -20,6 +21,26 @@ class _FakeAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async => onFetch(options);
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// Holds every response until [gate] completes, so a test can act mid-request.
+class _GatedAdapter implements HttpClientAdapter {
+  final Future<void> gate;
+  final ResponseBody Function(RequestOptions options) onFetch;
+  _GatedAdapter(this.gate, this.onFetch);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    await gate;
+    return onFetch(options);
+  }
 
   @override
   void close({bool force = false}) {}
@@ -50,6 +71,98 @@ void main() {
         ),
         httpClientAdapter: _FakeAdapter(onFetch),
       );
+
+  test('a response that lands after the cache was cleared is not cached', () async {
+    final release = Completer<void>();
+    final api = ApiService(
+      ApiCacheStore(
+        overridePath:
+            'file:api_service_test_${dbCounter++}?mode=memory&cache=shared',
+      ),
+      httpClientAdapter: _GatedAdapter(
+        release.future,
+        (_) => _json(200, '{"name":"Someone"}'),
+      ),
+    );
+
+    final request = api.get('/player/uid', params: {'uid': '1'});
+    await Future<void>.delayed(Duration.zero); // the request is now in flight
+    await api.clearCache(); // "Clear all data"
+    release.complete();
+    final result = await request;
+
+    expect(result.data['name'], 'Someone', reason: 'the caller still gets it');
+    expect(api.loadCached('/player/uid', params: {'uid': '1'}), isNull);
+  });
+
+  group('falling back to the stale cached copy', () {
+    // One ApiService: 200 first (filling the cache), then whatever [next] says.
+    Future<ApiService> primed(ResponseBody Function() next) async {
+      var first = true;
+      final api = apiReturning((_) {
+        if (first) {
+          first = false;
+          return _json(200, '{"name":"OldName"}');
+        }
+        return next();
+      });
+      await api.get('/player', params: {'player': 'x'});
+      return api;
+    }
+
+    for (final status in [401, 403, 404, 410]) {
+      test('a $status is thrown with its status, not hidden behind the cache', () async {
+        final api = await primed(() => _json(status, '{"error":"nope"}'));
+
+        await expectLater(
+          api.get('/player', params: {'player': 'x'}),
+          throwsA(
+            isA<AppException>().having((e) => e.status, 'status', status),
+          ),
+        );
+      });
+    }
+
+    for (final status in [400, 429]) {
+      test('a $status still serves the cached copy, marked stale', () async {
+        final api = await primed(() => _json(status, '{"error":"later"}'));
+
+        final result = await api.get('/player', params: {'player': 'x'});
+
+        expect(result.data['name'], 'OldName');
+        expect(result.staleAt, isNotNull);
+      });
+    }
+
+    test('no answer at all (offline) still serves the cached copy', () async {
+      var first = true;
+      final api = apiReturning((options) {
+        if (first) {
+          first = false;
+          return _json(200, '{"name":"OldName"}');
+        }
+        throw DioException.connectionError(
+          requestOptions: options,
+          reason: 'offline',
+        );
+      });
+      await api.get('/player', params: {'player': 'x'});
+
+      final result = await api.get('/player', params: {'player': 'x'});
+
+      expect(result.data['name'], 'OldName');
+      expect(result.staleAt, isNotNull);
+    });
+
+    test('a 404 with nothing cached is still the plain not-found error', () async {
+      final api = apiReturning((_) => _json(404, '{"error":"Player not found"}'));
+
+      await expectLater(
+        api.get('/player', params: {'player': 'x'}),
+        throwsA(isA<AppException>().having((e) => e.status, 'status', 404)),
+      );
+    });
+  });
 
   group('getWithStatus carries the status of a real error response', () {
     // Dio rejects every non-2xx before the body is looked at, so the status

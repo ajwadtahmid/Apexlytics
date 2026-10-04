@@ -13,6 +13,9 @@ typedef PlayerSearchQuery = ({String query, String platform, bool searchByUid});
 /// immediately if available so there is no loading spinner for returning
 /// visitors. The user can force a live fetch via the refresh button, which
 /// calls the service directly and then invalidates this provider.
+///
+/// Never retried: Riverpod's default (ten retries, spinner throughout) left a not-found
+/// search spinning ~30 s over eleven requests. [ApiService] already retries where it helps.
 final searchPlayerProvider = FutureProvider.autoDispose
     .family<ApiResult<PlayerStats>, PlayerSearchQuery>((ref, params) async {
       final (:query, :platform, :searchByUid) = params;
@@ -29,7 +32,7 @@ final searchPlayerProvider = FutureProvider.autoDispose
         return service.getPlayerStatsByUid(query.trim(), platform);
       }
       return service.getPlayerStats(query.trim(), platform);
-    });
+    }, retry: (_, _) => null);
 
 /// Tracks which player UIDs (or "platform:query" keys) were manually synced
 /// this session. Used by the search screen to show grey dots until the user

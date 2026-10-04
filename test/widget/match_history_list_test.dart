@@ -158,6 +158,31 @@ void main() {
     });
   });
 
+  group('paging', () {
+    // Twenty days of four games each, newest first.
+    final history = [
+      for (var d = 0; d < 20; d++)
+        for (var s = 0; s < 4; s++) game(dayOffset: d, slot: 4 - s),
+    ];
+
+    test('a page cut mid-day runs on to the end of that day', () {
+      final items = buildDayItems(history, limit: 6);
+      final headers = items.whereType<DayHeaderItem>().toList();
+
+      expect(items.whereType<MatchItem>().length, 8);
+      expect(headers.length, 2);
+      expect(
+        headers.last.games,
+        4,
+        reason: 'the last header must not total a half-shown day',
+      );
+    });
+
+    test('a cut on a day boundary adds nothing', () {
+      expect(buildDayItems(history, limit: 8).whereType<MatchItem>().length, 8);
+    });
+  });
+
   group('MatchHistoryList', () {
     // Eleven days of games, so the pinned headers have something to pin to.
     final matches = [
@@ -235,6 +260,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ExcludedTag), findsNWidgets(2)); // row + sheet
       expect(find.textContaining('Excluded automatically'), findsOneWidget);
+    });
+
+    testWidgets('loads every page when the list is too short to scroll', (
+      tester,
+    ) async {
+      // 80 games over 20 days in a window tall enough to show all: no scroll event fires.
+      final long = [
+        for (var d = 0; d < 20; d++)
+          for (var s = 0; s < 4; s++) game(dayOffset: d, slot: 4 - s),
+      ];
+      tester.view.physicalSize = const Size(800, 30000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(matches: long, onRefresh: () async {}),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Axle'), findsNWidgets(80));
     });
 
     testWidgets('scrolls with pinned headers without errors', (tester) async {

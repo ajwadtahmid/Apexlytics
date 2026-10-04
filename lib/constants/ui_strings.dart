@@ -5,3 +5,11 @@ const predatorPageInfo =
 
 const uidWarningMessage =
     'Click (Find your UID), search for your profile and visit it, then copy the UID from the end of the URL';
+
+const switchAutoUidNotice =
+    'Nintendo Switch players can only be found by UID, so UID search is on.';
+
+const switchNeedsUidWarning =
+    'Nintendo Switch players can only be searched by UID. Pick another platform to search by name.';
+
+const lookupCooldownNotice = 'One moment — try again in a few seconds.';

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/api_constants.dart';
+import '../constants/ui_strings.dart';
 import '../providers/api_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/error_messages.dart';
 import '../utils/formatting/search_utils.dart';
+import '../utils/lookup_drafts.dart';
 import '../utils/theme.dart';
 import '../utils/uid_warning_dialog.dart';
 import 'platform_picker.dart';
@@ -21,6 +23,9 @@ class PlayerLookupForm extends ConsumerStatefulWidget {
   final String? initialName;
   final String? initialPlatform;
 
+  /// UID of the profile being edited, shown when switching to UID search. Adding starts blank.
+  final String? initialUid;
+
   const PlayerLookupForm({
     super.key,
     required this.submitLabel,
@@ -28,6 +33,7 @@ class PlayerLookupForm extends ConsumerStatefulWidget {
     this.onPlayerFound,
     this.initialName,
     this.initialPlatform,
+    this.initialUid,
   });
 
   @override
@@ -36,24 +42,32 @@ class PlayerLookupForm extends ConsumerStatefulWidget {
 
 class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
   final _controller = TextEditingController();
+  final _drafts = LookupDrafts();
   String _platform = ApiConstants.defaultPlatform;
   bool _loading = false;
   String? _error;
+
+  /// A non-error heads-up (mode switched, refused toggle, throttled tap), in the accent colour.
+  String? _notice;
   bool _searchByUid = false;
+
+  /// UID search is on only because Switch is selected; leaving Switch turns it off again.
+  /// If it was already on, it stays on.
+  bool _uidForcedBySwitch = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialName != null) {
-      _controller.text = widget.initialName!;
+    // Only an edit starts filled in; adding starts blank.
+    final name = widget.initialName;
+    if (name != null) {
       _platform = widget.initialPlatform ?? ApiConstants.defaultPlatform;
-    } else {
-      final settings = ref.read(playerSettingsProvider);
-      if (settings.isPlayerSet) {
-        _controller.text = settings.name;
-        _platform = settings.platform;
-      }
+      _drafts.stash(uid: false, text: name);
+      _drafts.stash(uid: true, text: widget.initialUid ?? '');
     }
+    // Opened on Switch (editing one): UID search is forced, so leaving Switch returns to name.
+    _searchByUid = _uidForcedBySwitch = ApiConstants.isUidOnly(_platform);
+    setFieldText(_controller, _drafts.draftFor(uid: _searchByUid));
   }
 
   @override
@@ -63,17 +77,51 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
   }
 
   Future<void> _toggleUidSearch(bool value) async {
+    if (value == _searchByUid) return;
+    if (!value && ApiConstants.isUidOnly(_platform)) {
+      // Switch is UID-only.
+      setState(() {
+        _error = null;
+        _notice = switchNeedsUidWarning;
+      });
+      return;
+    }
+    await _setSearchByUid(value);
+  }
+
+  /// Switches the field between its name and UID drafts.
+  Future<void> _setSearchByUid(bool value) async {
     if (value && !_searchByUid) {
       await showUidWarningIfNeeded(context, ref);
     }
     if (!mounted) return;
     setState(() {
+      setFieldText(
+        _controller,
+        _drafts.swapTo(uid: value, current: _controller.text),
+      );
       _searchByUid = value;
-      // Flags an existing non-digit value rather than clearing it.
-      _error = (value && !isDigitsOnly(_controller.text))
-          ? 'UID must contain digits only.'
-          : null;
+      _error = null;
+      _notice = null;
     });
+  }
+
+  Future<void> _selectPlatform(String platform) async {
+    setState(() {
+      _platform = platform;
+      _error = null;
+      _notice = null;
+    });
+    if (ApiConstants.isUidOnly(platform)) {
+      if (_searchByUid) return;
+      _uidForcedBySwitch = true;
+      await _setSearchByUid(true);
+      if (mounted) setState(() => _notice = switchAutoUidNotice);
+    } else if (_uidForcedBySwitch) {
+      // Leaving Switch: restore the toggle.
+      _uidForcedBySwitch = false;
+      await _setSearchByUid(false);
+    }
   }
 
   Future<void> _submit() async {
@@ -94,40 +142,46 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
     }
     // The same key the favorites and result-page refreshes fire under, so all
     // three share one cooldown window per player.
-    if (!ref
-        .read(refreshCooldownProvider)
-        .tryFire(playerRefreshKey(_platform, query))) {
+    final cooldown = ref.read(refreshCooldownProvider);
+    final cooldownKey = playerRefreshKey(_platform, query);
+    if (!cooldown.tryFire(cooldownKey)) {
+      setState(() {
+        _error = null;
+        _notice = lookupCooldownNotice;
+      });
       return;
     }
     setState(() {
       _loading = true;
       _error = null;
+      _notice = null;
     });
     try {
-      final String name;
-      final String uid;
-      if (_searchByUid) {
-        final statsResult = await ref
-            .read(playerServiceProvider)
-            .getPlayerStatsByUid(query, _platform);
-        name = statsResult.data.name;
-        uid = statsResult.data.uid;
-      } else {
-        final statsResult = await ref
-            .read(playerServiceProvider)
-            .getPlayerStats(query, _platform);
-        name = statsResult.data.name;
-        uid = statsResult.data.uid;
+      final service = ref.read(playerServiceProvider);
+      final stats =
+          (_searchByUid
+                  ? await service.getPlayerStatsByUid(query, _platform)
+                  : await service.getPlayerStats(query, _platform))
+              .data;
+      // A 200 with no player would save an "Unknown" profile with no UID.
+      if (stats.uid.isEmpty) {
+        throw AppException(
+          _searchByUid
+              ? 'Player not found. Check the UID and platform.'
+              : 'Player not found. Check the name and platform.',
+        );
       }
       if (widget.onPlayerFound != null) {
-        await widget.onPlayerFound!(name, uid, _platform);
+        await widget.onPlayerFound!(stats.name, stats.uid, _platform);
       } else {
         await ref
             .read(playerSettingsProvider.notifier)
-            .setPlayer(name, uid, _platform);
+            .setPlayer(stats.name, stats.uid, _platform);
       }
       widget.onSuccess?.call();
     } catch (e) {
+      // A failed attempt doesn't hold the cooldown, so a retry isn't swallowed.
+      cooldown.release(cooldownKey);
       final msg = friendlyError(e);
       if (mounted) setState(() => _error = msg);
     } finally {
@@ -144,10 +198,14 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
         TextField(
           controller: _controller,
           onSubmitted: (_) => _submit(),
-          // Clears the toggle-time "digits only" message as soon as the user
-          // starts fixing it, instead of leaving a stale error on screen.
+          // Clear an old error or notice once the user types.
           onChanged: (_) {
-            if (_error != null) setState(() => _error = null);
+            if (_error != null || _notice != null) {
+              setState(() {
+                _error = null;
+                _notice = null;
+              });
+            }
           },
           textInputAction: TextInputAction.done,
           keyboardType: _searchByUid
@@ -166,7 +224,7 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
         const SizedBox(height: AppTheme.md),
         PlatformPicker(
           selected: _platform,
-          onChanged: (p) => setState(() => _platform = p),
+          onChanged: _selectPlatform,
           expanded: true,
         ),
         const SizedBox(height: AppTheme.sm),
@@ -187,6 +245,31 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
                   child: Text(
                     _error!,
                     style: const TextStyle(color: AppTheme.red, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (_notice != null) ...[
+          const SizedBox(height: AppTheme.sm),
+          Container(
+            padding: const EdgeInsets.all(AppTheme.sm),
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withAlpha(30),
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: AppTheme.accent, size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _notice!,
+                    style: const TextStyle(
+                      color: AppTheme.accent,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],

@@ -189,13 +189,20 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
           submitLabel: isAdding ? 'Add Profile' : 'Update Profile',
           initialName: editedProfile?.name,
           initialPlatform: editedProfile?.platform,
+          initialUid: editedProfile?.uid,
           onPlayerFound: isAdding
               ? (name, uid, platform) =>
                     notifier.addProfile(name, uid, platform)
               : (name, uid, platform) =>
                     notifier.updateProfile(_editingIndex!, name, uid, platform),
           onSuccess: () {
-            if (mounted) setState(() => _editingIndex = null);
+            if (!mounted) return;
+            if (isAdding) {
+              // The new profile is active; close so it loads, like switching profiles.
+              Navigator.pop(context);
+            } else {
+              setState(() => _editingIndex = null);
+            }
           },
         ),
       ],

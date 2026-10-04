@@ -123,17 +123,31 @@ class ApiCache {
   }
 
   /// Bumped by [clear], so a [primeFromDisk] already reading when the cache
-  /// was cleared doesn't put the cleared entries back into memory.
+  /// was cleared doesn't put them back, and so an in-flight response can tell its [save]
+  /// is stale.
   int _generation = 0;
+
+  /// Read before a request and passed back to [save] as `ifGeneration`.
+  int get generation => _generation;
 
   /// Saves [data] with a timestamp, then evicts the oldest entries if the
   /// cache has grown past [_maxEntries]. Updates the in-memory copy first, so
   /// a [load] immediately after this returns sees it even before the disk
   /// write settles.
-  Future<void> save(String key, dynamic data) async {
+  ///
+  /// [ifGeneration] is the [generation] read before the request; if [clear] ran since, the
+  /// response is dropped.
+  Future<void> save(String key, dynamic data, {int? ifGeneration}) async {
+    if (ifGeneration != null && ifGeneration != _generation) return;
+    final startedAt = _generation;
     final now = DateTime.now();
     _cache[key] = CachedEntry(data: data, savedAt: now);
     await _store.upsert(key, jsonEncode(data), now.millisecondsSinceEpoch);
+    if (startedAt != _generation) {
+      // Cleared while the row was being written; the clear may have run first.
+      await _store.remove(key);
+      return;
+    }
     if (_cache.length > _maxEntries) {
       await _evictOldestIfOverCap();
     }

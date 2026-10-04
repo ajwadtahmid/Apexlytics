@@ -12,6 +12,7 @@ import 'providers/notification_provider.dart';
 import 'providers/player_provider.dart';
 import 'providers/predator_provider.dart';
 import 'providers/ranked_provider.dart';
+import 'providers/search_provider.dart';
 import 'providers/server_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/home/home_screen.dart';
@@ -21,6 +22,7 @@ import 'screens/settings/settings_screen.dart';
 import 'services/notification_service.dart';
 import 'utils/app_logger.dart';
 import 'utils/onboarding.dart';
+import 'utils/storage/ranked_history_store.dart';
 import 'utils/storage/rp_snapshot_storage.dart';
 import 'utils/theme.dart';
 
@@ -198,9 +200,8 @@ class _AppShellState extends ConsumerState<_AppShell>
     unawaited(_prefetch(ref.read(serverStatusProvider.future)));
   }
 
-  /// Drains any legacy prefs snapshots into SQLite, then warms the cache for
-  /// the active profile. Failure is non-fatal - the RP graph just stays empty
-  /// for the session.
+  /// Drains legacy prefs snapshots into SQLite, trims old ones, then warms the
+  /// active profile's cache. Non-fatal: the RP graph just stays empty.
   Future<void> _prepareSnapshots(String uid) async {
     try {
       final store = ref.read(rankedHistoryStoreProvider);
@@ -208,9 +209,29 @@ class _AppShellState extends ConsumerState<_AppShell>
         ref.read(sharedPreferencesProvider),
         store,
       );
+      await _pruneSnapshots(store);
       if (uid.isNotEmpty) await primeSnapshots(store, uid);
     } catch (e) {
       log.w('Snapshot preparation failed', error: e);
+    }
+  }
+
+  /// Applies snapshot retention; a failure just leaves extra rows until next launch.
+  Future<void> _pruneSnapshots(RankedHistoryStore store) async {
+    try {
+      final removed = await store.pruneSnapshots(
+        profileUids: {
+          for (final p in ref.read(playerSettingsProvider).profiles)
+            if (p.uid.isNotEmpty) p.uid,
+        },
+        favoriteUids: {
+          for (final f in ref.read(searchStateProvider).favorites)
+            if (f.hasUid) f.uid!,
+        },
+      );
+      if (removed > 0) log.i('Pruned $removed expired RP snapshots');
+    } catch (e) {
+      log.w('Snapshot pruning failed', error: e);
     }
   }
 

@@ -292,7 +292,16 @@ void main() {
           PlayerSettingsNotifier.maxProfileCount,
         );
 
-        await notifier.addProfile('overflow', '1999999999999', 'PC');
+        await expectLater(
+          notifier.addProfile('overflow', '1999999999999', 'PC'),
+          throwsA(
+            isA<AppException>().having(
+              (e) => e.message,
+              'message',
+              contains('${PlayerSettingsNotifier.maxProfileCount} profiles'),
+            ),
+          ),
+        );
         expect(
           container.read(playerSettingsProvider).profiles.length,
           PlayerSettingsNotifier.maxProfileCount,
@@ -322,9 +331,12 @@ void main() {
         });
         addTearDown(container.dispose);
 
-        await container
-            .read(playerSettingsProvider.notifier)
-            .addProfile('extra', '1999999999999', 'PC');
+        await expectLater(
+          container
+              .read(playerSettingsProvider.notifier)
+              .addProfile('extra', '1999999999999', 'PC'),
+          throwsA(isA<AppException>()),
+        );
 
         expect(container.read(playerSettingsProvider).profiles.length, 5);
       });
@@ -350,7 +362,10 @@ void main() {
         for (var i = 0; i < PlayerSettingsNotifier.ownerMaxProfileCount; i++) {
           await notifier.addProfile('P$i', '100000000000$i', 'PC');
         }
-        await notifier.addProfile('overflow', '1999999999999', 'PC');
+        await expectLater(
+          notifier.addProfile('overflow', '1999999999999', 'PC'),
+          throwsA(isA<AppException>()),
+        );
 
         expect(
           container.read(playerSettingsProvider).profiles.length,
@@ -480,6 +495,32 @@ void main() {
         );
       },
     );
+
+    test('clearAll() drops the owner flag unless asked to keep it', () async {
+      final container = await makeContainer({PrefsKeys.ownerUnlocked: true});
+      addTearDown(container.dispose);
+      await container.read(playerSettingsProvider.notifier).clearAll();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(PrefsKeys.ownerUnlocked), isFalse);
+    });
+
+    test('clearAll(keepOwnerUnlock: true) also spares the owner flag', () async {
+      final container = await makeContainer({
+        PrefsKeys.ownerUnlocked: true,
+        PrefsKeys.keepScreenOn: true,
+        PrefsKeys.onboardingVersion: 1,
+      });
+      addTearDown(container.dispose);
+      await container
+          .read(playerSettingsProvider.notifier)
+          .clearAll(keepOwnerUnlock: true);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(PrefsKeys.ownerUnlocked), isTrue);
+      expect(prefs.containsKey(PrefsKeys.keepScreenOn), isFalse);
+      expect(prefs.getInt(PrefsKeys.onboardingVersion), 1);
+    });
 
     test('clearProfilesAndFavorites() keeps settings and history', () async {
       const uid = '1006838015507';

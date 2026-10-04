@@ -77,4 +77,47 @@ void main() {
       expect(reloaded, contains('Fuse'));
     });
   });
+
+  group('per-player stacks', () {
+    test('each uid keeps its own stack', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await pushToLegendStack('Wraith', prefs, uid: 'a');
+      await pushToLegendStack('Fuse', prefs, uid: 'b');
+
+      expect(await loadLegendStack(prefs, uid: 'a'), ['Wraith']);
+      expect(await loadLegendStack(prefs, uid: 'b'), ['Fuse']);
+    });
+
+    test('the legacy global stack seeds the first profile only', () async {
+      SharedPreferences.setMockInitialValues({
+        'legend_visit_stack': '["Bangalore","Wraith"]',
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      expect(await loadLegendStack(prefs, uid: 'a'), ['Bangalore', 'Wraith']);
+      expect(await loadLegendStack(prefs, uid: 'b'), isEmpty);
+      expect(prefs.containsKey('legend_visit_stack'), isFalse);
+    });
+
+    test('pushing adopts the legacy stack before adding to it', () async {
+      SharedPreferences.setMockInitialValues({
+        'legend_visit_stack': '["Bangalore"]',
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      final result = await pushToLegendStack('Fuse', prefs, uid: 'a');
+
+      expect(result, ['Fuse', 'Bangalore']);
+    });
+
+    test('an existing per-uid stack is never overwritten by the legacy one', () async {
+      SharedPreferences.setMockInitialValues({
+        'legend_visit_stack': '["Bangalore"]',
+        'legend_visit_stack_a': '["Wraith"]',
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      expect(await loadLegendStack(prefs, uid: 'a'), ['Wraith']);
+    });
+  });
 }

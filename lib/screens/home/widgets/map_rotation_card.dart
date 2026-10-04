@@ -237,7 +237,7 @@ class _MapCardState extends State<_MapCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          MapHeroImage(assetUrl: current.asset),
+          MapHeroImage(mapName: current.map, assetUrl: current.asset),
           Padding(
             padding: const EdgeInsets.all(AppTheme.md),
             child: Column(
