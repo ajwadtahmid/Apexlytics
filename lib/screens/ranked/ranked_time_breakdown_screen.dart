@@ -2,7 +2,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../widgets/trend_arrow.dart';
-import '../../utils/formatting/format.dart' show formatSigned;
+import '../../utils/formatting/format.dart' show formatSigned, formatNumber;
+import '../../utils/ranked/performance_insights.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
@@ -14,7 +15,7 @@ const _kSparklineSessions = 10;
 
 /// How many of the most recent sessions form each side of the before/after
 /// averages shown next to each sparkline.
-const _kTrendWindow = 3;
+const _kTrendWindow = 5;
 
 final _rangeFmt = DateFormat('MMM d');
 
@@ -102,6 +103,10 @@ class RankedTimeBreakdownScreen extends StatelessWidget {
               _SessionSparklines(sessions: sessions),
               const SizedBox(height: AppTheme.lg),
             ],
+            _PlayTimeInsights(
+              hourBuckets: hourBuckets,
+              weekdayBuckets: weekdayBuckets,
+            ),
             RankedTimeOfDayChart(buckets: hourBuckets),
             const SizedBox(height: AppTheme.md),
             RankedDayOfWeekChart(buckets: weekdayBuckets),
@@ -155,26 +160,36 @@ class _SessionSparklines extends StatelessWidget {
           ),
           const SizedBox(height: AppTheme.md),
           _SparklineRow(
-            label: 'RP',
+            label: 'RP per game',
+            unit: 'RP',
+            caveat: rpCaveat,
+            steadyBand: kRpSteadyBand,
             valuesOf: (s) => s.netRp,
             gamesOf: (s) => s.games,
             formatValue: (v) => formatSigned(v),
+            formatDelta: formatSigned,
             sessions: sessions,
           ),
           const SizedBox(height: AppTheme.md),
           _SparklineRow(
-            label: 'Kills',
+            label: 'Kills per game',
+            unit: 'kills',
+            steadyBand: kKillsSteadyBand,
             valuesOf: (s) => s.totalKills,
             gamesOf: (s) => s.games,
             formatValue: (v) => v.toStringAsFixed(1),
+            formatDelta: formatSigned,
             sessions: sessions,
           ),
           const SizedBox(height: AppTheme.md),
           _SparklineRow(
-            label: 'Damage',
+            label: 'Damage per game',
+            unit: 'damage',
+            steadyBand: kDamageSteadyBand,
             valuesOf: (s) => s.totalDamage,
             gamesOf: (s) => s.games,
             formatValue: (v) => v.toStringAsFixed(0),
+            formatDelta: (v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(0)}',
             sessions: sessions,
           ),
         ],
@@ -185,18 +200,37 @@ class _SessionSparklines extends StatelessWidget {
 
 class _SparklineRow extends StatelessWidget {
   final String label;
+
+  /// What one unit of the metric is called in the sentence, e.g. "kills".
+  final String unit;
+
+  /// Optional extra note for a trend, e.g. "still losing RP".
+  final String? Function(TrendVerdict verdict, double recent)? caveat;
+  final double steadyBand;
   final int Function(RankedSession) valuesOf;
   final int Function(RankedSession) gamesOf;
   final String Function(double) formatValue;
+
+  /// Signed size of the change, e.g. "+15.0".
+  final String Function(double) formatDelta;
   final List<RankedSession> sessions;
 
   const _SparklineRow({
     required this.label,
+    required this.unit,
+    this.caveat,
+    required this.steadyBand,
     required this.valuesOf,
     required this.gamesOf,
     required this.formatValue,
+    required this.formatDelta,
     required this.sessions,
   });
+
+  String _caveatSuffix(TrendVerdict verdict, double recent) {
+    final note = caveat?.call(verdict, recent);
+    return note == null ? '' : ', $note';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,13 +246,9 @@ class _SparklineRow extends StatelessWidget {
       gamesOf: gamesOf,
       window: _kTrendWindow,
     );
-    final delta = trend?.delta ?? 0;
-    final deltaColor = delta > 0
-        ? AppTheme.green
-        : delta < 0
-        ? AppTheme.red
-        : AppTheme.muted;
-
+    final verdict = trend == null
+        ? null
+        : trendVerdict(trend.delta, steadyBand: steadyBand);
     final minY = points.reduce((a, b) => a < b ? a : b);
     final maxY = points.reduce((a, b) => a > b ? a : b);
     // A flat window (every point equal) needs artificial padding, else
@@ -233,34 +263,50 @@ class _SparklineRow extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            if (trend != null)
-              Text.rich(
-                TextSpan(
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: formatValue(trend.previous),
-                      style: const TextStyle(color: AppTheme.muted),
-                    ),
-                    trendArrow(
-                      trendIcon(delta),
-                      deltaColor,
-                      size: 16,
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                    ),
-                    TextSpan(
-                      text: formatValue(trend.recent),
-                      style: TextStyle(color: deltaColor),
-                    ),
-                  ],
-                ),
+            if (trend != null && verdict != null)
+              _TrendChange(
+                verdict: verdict,
+                previous: formatValue(trend.previous),
+                recent: formatValue(trend.recent),
               ),
           ],
+        ),
+        const SizedBox(height: 2),
+        Text.rich(
+          TextSpan(
+            style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+            children: [
+              if (trend == null || verdict == null)
+                const TextSpan(
+                  text:
+                      'Play at least ${_kTrendWindow * 2} sessions to see a '
+                      'trend.',
+                )
+              else ...[
+                TextSpan(
+                  text: verdict == TrendVerdict.steady
+                      ? 'Steady:'
+                      : '${verdict.label}: ${formatDelta(trend.delta)}',
+                  style: TextStyle(
+                    color: _verdictColor(verdict),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextSpan(
+                  text: verdict == TrendVerdict.steady
+                      ? ' about the same as your $_kTrendWindow sessions before'
+                      : ' $unit per game vs your $_kTrendWindow sessions '
+                            'before${_caveatSuffix(verdict, trend.recent)}',
+                ),
+              ],
+            ],
+          ),
         ),
         const SizedBox(height: 4),
         SizedBox(
@@ -310,6 +356,160 @@ class _SparklineRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+Color _verdictColor(TrendVerdict v) => switch (v) {
+  TrendVerdict.improving => AppTheme.green,
+  TrendVerdict.steady => AppTheme.muted,
+  TrendVerdict.declining => AppTheme.red,
+};
+
+/// Top-right of a sparkline row: the old value, the trend icon, then the new
+/// value, the last two coloured by the verdict.
+class _TrendChange extends StatelessWidget {
+  final TrendVerdict verdict;
+  final String previous;
+  final String recent;
+  const _TrendChange({
+    required this.verdict,
+    required this.previous,
+    required this.recent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _verdictColor(verdict);
+    final delta = switch (verdict) {
+      TrendVerdict.improving => 1.0,
+      TrendVerdict.steady => 0.0,
+      TrendVerdict.declining => -1.0,
+    };
+    return Text.rich(
+      TextSpan(
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        children: [
+          TextSpan(
+            text: previous,
+            style: const TextStyle(color: AppTheme.muted),
+          ),
+          trendArrow(
+            trendIcon(delta),
+            color,
+            size: 16,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+          ),
+          TextSpan(
+            text: recent,
+            style: TextStyle(color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Best and toughest day / time of day to play, in plain words. Renders
+/// nothing until there are enough games to say anything fair.
+class _PlayTimeInsights extends StatelessWidget {
+  final List<HourBucket> hourBuckets;
+  final List<WeekdayBucket> weekdayBuckets;
+  const _PlayTimeInsights({
+    required this.hourBuckets,
+    required this.weekdayBuckets,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final insights = playTimeInsights(
+      hourBuckets: hourBuckets,
+      weekdayBuckets: weekdayBuckets,
+    );
+    if (insights.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppTheme.md),
+      child: SurfaceCard(
+        padding: const EdgeInsets.all(AppTheme.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'WHEN YOU PLAY BEST',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.muted,
+                fontSize: 12,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 2),
+            const Text(
+              'Based on average RP per game, for days and times with at '
+              'least 10 games.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 11),
+            ),
+            const SizedBox(height: AppTheme.sm),
+            for (final i in insights) _InsightRow(i),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InsightRow extends StatelessWidget {
+  final PlayInsight insight;
+  const _InsightRow(this.insight);
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppTheme.signColor(insight.avgRp >= 0);
+    return Padding(
+      padding: const EdgeInsets.only(top: AppTheme.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  insight.heading,
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                ),
+                Text(
+                  insight.detail == null
+                      ? insight.name
+                      : '${insight.name} (${insight.detail})',
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${formatSigned(insight.avgRp)} RP/game',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                '${formatNumber(insight.games)} games',
+                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
