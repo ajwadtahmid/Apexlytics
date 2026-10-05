@@ -105,7 +105,7 @@ class _SquadColumn extends StatelessWidget {
         Text(
           '${positive ? '+' : ''}${avgRp.toStringAsFixed(1)} RP/game',
           style: TextStyle(
-            color: positive ? AppTheme.green : AppTheme.red,
+            color: AppTheme.signColor(positive),
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),

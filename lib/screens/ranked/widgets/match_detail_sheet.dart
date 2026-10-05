@@ -83,7 +83,7 @@ class _MatchDetailSheetState extends State<_MatchDetailSheet> {
     final match = _match;
     final ranked = match.isRanked;
     final up = match.rpChange >= 0;
-    final rpColor = up ? AppTheme.green : AppTheme.red;
+    final rpColor = AppTheme.signColor(up);
     final notes = matchTagNotes(match);
     final pool = widget.baselinePool;
     final baseline = pool == null ? null : legendBaselineFor(match, pool);
@@ -283,7 +283,7 @@ class _StatsBlock extends StatelessWidget {
         : '${rounded > 0 ? '+' : ''}${decimals == 0 ? formatNumber(rounded.round()) : rounded.toStringAsFixed(decimals)} vs avg';
     final color = rounded == 0
         ? AppTheme.muted
-        : (rounded > 0 ? AppTheme.green : AppTheme.red);
+        : AppTheme.signColor(rounded > 0);
     return (text, color);
   }
 

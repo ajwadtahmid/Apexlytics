@@ -145,12 +145,8 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
                       label: 'RP',
                       avg: formatSigned(map.avgRpPerGame),
                       total: formatSignedInt(map.totalRp),
-                      avgColor: map.avgRpPerGame >= 0
-                          ? AppTheme.green
-                          : AppTheme.red,
-                      totalColor: map.totalRp >= 0
-                          ? AppTheme.green
-                          : AppTheme.red,
+                      avgColor: AppTheme.signColor(map.avgRpPerGame >= 0),
+                      totalColor: AppTheme.signColor(map.totalRp >= 0),
                     ),
                     StatTableRow(
                       label: 'Kills',

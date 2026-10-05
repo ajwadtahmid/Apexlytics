@@ -26,6 +26,10 @@ class AppTheme {
   static const muted = Color(0xFF8b929c);
   static const green = Color(0xFF56d364);
   static const red = Color(0xFFe06c75);
+
+  /// Green for a gain, red for a loss. Callers pass their own test for what
+  /// counts as positive (some treat 0 as a gain, others don't).
+  static Color signColor(bool positive) => positive ? green : red;
   static const blue = Color(0xFF79c0ff);
   static const orange = Color(0xFFffa657);
   static const shimmerHighlight = Color(0xFF2d3a4a);

@@ -109,7 +109,7 @@ class RankedDayOfWeekChart extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: b.games.toDouble(),
-                        color: up ? AppTheme.green : AppTheme.red,
+                        color: AppTheme.signColor(up),
                         width: 18,
                         borderRadius: BorderRadius.circular(3),
                       ),

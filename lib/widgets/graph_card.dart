@@ -387,7 +387,7 @@ class _DeltaBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPos = delta >= 0;
-    final color = isPos ? AppTheme.green : AppTheme.red;
+    final color = AppTheme.signColor(isPos);
     final sign = isPos ? '+' : '-';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

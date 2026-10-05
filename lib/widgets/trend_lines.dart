@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'trend_arrow.dart';
 import '../utils/formatting/format.dart' show formatNumber, formatSigned;
 import '../utils/ranked/ranked_aggregates.dart';
 import '../utils/theme.dart';
@@ -62,19 +63,19 @@ class TrendLines extends StatelessWidget {
         TextSpan(
           style: const TextStyle(fontSize: 11, color: AppTheme.muted),
           children: [
-            const TextSpan(text: '▶ '),
+            trendArrow(Icons.trending_flat, AppTheme.muted),
             TextSpan(text: '$label unchanged'),
           ],
         ),
       );
     }
     final up = trend.delta > 0;
-    final color = up ? AppTheme.green : AppTheme.red;
+    final color = AppTheme.signColor(up);
     return Text.rich(
       TextSpan(
         style: TextStyle(fontSize: 11, color: color),
         children: [
-          TextSpan(text: up ? '▲ ' : '▼ '),
+          trendArrow(trendIcon(trend.delta), color),
           TextSpan(
             text:
                 '$label ${up ? 'up' : 'down'} ${magnitudeFmt(trend.delta.abs())}, '

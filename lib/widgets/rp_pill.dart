@@ -20,7 +20,7 @@ class RpPill extends StatelessWidget {
     final text = avg != null
         ? '${positive ? '+' : ''}${avg.toStringAsFixed(1)} /game'
         : '${positive ? '+' : ''}${formatNumber(totalRp!)} RP';
-    final color = positive ? AppTheme.green : AppTheme.red;
+    final color = AppTheme.signColor(positive);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(

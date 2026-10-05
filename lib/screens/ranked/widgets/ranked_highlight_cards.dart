@@ -218,9 +218,7 @@ class _CompactLegend extends StatelessWidget {
                           _HighlightStat(
                             label: 'Total RP',
                             value: formatSignedInt(breakdown.totalRp),
-                            color: breakdown.totalRp >= 0
-                                ? AppTheme.green
-                                : AppTheme.red,
+                            color: AppTheme.signColor(breakdown.totalRp >= 0),
                             compact: true,
                           ),
                           _HighlightStat(
@@ -290,7 +288,7 @@ class _MapHighlight extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = map.avgRpPerGame >= 0;
-    final accent = positive ? AppTheme.green : AppTheme.red;
+    final accent = AppTheme.signColor(positive);
     final asset = battleRoyaleMapAsset(map.mapKey);
 
     return SurfaceCard(
@@ -361,9 +359,7 @@ class _MapHighlight extends StatelessWidget {
                         _HighlightStat(
                           label: 'Total RP',
                           value: formatSignedInt(map.totalRp),
-                          color: map.totalRp >= 0
-                              ? AppTheme.green
-                              : AppTheme.red,
+                          color: AppTheme.signColor(map.totalRp >= 0),
                           onImage: true,
                         ),
                         _HighlightStat(

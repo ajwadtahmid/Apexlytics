@@ -194,12 +194,8 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
                       label: 'RP',
                       avg: formatSigned(breakdown.avgRpPerGame),
                       total: formatSignedInt(breakdown.totalRp),
-                      avgColor: breakdown.avgRpPerGame >= 0
-                          ? AppTheme.green
-                          : AppTheme.red,
-                      totalColor: breakdown.totalRp >= 0
-                          ? AppTheme.green
-                          : AppTheme.red,
+                      avgColor: AppTheme.signColor(breakdown.avgRpPerGame >= 0),
+                      totalColor: AppTheme.signColor(breakdown.totalRp >= 0),
                     ),
                     StatTableRow(
                       label: 'Kills',

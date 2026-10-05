@@ -186,7 +186,7 @@ class _RankedRpChartState extends State<RankedRpChart> {
                 final up = matches[index].rpChange >= 0;
                 return FlDotCirclePainter(
                   radius: 2.5,
-                  color: up ? AppTheme.green : AppTheme.red,
+                  color: AppTheme.signColor(up),
                   strokeColor: AppTheme.surface,
                   strokeWidth: 1,
                 );

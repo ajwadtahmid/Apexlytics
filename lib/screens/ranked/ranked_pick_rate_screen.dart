@@ -528,7 +528,7 @@ class _SelectedDetail extends StatelessWidget {
           Text(
             '${positive ? '+' : ''}${l.avgRpPerGame.toStringAsFixed(1)} RP/game',
             style: TextStyle(
-              color: positive ? AppTheme.green : AppTheme.red,
+              color: AppTheme.signColor(positive),
               fontWeight: FontWeight.bold,
               fontSize: 13,
             ),
@@ -672,7 +672,7 @@ class _LegendStatsRow extends StatelessWidget {
               '${positive ? '+' : ''}${legend.avgRpPerGame.toStringAsFixed(1)}',
               textAlign: TextAlign.end,
               style: TextStyle(
-                color: positive ? AppTheme.green : AppTheme.red,
+                color: AppTheme.signColor(positive),
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),

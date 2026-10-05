@@ -32,7 +32,7 @@ class RankedSummaryHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final netPositive = summary.netRp >= 0;
-    final netColor = netPositive ? AppTheme.green : AppTheme.red;
+    final netColor = AppTheme.signColor(netPositive);
 
     final goalIndex = ref.watch(rankGoalProvider(uid));
     final predatorRp = _predatorRp(ref);

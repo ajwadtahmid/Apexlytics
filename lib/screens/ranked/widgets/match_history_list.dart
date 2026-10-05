@@ -348,7 +348,7 @@ class _DayTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = item.netRp >= 0;
-    final color = positive ? AppTheme.green : AppTheme.red;
+    final color = AppTheme.signColor(positive);
     final played = item.playSecs > 0
         ? ' · ${formatDuration(item.playSecs)}'
         : '';
@@ -528,7 +528,7 @@ class _GroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = item.netRp >= 0;
-    final color = positive ? AppTheme.green : AppTheme.red;
+    final color = AppTheme.signColor(positive);
     final avg = item.games == 0 ? 0.0 : item.netRp / item.games;
     return Column(
       children: [
@@ -637,7 +637,7 @@ class _MatchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ranked = match.isRanked;
     final up = match.rpChange >= 0;
-    final rpColor = up ? AppTheme.green : AppTheme.red;
+    final rpColor = AppTheme.signColor(up);
     final notes = matchTagNotes(match);
 
     final tagRow = Row(

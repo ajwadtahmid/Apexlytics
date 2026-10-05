@@ -616,9 +616,7 @@ class _PickRateList extends StatelessWidget {
                   Text(
                     '${l.avgRpPerGame >= 0 ? '+' : ''}${l.avgRpPerGame.toStringAsFixed(1)} RP',
                     style: TextStyle(
-                      color: l.avgRpPerGame >= 0
-                          ? AppTheme.green
-                          : AppTheme.red,
+                      color: AppTheme.signColor(l.avgRpPerGame >= 0),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),

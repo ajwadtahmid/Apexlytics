@@ -211,7 +211,7 @@ class _ValueCell extends StatelessWidget {
       );
     }
     final positive = c.avgRpPerGame >= 0;
-    final color = positive ? AppTheme.green : AppTheme.red;
+    final color = AppTheme.signColor(positive);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
       child: Container(

@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../widgets/trend_arrow.dart';
 import '../../utils/formatting/format.dart' show formatSigned;
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
@@ -246,9 +247,11 @@ class _SparklineRow extends StatelessWidget {
                       text: formatValue(trend.previous),
                       style: const TextStyle(color: AppTheme.muted),
                     ),
-                    TextSpan(
-                      text: '  →  ',
-                      style: TextStyle(color: deltaColor),
+                    trendArrow(
+                      trendIcon(delta),
+                      deltaColor,
+                      size: 16,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                     ),
                     TextSpan(
                       text: formatValue(trend.recent),

@@ -67,7 +67,7 @@ class SessionRecapBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = session.netRp >= 0;
-    final rpColor = positive ? AppTheme.green : AppTheme.red;
+    final rpColor = AppTheme.signColor(positive);
     final best = session.bestLegend;
 
     return Column(

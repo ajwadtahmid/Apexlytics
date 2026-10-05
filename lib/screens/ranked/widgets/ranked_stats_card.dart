@@ -17,8 +17,8 @@ class RankedStatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = summary;
     final avgRp = s.avgRpPerGame;
-    final avgRpColor = avgRp >= 0 ? AppTheme.green : AppTheme.red;
-    final netRpColor = s.netRp >= 0 ? AppTheme.green : AppTheme.red;
+    final avgRpColor = AppTheme.signColor(avgRp >= 0);
+    final netRpColor = AppTheme.signColor(s.netRp >= 0);
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),

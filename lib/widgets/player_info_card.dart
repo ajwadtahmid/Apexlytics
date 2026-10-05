@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../constants/api_constants.dart';
+import '../constants/ui_constants.dart';
 import '../models/player_stats.dart';
 import '../utils/formatting/format.dart';
 import '../utils/formatting/platform_utils.dart';
@@ -49,9 +50,14 @@ class PlayerInfoCard extends StatelessWidget {
           const SizedBox(height: 6),
           Row(
             children: [
-              Text(
-                'Level ${stats.level}  •  ',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+              Text.rich(
+                TextSpan(
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                  children: [
+                    TextSpan(text: 'Level ${stats.level}'),
+                    separatorDot,
+                  ],
+                ),
               ),
               SizedBox(
                 width: 14,
@@ -68,9 +74,15 @@ class PlayerInfoCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Text(
-                '${stats.rank}  •  ${formatNumber(stats.rankScore)} RP',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+              Text.rich(
+                TextSpan(
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                  children: [
+                    TextSpan(text: stats.rank),
+                    separatorDot,
+                    TextSpan(text: '${formatNumber(stats.rankScore)} RP'),
+                  ],
+                ),
               ),
             ],
           ),

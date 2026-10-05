@@ -179,9 +179,7 @@ class _LegendCard extends StatelessWidget {
                         _chip(
                           'Avg RP',
                           _signedAvg(row.avgRpPerGame),
-                          valueColor: row.avgRpPerGame >= 0
-                              ? AppTheme.green
-                              : AppTheme.red,
+                          valueColor: AppTheme.signColor(row.avgRpPerGame >= 0),
                         ),
                         _chip('Avg Dmg', formatNumber(row.avgDamage.round())),
                         _chip('Total Dmg', formatNumber(row.totalDamage)),
@@ -328,7 +326,7 @@ class _MapCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = row.avgRpPerGame >= 0;
-    final rpColor = positive ? AppTheme.green : AppTheme.red;
+    final rpColor = AppTheme.signColor(positive);
     final asset = battleRoyaleMapAsset(row.mapKey);
 
     return SurfaceCard(
