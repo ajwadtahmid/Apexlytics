@@ -194,8 +194,7 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '${match.isPartyFull ? 'Full squad' : 'Partial squad'} · '
-                '${_MatchDetailSheetState.formatTime(match.endTime)}',
+                _MatchDetailSheetState.formatTime(match.endTime),
                 style: const TextStyle(color: AppTheme.muted, fontSize: 12),
               ),
             ],

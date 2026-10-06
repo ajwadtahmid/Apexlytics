@@ -139,6 +139,8 @@ class RankedMatch {
   final int lengthSecs; // gameLengthSecs
   final DateTime startTime; // gameStartTimestamp (UTC)
   final DateTime endTime; // gameEndTimestamp (UTC)
+  /// Upstream's own flag. Stored and backed up but not shown anywhere, as the
+  /// source doesn't report it reliably.
   final bool isPartyFull;
 
   /// The match's `gameData` trackers. Only the detail sheet reads them, so a

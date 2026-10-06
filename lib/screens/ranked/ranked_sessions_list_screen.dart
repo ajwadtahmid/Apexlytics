@@ -3,38 +3,30 @@ import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_sessions_screen.dart';
-import 'widgets/ranked_squad_breakdown_card.dart';
 
 /// How many sessions are visible initially, and how many each "Load more"
 /// tap adds.
 const _kSessionPageSize = 6;
 
-/// Entry point for the combined Squad & Sessions screen. [sessions] is the
+/// Entry point for the Sessions screen. [sessions] is the
 /// same list already memoized by `rankedSplitViewProvider`, rather than this
 /// widget sessionizing its own `matches` on every rebuild of the
 /// always-visible Overview tab. Expected empty at Lifetime
 /// scope (sessions are a split-relative concept — see
-/// [RankedSquadSessionsScreen]); the squad summaries work at either scope.
-/// Hides itself when there's nothing to show.
-class RankedSquadSessionsEntry extends StatelessWidget {
-  final RankedSummary fullSquad;
-  final RankedSummary partialSquad;
+/// [RankedSessionsListScreen]). Hides itself when there's nothing to show.
+class RankedSessionsEntry extends StatelessWidget {
   final List<RankedSession> sessions;
   final Future<void> Function() onRefresh;
 
-  const RankedSquadSessionsEntry({
+  const RankedSessionsEntry({
     super.key,
-    required this.fullSquad,
-    required this.partialSquad,
     required this.sessions,
     required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (fullSquad.games == 0 && partialSquad.games == 0 && sessions.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (sessions.isEmpty) return const SizedBox.shrink();
 
     return SurfaceCard(
       padding: EdgeInsets.zero,
@@ -42,9 +34,7 @@ class RankedSquadSessionsEntry extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => RankedSquadSessionsScreen(
-              fullSquad: fullSquad,
-              partialSquad: partialSquad,
+            builder: (_) => RankedSessionsListScreen(
               sessions: sessions,
               onRefresh: onRefresh,
             ),
@@ -54,11 +44,11 @@ class RankedSquadSessionsEntry extends StatelessWidget {
           padding: EdgeInsets.all(AppTheme.md),
           child: Row(
             children: [
-              Icon(Icons.groups_outlined, size: 18, color: AppTheme.accent),
+              Icon(Icons.timeline, size: 18, color: AppTheme.accent),
               SizedBox(width: AppTheme.sm),
               Expanded(
                 child: Text(
-                  'Squad & Sessions',
+                  'Sessions',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 14,
@@ -75,30 +65,26 @@ class RankedSquadSessionsEntry extends StatelessWidget {
   }
 }
 
-/// Full-screen pairing of the squad breakdown and the sessions list, paginated
+/// Full-screen sessions list, paginated
 /// [_kSessionPageSize] at a time via a "Load more" button. Pass an empty
 /// [sessions] list at Lifetime scope, where sessions were never offered (too
 /// heavy at that scale, and RP resets each split anyway).
-class RankedSquadSessionsScreen extends StatefulWidget {
-  final RankedSummary fullSquad;
-  final RankedSummary partialSquad;
+class RankedSessionsListScreen extends StatefulWidget {
   final List<RankedSession> sessions;
   final Future<void> Function() onRefresh;
 
-  const RankedSquadSessionsScreen({
+  const RankedSessionsListScreen({
     super.key,
-    required this.fullSquad,
-    required this.partialSquad,
     required this.sessions,
     required this.onRefresh,
   });
 
   @override
-  State<RankedSquadSessionsScreen> createState() =>
-      _RankedSquadSessionsScreenState();
+  State<RankedSessionsListScreen> createState() =>
+      _RankedSessionsListScreenState();
 }
 
-class _RankedSquadSessionsScreenState extends State<RankedSquadSessionsScreen> {
+class _RankedSessionsListScreenState extends State<RankedSessionsListScreen> {
   int _visibleCount = _kSessionPageSize;
 
   @override
@@ -107,17 +93,12 @@ class _RankedSquadSessionsScreenState extends State<RankedSquadSessionsScreen> {
     final hasMore = _visibleCount < widget.sessions.length;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Squad & Sessions')),
+      appBar: AppBar(title: const Text('Sessions')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppTheme.md),
           children: [
-            RankedSquadBreakdownCard(
-              full: widget.fullSquad,
-              partial: widget.partialSquad,
-            ),
             if (visible.isNotEmpty) ...[
-              const SizedBox(height: AppTheme.lg),
               const Text(
                 'RECENT SESSIONS',
                 style: TextStyle(

@@ -923,40 +923,6 @@ class RankedHistoryStore {
     );
   }
 
-  /// Ranked summary split by full vs. partial squad for [uid] across
-  /// [seasonId] (null = lifetime), via the same `GROUP BY` shape as
-  /// [legendBreakdownsFor]. `currentRp`/`latestRankImg` are left at
-  /// [RankedSummary.empty]'s defaults — squad composition has no single
-  /// "current rank" the way a legend or map split doesn't either, and neither
-  /// field is used by this split's UI.
-  Future<({RankedSummary full, RankedSummary partial})> squadBreakdownFor(
-    String uid, {
-    String? seasonId,
-  }) async {
-    final db = await _open();
-    final (where, args) = _rankedScope(uid, seasonId);
-    // COALESCE'd on both sides: a NULL is_party_full (e.g. an imported row
-    // missing the column) must join the partial-squad bucket, not form its
-    // own group that neither `== 1` nor `== 0` below ever matches — matches
-    // RankedMatch.fromStoredMap's null-to-false convention.
-    final rows = await db.rawQuery(
-      'SELECT COALESCE(is_party_full, 0) AS is_party_full, $_aggCols '
-      'FROM $table WHERE $where '
-      'GROUP BY COALESCE(is_party_full, 0)',
-      args,
-    );
-
-    RankedSummary summaryFromRow(int isPartyFull) {
-      final agg = RankedAgg();
-      for (final r in rows) {
-        if ((r['is_party_full'] as num?)?.toInt() == isPartyFull) agg.addRow(r);
-      }
-      return agg.toSummary();
-    }
-
-    return (full: summaryFromRow(1), partial: summaryFromRow(0));
-  }
-
   /// Per-legend breakdown for [uid] across [seasonId] (null = lifetime), sorted
   /// by total RP descending — matching [legendBreakdowns].
   ///

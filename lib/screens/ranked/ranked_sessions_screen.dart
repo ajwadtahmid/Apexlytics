@@ -36,7 +36,7 @@ void openSessionHistory(
   );
 }
 
-/// A tappable session summary as its own card. Used by the Squad & Sessions
+/// A tappable session summary as its own card. Used by the Sessions
 /// screen's session list.
 class SessionRecapTile extends StatelessWidget {
   final RankedSession session;

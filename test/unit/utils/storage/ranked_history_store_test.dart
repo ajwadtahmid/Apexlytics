@@ -1513,8 +1513,6 @@ void main() {
       );
       expect((await store.personalBestGamesFor('1')).bestRpGame?.rpChange, 40);
       expect((await store.mapBreakdownsFor('1')).single.games, 2);
-      final squad = await store.squadBreakdownFor('1');
-      expect(squad.partial.games + squad.full.games, 2);
       final time = await store.timeBucketsFor('1');
       expect(time.hours.fold<int>(0, (a, b) => a + b.games), 2);
       expect(time.hours.fold<int>(0, (a, b) => a + b.netRp), 20);
@@ -1775,63 +1773,6 @@ void main() {
           sqlSplit.map((b) => (b.weekday, b.games, b.netRp)).toList(),
           dartSplit.map((b) => (b.weekday, b.games, b.netRp)).toList(),
         );
-      },
-    );
-
-    test(
-      'squadBreakdownFor splits ranked games by full vs partial squad',
-      () async {
-        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-        addTearDown(store.close);
-        await store.upsertAll('1', [
-          match('1', 100, rp: 40, isPartyFull: true),
-          match('1', 200, rp: -20, isPartyFull: true),
-          match('1', 300, rp: 60, isPartyFull: false),
-          match('1', 250, rp: 0, isPartyFull: false), // pub, excluded
-        ]);
-
-        final split = await store.squadBreakdownFor('1');
-        expect(split.full.games, 2);
-        expect(split.full.netRp, 20);
-        expect(split.partial.games, 1, reason: 'the 0-RP pub is not ranked');
-        expect(split.partial.netRp, 60);
-      },
-    );
-
-    test(
-      'squadBreakdownFor returns empty summaries for an untouched scope',
-      () async {
-        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-        addTearDown(store.close);
-        final split = await store.squadBreakdownFor('nobody');
-        expect(split.full.games, 0);
-        expect(split.partial.games, 0);
-      },
-    );
-
-    test(
-      'squadBreakdownFor folds a NULL is_party_full (e.g. an imported row '
-      'missing the column) into the partial bucket instead of dropping it',
-      () async {
-        final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
-        addTearDown(store.close);
-        // importRows leaves is_party_full NULL when the source row omits the
-        // key entirely — a hand-edited or foreign backup file.
-        await store.importRows([
-          {
-            'id': '1_100',
-            'uid': '1',
-            'game_mode': 'BATTLE_ROYALE',
-            'rp_change': 40,
-            'start_ms': 100000,
-            'end_ms': 160000,
-          },
-        ]);
-
-        final split = await store.squadBreakdownFor('1');
-        expect(split.full.games, 0);
-        expect(split.partial.games, 1);
-        expect(split.partial.netRp, 40);
       },
     );
   });

@@ -20,7 +20,7 @@ import 'ranked_available_now_screen.dart';
 import 'ranked_legend_map_matrix_screen.dart';
 import 'ranked_personal_records_screen.dart';
 import 'ranked_pick_rate_screen.dart';
-import 'ranked_squad_sessions_screen.dart';
+import 'ranked_sessions_list_screen.dart';
 import 'ranked_time_breakdown_screen.dart';
 import 'widgets/ranked_breakdown_tables.dart';
 import 'widgets/ranked_highlight_cards.dart';
@@ -683,9 +683,7 @@ class _OverviewTab extends StatelessWidget {
                 ),
                 const SizedBox(width: AppTheme.sm),
                 Expanded(
-                  child: RankedSquadSessionsEntry(
-                    fullSquad: data.fullSquad,
-                    partialSquad: data.partialSquad,
+                  child: RankedSessionsEntry(
                     sessions: data.sessions,
                     onRefresh: onRefresh,
                   ),

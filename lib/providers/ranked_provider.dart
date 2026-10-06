@@ -333,10 +333,8 @@ typedef RankedSplitView = ({
   // exists to avoid.
   List<HourBucket> timeOfDay,
   List<WeekdayBucket> dayOfWeek,
-  RankedSummary fullSquad,
-  RankedSummary partialSquad,
   // Also belongs here, not in build - RankedRpChart and
-  // RankedSquadSessionsEntry used to each call sessionize() on every
+  // RankedSessionsEntry used to each call sessionize() on every
   // rebuild of the always-visible Overview tab.
   List<RankedSession> sessions,
 });
@@ -366,8 +364,6 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
         maps: mapBreakdowns(filtered),
         timeOfDay: timeOfDayBuckets(filtered),
         dayOfWeek: dayOfWeekBuckets(filtered),
-        fullSquad: summarize(filtered.where((m) => m.isPartyFull).toList()),
-        partialSquad: summarize(filtered.where((m) => !m.isPartyFull).toList()),
         sessions: sessionize(filtered),
       );
     });
@@ -426,7 +422,6 @@ typedef RankedSplitDetail = ({
   List<LegendBreakdown> legends,
   List<MapBreakdown> maps,
   List<LegendMapCell> legendMap,
-  ({RankedSummary full, RankedSummary partial}) squadBreakdown,
   List<HourBucket> timeOfDay,
   List<WeekdayBucket> dayOfWeek,
 });
@@ -441,20 +436,18 @@ final rankedSplitDetailProvider = FutureProvider.autoDispose
       final uid = arg.uid;
       final seasonId = arg.splitId;
       // Independent reads, issued together (see rankedLifetimeAggregatesProvider).
-      final (time, summary, legends, maps, legendMap, squadBreakdown) = await (
+      final (time, summary, legends, maps, legendMap) = await (
         store.timeBucketsFor(uid, seasonId: seasonId),
         store.summaryFor(uid, seasonId: seasonId),
         store.legendBreakdownsFor(uid, seasonId: seasonId),
         store.mapBreakdownsFor(uid, seasonId: seasonId),
         store.legendMapBreakdownsFor(uid, seasonId: seasonId),
-        store.squadBreakdownFor(uid, seasonId: seasonId),
       ).wait;
       return (
         summary: summary,
         legends: legends,
         maps: maps,
         legendMap: legendMap,
-        squadBreakdown: squadBreakdown,
         timeOfDay: time.hours,
         dayOfWeek: time.weekdays,
       );

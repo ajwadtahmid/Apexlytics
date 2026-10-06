@@ -13,7 +13,6 @@ import '../../widgets/legend_icon.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_legend_map_matrix_screen.dart';
 import 'widgets/ranked_day_of_week_chart.dart';
-import 'widgets/ranked_squad_breakdown_card.dart';
 import 'widgets/ranked_time_of_day_chart.dart';
 
 /// Split-vs-split comparison. Embedded inline (not in its own scrollable) at
@@ -277,19 +276,6 @@ class _CompareBody extends ConsumerWidget {
         const _Disclaimer(),
         const SizedBox(height: AppTheme.md),
         _SummarySection(bucketA: bucketA, bucketB: bucketB, a: a, b: b),
-        const SizedBox(height: AppTheme.md),
-        const _SectionHeader('SQUAD'),
-        _SplitLabel(bucketA.displayName),
-        RankedSquadBreakdownCard(
-          full: a.squadBreakdown.full,
-          partial: a.squadBreakdown.partial,
-        ),
-        const SizedBox(height: AppTheme.sm),
-        _SplitLabel(bucketB.displayName),
-        RankedSquadBreakdownCard(
-          full: b.squadBreakdown.full,
-          partial: b.squadBreakdown.partial,
-        ),
         const SizedBox(height: AppTheme.md),
         const _SectionHeader('PICK RATE'),
         _SplitLabel(bucketA.displayName),

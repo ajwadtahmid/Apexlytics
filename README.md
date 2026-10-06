@@ -72,7 +72,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Track Your Grind**: Look up any player's rank and legend statistics. Visualize your weekly RP gains with interactive graphs and compare head-to-head performance with other players across ranked seasons and splits.
 
-- **Ranked Breakdown**: A full deep-dive into your ranked performance: match history with per-match correction, an RP chart, per-map/per-legend tables with a combined Legend × Map matrix, pick-rate analysis, squad & session summaries, personal records and win streaks, performance trends, time-of-day breakdowns, and side-by-side comparison between any two splits. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking works.
+- **Ranked Breakdown**: A full deep-dive into your ranked performance: match history with per-match correction, an RP chart, per-map/per-legend tables with a combined Legend × Map matrix, pick-rate analysis, session summaries, personal records and win streaks, performance trends, time-of-day breakdowns, and side-by-side comparison between any two splits. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking works.
 
 - **Favorite Players & Compare**: Add players to your favorites and track their RP progression in real-time. Compare your stats side-by-side with favorited players to monitor competition and benchmark your climb.
 
@@ -99,7 +99,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Player Stats**: Rank, RP, current legend, equipped trackers, and weekly RP gain tracking. Supports search by name or numeric UID.
 - **RP Progression Graph**: Interactive chart of RP gained per match, built from your match history, with session filtering and split/week navigation. A snapshot-based RP graph is also available.
-- **Ranked Breakdown**: Full ranked deep-dive: match history with per-match correction, an RP chart, per-map and per-legend breakdown tables, a combined Legend × Map matrix, pick-rate analysis, squad & session summaries, personal records (best RP/kills/damage games and win streaks), performance trends with session sparklines, time-of-day/day-of-week charts, and a full comparison view between any two splits. Auto-refreshes every 10 minutes while the app is open. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking starts.
+- **Ranked Breakdown**: Full ranked deep-dive: match history with per-match correction, an RP chart, per-map and per-legend breakdown tables, a combined Legend × Map matrix, pick-rate analysis, session summaries, personal records (best RP/kills/damage games and win streaks), performance trends with session sparklines, time-of-day/day-of-week charts, and a full comparison view between any two splits. Auto-refreshes every 10 minutes while the app is open. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking starts.
 - **Legend Stats**: Kill counts and tracker values per legend, merged across sessions and sorted by most-played.
 - **Gun Stats**: Detailed weapon performance including kills, damage, and damage per kill.
 - **Map Rotations**: Live countdown for Ranked, Pubs, and Mixtape. Shows current map, time remaining, and what loads next. Switches automatically when the rotation changes.
