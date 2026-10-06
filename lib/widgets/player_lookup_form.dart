@@ -229,6 +229,11 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
         ),
         const SizedBox(height: AppTheme.sm),
         UidSearchToggle(value: _searchByUid, onChanged: _toggleUidSearch),
+        UidSuggestion(
+          controller: _controller,
+          searchByUid: _searchByUid,
+          onUseUid: () => _toggleUidSearch(true),
+        ),
         if (_error != null) ...[
           const SizedBox(height: AppTheme.sm),
           Container(

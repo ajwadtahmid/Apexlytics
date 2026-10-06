@@ -189,6 +189,11 @@ class _SearchBar extends StatelessWidget {
           PlatformPicker(selected: platform, onChanged: onPlatformChanged),
           const SizedBox(height: AppTheme.sm),
           UidSearchToggle(value: searchByUid, onChanged: onSearchByUidChanged),
+          UidSuggestion(
+            controller: controller,
+            searchByUid: searchByUid,
+            onUseUid: () => onSearchByUidChanged(true),
+          ),
         ],
       ),
     );

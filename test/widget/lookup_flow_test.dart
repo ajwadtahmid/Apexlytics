@@ -216,6 +216,97 @@ void main() {
       await t.pump();
       expect(fieldText(t), '12345');
     });
+
+    testWidgets('a UID typed before ticking the box stays in the field', (
+      t,
+    ) async {
+      await boot(t, const StatsScreen(), FakeHttpAdapter());
+      await t.enterText(find.byType(TextField), '1012345678');
+
+      await t.tap(find.byType(Switch));
+      await t.pump();
+
+      expect(uidSwitchOn(t), isTrue);
+      expect(fieldText(t), '1012345678');
+    });
+
+    testWidgets('a name with letters does not keep its digits when switching '
+        'to UID', (t) async {
+      await boot(t, const StatsScreen(), FakeHttpAdapter());
+      await t.enterText(find.byType(TextField), 'Aceu123');
+
+      await t.tap(find.byType(Switch));
+      await t.pump();
+
+      expect(uidSwitchOn(t), isTrue);
+      expect(fieldText(t), isEmpty);
+    });
+
+    testWidgets('a number carried across is gone once the name has letters', (
+      t,
+    ) async {
+      await boot(t, const StatsScreen(), FakeHttpAdapter());
+      await t.enterText(find.byType(TextField), '1012345678');
+      await t.tap(find.byType(Switch));
+      await t.pump();
+      expect(fieldText(t), '1012345678');
+
+      await t.tap(find.byType(Switch));
+      await t.pump();
+      await t.enterText(find.byType(TextField), 'Aceu1012345678');
+      await t.tap(find.byType(Switch));
+      await t.pump();
+
+      expect(uidSwitchOn(t), isTrue);
+      expect(fieldText(t), isEmpty);
+    });
+
+    testWidgets('the same in the search bar', (t) async {
+      await boot(t, const SearchScreen(), FakeHttpAdapter());
+      await t.enterText(find.byType(TextField), 'Aceu123');
+
+      await t.tap(find.byType(Switch));
+      await t.pump();
+
+      expect(fieldText(t), isEmpty);
+    });
+
+    testWidgets('digits in the name field offer to search by UID', (t) async {
+      await boot(t, const StatsScreen(), FakeHttpAdapter());
+      const hint = 'Looks like a UID. Tap to search by UID.';
+
+      await t.enterText(find.byType(TextField), 'Aceu');
+      expect(find.text(hint), findsNothing);
+      await t.enterText(find.byType(TextField), '12345');
+      expect(find.text(hint), findsNothing, reason: 'too short for a UID');
+
+      await t.enterText(find.byType(TextField), '1012345678');
+      await t.pump();
+      expect(find.text(hint), findsOneWidget);
+
+      await t.tap(find.text(hint));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+
+      expect(uidSwitchOn(t), isTrue);
+      expect(fieldText(t), '1012345678');
+      expect(find.text(hint), findsNothing);
+    });
+
+    testWidgets('the same hint and carry-over work in the search bar', (
+      t,
+    ) async {
+      await boot(t, const SearchScreen(), FakeHttpAdapter());
+      await t.enterText(find.byType(TextField), '1012345678');
+      await t.pump();
+
+      await t.tap(find.text('Looks like a UID. Tap to search by UID.'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+
+      expect(uidSwitchOn(t), isTrue);
+      expect(fieldText(t), '1012345678');
+    });
   });
 
   group('Nintendo Switch is UID-only', () {
