@@ -38,7 +38,13 @@ final predatorServiceProvider = Provider<PredatorService>(
 final gamesServiceProvider = Provider<GamesService>(
   (ref) => GamesService(
     ref.watch(apiServiceProvider),
-    ownerToken: ref.watch(ownerTokenStoreProvider).read,
+    // Only on a device flagged as the owner's. A token can outlive the flag
+    // (an iOS Keychain item survives uninstall), and would otherwise keep
+    // being sent, and keep granting priority, on a device that shows no owner
+    // mode. Read at call time, so unlocking or locking takes effect at once.
+    ownerToken: () async => ref.read(ownerUnlockedProvider)
+        ? ref.read(ownerTokenStoreProvider).read()
+        : null,
   ),
 );
 

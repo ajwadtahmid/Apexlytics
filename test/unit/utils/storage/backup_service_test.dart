@@ -10,13 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../../helpers.dart';
 
 void main() {
   // sqflite has no native binding under `flutter test` (host VM) — use FFI.
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   group('backup allowlist exhaustiveness', () {
     // Every key shape the app persists, each with an explicit verdict -
@@ -415,7 +413,7 @@ void main() {
       const uid = '1006838015507';
       final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
       addTearDown(source.close);
-      await source.upsertAll(uid, [for (var i = 0; i < 7; i++) game(uid, i * 1000)]);
+      await source.upsertAll(uid, [for (var i = 1; i <= 7; i++) game(uid, i * 1000)]);
       // Two UIDs, 5 readings: pages of 2 cross both a page seam and a UID seam.
       for (final owner in [uid, '1000000000002']) {
         await source.appendSnapshotsFor(owner, [

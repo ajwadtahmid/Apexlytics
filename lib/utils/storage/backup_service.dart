@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:file_picker/file_picker.dart' show FilePicker;
 import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -578,6 +579,31 @@ class PreviewError extends PreviewResult {
   return (envelope: envelope, sizeBytes: jsonBytes.length);
 }
 
+/// Deletes the picker's private copy of a chosen file (and its folder, if now
+/// empty). On Android and iOS the picker copies the file into the app's cache
+/// and nothing else removes it, so an imported backup would outlive "Clear all
+/// data". Only a file inside [tempDir] is touched, so a desktop user's own file
+/// is never deleted. Never throws.
+@visibleForTesting
+Future<void> deletePickerCopy(String path, Directory tempDir) async {
+  try {
+    if (!p.isWithin(tempDir.path, path)) return;
+    final file = File(path);
+    if (await file.exists()) await file.delete();
+    // Android nests the copy in a folder of its own.
+    final parent = file.parent;
+    if (p.isWithin(tempDir.path, parent.path)) {
+      try {
+        await parent.delete(); // non-recursive: only if now empty
+      } on FileSystemException {
+        // Not empty: leave it.
+      }
+    }
+  } catch (e) {
+    log.w('Could not remove the picked backup copy (${e.runtimeType})');
+  }
+}
+
 /// Shows a file picker dialog and parses+summarizes the selected backup,
 /// without writing anything. Pass the [BackupPreview] from a [PreviewReady]
 /// result to [commitBackupImport] to actually restore it.
@@ -599,6 +625,9 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
 
   try {
     final rawBytes = await pickedFile.readAsBytes();
+    if (Platform.isAndroid || Platform.isIOS) {
+      await deletePickerCopy(pickedFile.path, await getTemporaryDirectory());
+    }
     // Off the UI isolate: a large backup is tens of MB of JSON.
     final (:envelope, :sizeBytes) = await Isolate.run(
       () => _decodeBackupEnvelope(rawBytes),

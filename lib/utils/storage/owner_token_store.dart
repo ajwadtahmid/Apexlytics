@@ -25,11 +25,15 @@ class OwnerTokenStore {
 
   Future<void> write(String token) => _storage.write(key: _key, value: token);
 
+  /// Deletes the token. Throws when the platform store refuses: swallowing it
+  /// would report "removed" while the token stayed and kept being sent.
   Future<void> clear() async {
     try {
       await _storage.delete(key: _key);
     } catch (e) {
-      log.w('owner token delete failed', error: e);
+      // Type only: the message can name the platform store's internals.
+      log.w('owner token delete failed (${e.runtimeType})');
+      rethrow;
     }
   }
 }

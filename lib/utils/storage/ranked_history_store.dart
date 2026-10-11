@@ -136,17 +136,18 @@ class RankedHistoryStore {
         // rows get a NULL season_id and are populated lazily by
         // [backfillSeasonIds] once season metadata is available.
         if (oldVersion < 2) {
-          await db.execute('ALTER TABLE $table ADD COLUMN season_id TEXT');
+          await _addColumnIfMissing(db, 'season_id', 'TEXT');
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_uid_season ON $table (uid, season_id)',
           );
         }
         // v2 → v3: denormalize kills/damage out of the trackers JSON blob into
         // real columns so aggregates can SUM() them in SQL. Existing rows get
-        // NULLs, filled lazily by [backfillKillsDamage].
+        // NULLs, which were once filled lazily by a backfill (dropped in the
+        // v5 → v6 step below, which re-derives them from the trackers blob).
         if (oldVersion < 3) {
-          await db.execute('ALTER TABLE $table ADD COLUMN kills INTEGER');
-          await db.execute('ALTER TABLE $table ADD COLUMN damage INTEGER');
+          await _addColumnIfMissing(db, 'kills', 'INTEGER');
+          await _addColumnIfMissing(db, 'damage', 'INTEGER');
         }
         // v3 → v4: partial indexes over just the rows each lazy backfill still
         // has to touch, so those passes stop full-scanning the table on every
@@ -172,7 +173,7 @@ class RankedHistoryStore {
         // could never drain and the pass would full-scan on every sync.
         // [_repairTrackerColumns] replaces it as a one-time pass.
         if (oldVersion < 6) {
-          await db.execute('ALTER TABLE $table ADD COLUMN edited_fields TEXT');
+          await _addColumnIfMissing(db, 'edited_fields', 'TEXT');
           await db.execute('DROP INDEX IF EXISTS idx_needs_kills_damage');
           await _repairTrackerColumns(db);
         }
@@ -206,8 +207,10 @@ class RankedHistoryStore {
         // Existing rows default to 0 (included), matching a freshly synced
         // match.
         if (oldVersion < 10) {
-          await db.execute(
-            'ALTER TABLE $table ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0',
+          await _addColumnIfMissing(
+            db,
+            'excluded',
+            'INTEGER NOT NULL DEFAULT 0',
           );
         }
         // v10 → v11: the v6 → v7 repair above flagged every kills/damage value
@@ -220,6 +223,22 @@ class RankedHistoryStore {
       },
     );
     return _db!;
+  }
+
+  /// `ALTER TABLE ... ADD COLUMN`, skipped when the column already exists.
+  ///
+  /// Every `onUpgrade` step must be safe to re-run: an older build opening a
+  /// newer database writes its lower `user_version` back, so the next launch
+  /// replays the steps, and a plain ADD COLUMN would fail on every launch.
+  /// Route any new ADD COLUMN through here.
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String column,
+    String definition,
+  ) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((c) => c['name'] == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
   }
 
   /// Partial index scoped to the rows the season backfill still has to touch.
@@ -257,23 +276,29 @@ class RankedHistoryStore {
   /// which is indistinguishable from a real scoreless game and drags every
   /// average down. The blob is untouched by all of that, so the true value is
   /// still recoverable for history recorded before this fix.
+  ///
+  /// A column the user hand-edited is left alone: on the first run no row has
+  /// any edit, but this step is replayed after a downgrade (see
+  /// [_addColumnIfMissing]), by which time an edit may exist.
   Future<void> _repairTrackerColumns(Database db) async {
-    final rows = await db.query(table, columns: ['id', 'trackers']);
+    final rows = await db.query(
+      table,
+      columns: ['id', 'trackers', 'edited_fields'],
+    );
     if (rows.isEmpty) return;
     final batch = db.batch();
     for (final r in rows) {
       final trackers = RankedMatch.fromStoredMap({
         'trackers': r['trackers'],
       }).trackers;
-      batch.update(
-        table,
-        {
-          'kills': RankedMatch.killsFrom(trackers),
+      final edited = decodeEditedFields(r['edited_fields']);
+      final values = {
+        if (!edited.contains('kills')) 'kills': RankedMatch.killsFrom(trackers),
+        if (!edited.contains('damage'))
           'damage': RankedMatch.damageFrom(trackers),
-        },
-        where: 'id = ?',
-        whereArgs: [r['id']],
-      );
+      };
+      if (values.isEmpty) continue;
+      batch.update(table, values, where: 'id = ?', whereArgs: [r['id']]);
     }
     await batch.commit(noResult: true);
   }
@@ -444,6 +469,7 @@ class RankedHistoryStore {
     'game_mode',
     'cumulative_rp',
     'rank_img',
+    'length_secs',
     'start_ms',
     'end_ms',
     'is_party_full',
@@ -751,11 +777,13 @@ class RankedHistoryStore {
     );
   }
 
-  /// Sets [RankedMatch.excluded] on the match [id]. Deliberately separate
-  /// from [editMatch]: a sync never writes or clears it, and a restore can
-  /// only set it (see [_conflictUpdateSet]).
+  /// Sets only [RankedMatch.excluded] on the match [id]. Test-only: the app
+  /// excludes a match via [editMatch] (`excluded:`) from the edit sheet. A
+  /// sync never writes the flag, and a restore can only set it (see
+  /// [_conflictUpdateSet]).
   ///
   /// Returns `false` when no row matches [id], same as [editMatch].
+  @visibleForTesting
   Future<bool> setExcluded(String id, bool excluded) async {
     final db = await _open();
     final count = await db.update(
@@ -1075,7 +1103,7 @@ class RankedHistoryStore {
     final (where, args) = _rankedScope(uid, seasonId);
     final rows = await db.rawQuery(
       "SELECT * FROM $table WHERE $where AND "
-      "LOWER(COALESCE(legend, 'Unknown')) = LOWER(?) "
+      "LOWER(COALESCE(NULLIF(TRIM(legend), ''), 'Unknown')) = LOWER(?) "
       'ORDER BY start_ms DESC',
       [...args, legend],
     );
@@ -1108,7 +1136,8 @@ class RankedHistoryStore {
     final placeholders = List.filled(variants.length, 'LOWER(?)').join(', ');
     final rows = await db.rawQuery(
       "SELECT * FROM $table WHERE $where AND "
-      "LOWER(COALESCE(map_key, 'UNKNOWN')) IN ($placeholders) "
+      "LOWER(COALESCE(NULLIF(TRIM(map_key), ''), 'UNKNOWN')) "
+      'IN ($placeholders) '
       'ORDER BY start_ms DESC',
       [...args, ...variants],
     );
@@ -1353,7 +1382,7 @@ class RankedHistoryStore {
       // uid/ts_ms are NOT NULL primary-key columns, and a wrong type can't be
       // bound at all — any of these would fail the whole batch.
       if (uid is! String ||
-          tsMs is! num ||
+          !_isEpochMs(tsMs) ||
           (rp != null && rp is! num) ||
           (seasonId != null && seasonId is! String)) {
         skipped++;
@@ -1361,7 +1390,7 @@ class RankedHistoryStore {
       }
       batch.insert(snapshotTable, {
         'uid': uid,
-        'ts_ms': tsMs.toInt(),
+        'ts_ms': (tsMs as num).toInt(),
         'rp': (rp as num?)?.toInt() ?? 0,
         'season_id': seasonId as String?,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -1372,7 +1401,10 @@ class RankedHistoryStore {
 
   // ── Export / import ────────────────────────────────────────────────────────
 
-  /// Every row across all UIDs — used to build the single-file export.
+  /// Every row across all UIDs, all at once. Test-only: the backup export
+  /// streams the table with [exportRowPages] so it never holds the whole
+  /// history in memory.
+  @visibleForTesting
   Future<List<Map<String, Object?>>> exportRows() async {
     final db = await _open();
     return db.query(table, orderBy: 'start_ms DESC');
@@ -1444,8 +1476,8 @@ class RankedHistoryStore {
   /// rather than failing the whole batch. A row with an implausible `cumulative_rp` or
   /// untrusted `rank_img` is imported without that value (count logged). A row is skipped unless: it's
   /// filtered to [_importableColumns] (an unknown key would reach SQLite as
-  /// a column name); it has a non-empty `id` and `uid`, and numeric
-  /// `start_ms`/`end_ms`; and every value is bindable (null, number, or
+  /// a column name); it has a non-empty `id` and `uid`, and a `start_ms`/`end_ms`
+  /// that is a readable timestamp (see [_isEpochMs]); and every value is bindable (null, number, or
   /// string — a JSON boolean is coerced to 1/0).
   ///
   /// A conflicting id goes through [_conflictUpdateSet]'s restore form: like
@@ -1526,9 +1558,20 @@ class RankedHistoryStore {
   static String? canonicalIdOf(Map<dynamic, dynamic> r) {
     final uid = r['uid'];
     final start = r['start_ms'];
-    if (uid is! String || uid.isEmpty || start is! num) return null;
-    return '${uid}_${start.toInt() ~/ 1000}';
+    if (uid is! String || uid.isEmpty || !_isEpochMs(start)) return null;
+    return '${uid}_${(start as num).toInt() ~/ 1000}';
   }
+
+  /// Latest millisecond timestamp a [DateTime] can hold; one past it makes
+  /// `DateTime.fromMillisecondsSinceEpoch` throw.
+  static const _maxEpochMs = 8640000000000000;
+
+  /// Whether [v] is a timestamp the app can read back: finite and within
+  /// [DateTime]'s range (a row failing this restores, then breaks every view
+  /// that loads it). Positive like a sync; [allowZero] is for an end time,
+  /// which a sync stores as 0 when upstream sent none.
+  static bool _isEpochMs(Object? v, {bool allowZero = false}) =>
+      v is num && v.isFinite && (allowZero ? v >= 0 : v > 0) && v <= _maxEpochMs;
 
   /// [r] as a row [importRows] can queue, or null when it isn't usable —
   /// see [importRows] for the rules.
@@ -1542,7 +1585,10 @@ class RankedHistoryStore {
     final uid = r['uid'];
     if (id is! String || id.isEmpty) return null;
     if (uid is! String || uid.isEmpty) return null;
-    if (r['start_ms'] is! num || r['end_ms'] is! num) return null;
+    if (!_isEpochMs(r['start_ms']) ||
+        !_isEpochMs(r['end_ms'], allowZero: true)) {
+      return null;
+    }
 
     // Type-check every column: SQLite would store text in an INTEGER column
     // and break the views that later load the row.
@@ -1550,6 +1596,8 @@ class RankedHistoryStore {
     for (final col in _importableColumns) {
       final v = r[col];
       if (_integerColumns.contains(col)) {
+        // Infinity/NaN has no integer form; `toInt()` would throw.
+        if (v is num && !v.isFinite) return null;
         if (v == null || v is num) {
           row[col] = (v as num?)?.toInt();
         } else if (v is bool) {

@@ -167,5 +167,69 @@ void main() {
       expect(store.token, isNull);
       expect(prefs.getBool(PrefsKeys.ownerUnlocked), isNull);
     });
+
+    test('lock reports a token the secure store would not delete, and keeps '
+        'the device unlocked rather than claiming it was removed', () async {
+      await setUpContainer({PrefsKeys.ownerUnlocked: true});
+      container.updateOverrides([
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        apiServiceProvider.overrideWithValue(api),
+        ownerTokenStoreProvider.overrideWithValue(_UndeletableTokenStore()),
+      ]);
+
+      await expectLater(
+        container.read(ownerUnlockedProvider.notifier).lock(),
+        throwsA(isA<StateError>()),
+      );
+      // The token is still there, so the flag that mirrors it stays too.
+      expect(container.read(ownerUnlockedProvider), isTrue);
+      expect(prefs.getBool(PrefsKeys.ownerUnlocked), isTrue);
+    });
   });
+
+  group('the owner token on /games requests', () {
+    Future<Map<String, String>?> sentHeaders() async {
+      Map<String, String>? headers;
+      when(
+        () => api.getWithStatus(
+          ApiConstants.gamesPath,
+          params: any(named: 'params'),
+          failover: false,
+          headers: any(named: 'headers'),
+        ),
+      ).thenAnswer((invocation) async {
+        headers = invocation.namedArguments[#headers] as Map<String, String>?;
+        return (status: 200, data: <dynamic>[]);
+      });
+      await container.read(gamesServiceProvider).getMatches('uid123');
+      return headers;
+    }
+
+    test('is sent on a device flagged as the owner\'s', () async {
+      await setUpContainer({PrefsKeys.ownerUnlocked: true});
+      store.token = 'secret';
+
+      expect((await sentHeaders())?[ApiConstants.ownerTokenHeader], 'secret');
+    });
+
+    test('is not sent when a leftover token has no owner flag, as after an iOS '
+        'reinstall', () async {
+      await setUpContainer();
+      store.token = 'secret';
+
+      expect(await sentHeaders(), isNull);
+    });
+  });
+}
+
+/// A store whose platform backend refuses to delete.
+class _UndeletableTokenStore implements OwnerTokenStore {
+  @override
+  Future<String?> read() async => 'secret';
+
+  @override
+  Future<void> write(String value) async {}
+
+  @override
+  Future<void> clear() => Future.error(StateError('platform store unavailable'));
 }

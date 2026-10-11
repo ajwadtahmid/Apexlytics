@@ -15,10 +15,20 @@ List<LegendStat> _parseLegendStats(String? raw) {
       log.w('Stored legend stats blob is not a list — treating as empty');
       return [];
     }
-    return decoded
-        .whereType<Map<String, dynamic>>()
-        .map(LegendStat.fromJson)
-        .toList();
+    // Entry by entry: [mergeLegendStats] writes back whatever this returns, so
+    // one unreadable legend must not take every other legend's accumulated
+    // trackers with it.
+    final legends = <LegendStat>[];
+    var skipped = 0;
+    for (final entry in decoded.whereType<Map<String, dynamic>>()) {
+      try {
+        legends.add(LegendStat.fromJson(entry));
+      } catch (_) {
+        skipped++;
+      }
+    }
+    if (skipped > 0) log.w('Skipped $skipped unreadable stored legend entries');
+    return legends;
   } catch (e) {
     // Well-formed-but-wrong-shape JSON throws TypeError, not
     // FormatException — see rp_snapshot_storage._parseSnapshots.

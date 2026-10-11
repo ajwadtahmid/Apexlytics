@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/models/player_stats.dart';
 import 'package:apexlytics/utils/storage/legend_stats_storage.dart';
 
@@ -18,6 +21,26 @@ void main() {
       SharedPreferences.setMockInitialValues({'legend_stats': 'bad'});
       final prefs = await SharedPreferences.getInstance();
       expect(loadLegendStats(prefs), isEmpty);
+    });
+
+    test('skips one unreadable entry and keeps the others', () async {
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.legendStatsKeyFor(null): jsonEncode([
+          {
+            'name': 'Wraith',
+            'trackers': [
+              {'key': 'kills', 'name': 'Kills', 'value': 5},
+            ],
+          },
+          // A wrong type in one field, as a foreign or hand-edited backup
+          // could carry.
+          {'name': 'Lifeline', 'trackers': <Object?>[], 'lu': 'x'},
+          {'name': 'Axle', 'trackers': <Object?>[]},
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      expect(loadLegendStats(prefs).map((l) => l.name), ['Wraith', 'Axle']);
     });
   });
 
@@ -142,6 +165,32 @@ void main() {
       ], prefs);
       expect(result.length, 2);
       expect(result.map((l) => l.name), containsAll(['Wraith', 'Lifeline']));
+    });
+
+    test('one unreadable stored entry does not cost the other legends their '
+        'accumulated trackers', () async {
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.legendStatsKeyFor(null): jsonEncode([
+          {
+            'name': 'Wraith',
+            'trackers': [
+              {'key': 'kills', 'name': 'Kills', 'value': 5},
+            ],
+          },
+          {'name': 'Lifeline', 'trackers': <Object?>[], 'lu': 'x'},
+        ]),
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      // The next stats load brings in only an unrelated legend.
+      await mergeLegendStats([buildLegend(name: 'Axle')], prefs);
+
+      final saved = loadLegendStats(prefs);
+      expect(saved.map((l) => l.name), containsAll(['Wraith', 'Axle']));
+      expect(
+        saved.firstWhere((l) => l.name == 'Wraith').trackers.single.value,
+        5,
+      );
     });
 
     test('stores stats under uid-specific key', () async {

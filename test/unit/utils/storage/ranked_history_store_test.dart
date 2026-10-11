@@ -10,13 +10,11 @@ import 'package:apexlytics/utils/formatting/season_utils.dart';
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:apexlytics/utils/storage/ranked_history_store.dart';
+import '../../../helpers.dart';
 
 void main() {
   // sqflite has no native binding under `flutter test` (host VM) — use FFI.
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   // fromApi takes Unix seconds; match end = start + 600s (see [match]).
   SeasonMeta season(String id, int startSecs, int endSecs) =>
@@ -216,7 +214,7 @@ void main() {
   test('a restore larger than one commit chunk lands every row', () async {
     final source = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(source.close);
-    await source.upsertAll('1', [for (var i = 0; i < 1250; i++) match('1', i * 1000)]);
+    await source.upsertAll('1', [for (var i = 1; i <= 1250; i++) match('1', i * 1000)]);
     final rows = await source.exportRows();
     await source.close(); // the in-memory path is shared while it stays open
 
@@ -827,6 +825,61 @@ void main() {
     expect(byStart[100]!['kills'], isNull);
   });
 
+  // An older build opening a newer database writes its own, lower user_version
+  // back without touching the schema; the next launch of this build then
+  // replays the upgrade steps against columns that already exist.
+  for (final olderVersion in [9, 5, 1]) {
+    test('reopens after an older build reset user_version to $olderVersion, '
+        'keeping every row and hand edit', () async {
+      final dir = await Directory.systemTemp.createTemp('rhs_downgrade');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = p.join(dir.path, 'ranked_history.db');
+
+      final first = RankedHistoryStore(overridePath: path);
+      await first.upsertAll('1', [match('1', 100), match('1', 200)]);
+      await first.close();
+
+      final raw = await databaseFactory.openDatabase(path);
+      // A hand edit and an exclusion, both made on the newer schema.
+      await raw.update(
+        'ranked_matches',
+        {'kills': 7, 'edited_fields': ',kills,'},
+        where: 'start_ms = ?',
+        whereArgs: [100 * 1000],
+      );
+      await raw.update(
+        'ranked_matches',
+        {'excluded': 1},
+        where: 'start_ms = ?',
+        whereArgs: [200 * 1000],
+      );
+      await raw.execute('PRAGMA user_version = $olderVersion');
+      await raw.close();
+
+      final store = RankedHistoryStore(overridePath: path);
+      final byStart = {
+        for (final r in await store.exportRows())
+          (r['start_ms'] as int) ~/ 1000: r,
+      };
+      await store.close();
+
+      expect(byStart.keys, unorderedEquals([100, 200]));
+      expect(byStart[100]!['kills'], 7, reason: 'the hand edit survives');
+      expect(byStart[100]!['damage'], 1000);
+      expect(byStart[200]!['kills'], 3);
+      expect(byStart[200]!['excluded'], 1);
+
+      // And it settles: the version is current again, so the next launch is
+      // an ordinary open.
+      final check = await databaseFactory.openDatabase(path);
+      final version = (await check.rawQuery(
+        'PRAGMA user_version',
+      )).single.values.single;
+      await check.close();
+      expect(version, 11);
+    });
+  }
+
   group('importRows hardening (the file comes from the user)', () {
     test('an unknown key does not fail the whole restore', () async {
       final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
@@ -888,6 +941,156 @@ void main() {
       expect(skipped, 1);
       expect((await store.getAll('1')).map((m) => m.id), ['1_200']);
     });
+
+    test('a row whose timestamp cannot be read back is skipped, not stored',
+        () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final good = match('1', 200).toStoredMap();
+      // One past what DateTime holds, non-finite, and not after the epoch.
+      for (final bad in [9e15, double.infinity, 0, -5]) {
+        for (final column in ['start_ms', 'end_ms']) {
+          if (column == 'end_ms' && bad == 0) continue; // allowed, see below
+          final row = Map<String, Object?>.from(match('1', 100).toStoredMap())
+            ..[column] = bad;
+
+          expect(
+            await store.importRows([row, good]),
+            1,
+            reason: '$column = $bad',
+          );
+        }
+      }
+
+      // getAll throws on a stored out-of-range timestamp, so reaching the
+      // assertion at all shows none was stored.
+      expect((await store.getAll('1')).map((m) => m.id), ['1_200']);
+    });
+
+    test('a row with no end time is still restored', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final row = Map<String, Object?>.from(match('1', 100).toStoredMap())
+        ..['end_ms'] = 0;
+
+      expect(await store.importRows([row]), 0);
+      expect((await store.getAll('1')).single.endTime.millisecondsSinceEpoch, 0);
+    });
+
+    test('a snapshot with an unreadable timestamp is skipped', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+
+      final skipped = await store.importSnapshotRows([
+        {'uid': '1', 'ts_ms': 9e15, 'rp': 1000},
+        {'uid': '1', 'ts_ms': double.infinity, 'rp': 1000},
+        {'uid': '1', 'ts_ms': 0, 'rp': 1000},
+        {'uid': '1', 'ts_ms': 1782090000000, 'rp': 1200},
+      ]);
+
+      expect(skipped, 3);
+      expect((await store.snapshotsFor('1')).single.rp, 1200);
+    });
+
+    test('a non-finite number in any numeric column skips just that row',
+        () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final bad = Map<String, Object?>.from(match('1', 100).toStoredMap())
+        ..['rp_change'] = double.infinity;
+      final nan = Map<String, Object?>.from(match('1', 150).toStoredMap())
+        ..['kills'] = double.nan;
+      final good = match('1', 200).toStoredMap();
+
+      // Used to throw from `toInt()` and fail the whole restore.
+      final skipped = await store.importRows([bad, nan, good]);
+
+      expect(skipped, 2);
+      expect((await store.getAll('1')).map((m) => m.id), ['1_200']);
+    });
+  });
+
+  group('rows whose legend or map is blank or padded', () {
+    /// A ranked match filed under [legend] / [mapKey] as given (null allowed).
+    Map<String, Object?> row(int start, {String? legend, String? mapKey}) =>
+        Map<String, Object?>.from(match('1', start).toStoredMap())
+          ..['legend'] = legend
+          ..['map_key'] = mapKey;
+
+    test('a legend drill-down includes padded spellings', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.importRows([
+        row(100, legend: 'Wraith'),
+        row(200, legend: 'Wraith '),
+        row(300, legend: ' wraith'),
+        row(400, legend: 'Axle'),
+      ]);
+
+      final games = await store.matchesForLegend('1', 'Wraith');
+
+      expect(games.map((m) => m.startTime.millisecondsSinceEpoch ~/ 1000), [
+        300,
+        200,
+        100,
+      ]);
+    });
+
+    test('Unknown covers a blank, a whitespace-only and a missing legend',
+        () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.importRows([
+        row(100, legend: ''),
+        row(200, legend: '  '),
+        row(300, legend: null),
+        row(400, legend: 'Unknown'),
+        row(500, legend: 'Axle'),
+      ]);
+
+      expect(await store.matchesForLegend('1', 'Unknown'), hasLength(4));
+    });
+
+    test('Unknown map covers a blank and a missing key as well as UNKNOWN',
+        () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.importRows([
+        row(100, mapKey: 'UNKNOWN'),
+        row(200, mapKey: ''),
+        row(300, mapKey: null),
+        row(400, mapKey: 'olympus_rotation'),
+      ]);
+
+      expect(await store.matchesForMap('1', 'unknown'), hasLength(3));
+    });
+  });
+
+  test('a later sync updates a match\'s length, like its other columns',
+      () async {
+    final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+    addTearDown(store.close);
+    RankedMatch withLength(int secs) => RankedMatch.fromJson({
+      'uid': '1',
+      'name': 'Tester',
+      'legendPlayed': 'Axle',
+      'gameMode': 'BATTLE_ROYALE',
+      'gameLengthSecs': secs,
+      'gameStartTimestamp': 100,
+      'gameEndTimestamp': 100 + secs,
+      'gameData': const [],
+      'BRScoreChange': 10,
+      'BRScore': 1000,
+      'map': 'olympus_rotation',
+    });
+
+    await store.upsertAll('1', [withLength(600)]);
+    await store.upsertAll('1', [withLength(900)]);
+
+    expect((await store.getAll('1')).single.lengthSecs, 900);
+  });
+
+  group('importRows hardening, continued', () {
 
     test('an implausible imported kills value is dropped, like a sync', () async {
       final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
