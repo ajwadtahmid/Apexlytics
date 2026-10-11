@@ -78,6 +78,10 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     _refreshTimer = Timer.periodic(
       _kViewRefreshInterval,
       (_) {
+        // With a refresh interval set, My Stats' own timer already runs this
+        // sync (see StatsScreen._sync); both firing back to back started two
+        // `/games` requests for the same profile.
+        if (ref.read(playerSettingsProvider).statsRefreshMinutes > 0) return;
         // Skip while the sync would only replay its stored outcome.
         if (rankedSyncDue(ref.read(sharedPreferencesProvider), widget.uid)) {
           ref.invalidate(rankedSyncProvider(widget.uid));
@@ -264,7 +268,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
         'Busy for a moment',
         Icons.hourglass_top,
         'The history server is pacing new syncs for a minute. Nothing is '
-            'lost — pull down to try again shortly, or it will retry on its own.',
+            'lost — tap Retry to try again shortly, or it will retry on its own.',
       ),
       RankedSyncOutcome.offline => (
         'Offline',

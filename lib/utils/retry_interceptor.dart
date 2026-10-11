@@ -35,6 +35,10 @@ const kNoFailoverKey = '_no_failover';
 /// retry budget) before giving up — this is what covers a primary host that's
 /// asleep or down, e.g. a free-tier server that spins down.
 ///
+/// A 5xx in the proxy's own JSON `{error}` shape means the proxy is reachable
+/// (the failure is upstream or its busy signal): it gets the same-host retry
+/// but no failover or sticky window, as the backup reaches the same upstream.
+///
 /// A *timeout* skips the same-host retry when another host is available and
 /// moves straight to it — a second timeout on the same host rarely helps,
 /// and used up too much of `TimeoutConstants.overallRequestDeadline` to leave
@@ -154,6 +158,11 @@ class RetryInterceptor extends Interceptor {
     // Retries against the current host are exhausted (or skipped for a
     // timeout — see the class doc).
 
+    // The proxy answered in its own JSON `{error}` shape, so it is reachable.
+    // Failing over would only spend more budget and park later requests on the
+    // backup for [primaryDownFor].
+    if (_isProxyError(err)) return handler.next(err);
+
     // Started on the backup by preference, not a real failover, and the
     // backup failed too — fall back to the primary rather than staying stuck
     // for the rest of the window. Marking the backup spent stops a
@@ -209,6 +218,17 @@ class RetryInterceptor extends Interceptor {
       err.type == DioExceptionType.connectionTimeout ||
       err.type == DioExceptionType.receiveTimeout ||
       err.type == DioExceptionType.sendTimeout;
+
+  /// A 5xx whose body follows the proxy's contract (`{"error": "..."}`), as
+  /// opposed to a platform error page or no answer at all.
+  static bool _isProxyError(DioException err) {
+    final status = err.response?.statusCode;
+    final data = err.response?.data;
+    return status != null &&
+        status >= 500 &&
+        data is Map &&
+        data['error'] is String;
+  }
 
   bool _shouldRetry(DioException err) {
     final status = err.response?.statusCode;

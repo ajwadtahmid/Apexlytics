@@ -115,6 +115,11 @@ class ApiService {
       return d is Map<String, dynamic> ? d : {'_raw': d};
     },
     cacheNormalizer: (d) => d as Map<String, dynamic>,
+    // A body that had to be wrapped (an HTML page from an intermediary, say)
+    // or that is the upstream API's own `{"Error": ...}` is not a response
+    // worth keeping: saved, it would replace the last good copy, and the
+    // offline fallback would then serve it as the player's stats.
+    cacheable: (d) => d is Map<String, dynamic> && !d.containsKey('Error'),
   );
 
   /// Fetches [endpoint] expecting a list response and caches the result.
@@ -136,6 +141,8 @@ class ApiService {
       return <dynamic>[];
     },
     cacheNormalizer: (d) => d as List<dynamic>,
+    // Not a list: the normalizer's empty stand-in, not an answer to keep.
+    cacheable: (d) => d is List,
   );
 
   /// Fetches [endpoint] and returns the HTTP status alongside the decoded body.
@@ -210,6 +217,8 @@ class ApiService {
     bool noCache = false,
     required T Function(dynamic) normalizer,
     required T Function(dynamic) cacheNormalizer,
+    // Whether the raw response body may be saved as the last good copy.
+    required bool Function(dynamic) cacheable,
   }) async {
     final key = _buildCacheKey(endpoint, params);
     // Read before the request: a clear while it's in flight must not get this written back.
@@ -221,7 +230,7 @@ class ApiService {
             _dio.get(endpoint, queryParameters: params, cancelToken: token),
       );
       final data = normalizer(response.data);
-      if (!noCache) {
+      if (!noCache && cacheable(response.data)) {
         // Best-effort: a cache-write failure (e.g. disk full) must not turn
         // an already-successful fetch into a thrown error.
         try {

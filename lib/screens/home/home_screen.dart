@@ -36,11 +36,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   ProviderSubscription? _settingsSub;
   Timer? _rotationRefreshTimer;
 
-  // Small grace period added to a rotation's remaining time before refetching,
-  // so the server has actually flipped the rotation by the time we ask for it
-  // (avoids racing the boundary and pulling the same, not-yet-rotated data).
-  static const _kRotationFlipBuffer = Duration(seconds: 15);
-
   @override
   void initState() {
     super.initState();
@@ -110,24 +105,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         (s.notifyWildcardMapRotation && s.wildcardNotifyMinutesBefore > 0);
     if (!anyNotif) return;
 
-    final candidates = <int>[
-      if (s.notifyRankedMapRotation) rotation.rankedCurrent.remainingSecs,
-      if (s.notifyPubsMapRotation) rotation.battleRoyaleCurrent.remainingSecs,
-      if (s.notifyMixtapeMapRotation && rotation.ltmCurrent != null)
-        rotation.ltmCurrent!.remainingSecs,
-      if (s.notifyWildcardMapRotation && rotation.wildcardCurrent != null)
-        rotation.wildcardCurrent!.remainingSecs,
-    ];
-    if (candidates.isEmpty) return;
-
-    final soonestSecs = candidates.reduce((a, b) => a < b ? a : b);
-    if (soonestSecs <= 0) {
-      ref.invalidate(mapRotationProvider);
-      return;
-    }
+    final delay = rotationRefreshDelay(
+      rotation,
+      notifyRanked: s.notifyRankedMapRotation,
+      notifyPubs: s.notifyPubsMapRotation,
+      notifyMixtape: s.notifyMixtapeMapRotation,
+      notifyWildcard: s.notifyWildcardMapRotation,
+    );
+    if (delay == null) return;
 
     _rotationRefreshTimer = Timer(
-      Duration(seconds: soonestSecs) + _kRotationFlipBuffer,
+      delay,
       () => ref.invalidate(mapRotationProvider),
     );
   }

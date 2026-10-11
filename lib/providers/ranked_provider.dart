@@ -197,11 +197,12 @@ Future<RankedSyncOutcome> syncRankedHistory({
     final status = e is AppException ? e.status : null;
     // A 429 is rate limiting, not a rejection — it clears on its own, so
     // it reads as "busy" (waiting the server's Retry-After), not
-    // requestError's hour-long "needs attention".
+    // requestError's hour-long "needs attention" and not `queued`, whose wait
+    // is for an hourly slot to free up.
     if (status == 429) {
       log.w('games fetch rate-limited; serving persisted history');
       return remember(
-        RankedSyncOutcome.queued,
+        RankedSyncOutcome.busy,
         (e as AppException).retryAfter ?? _kOfflineRetry,
       );
     }
@@ -355,10 +356,12 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
       final filtered = view.filtered;
       return (
         view: view,
-        // Excluded games still moved the player's running RP.
+        // Excluded games still moved the player's running RP. Taken from the
+        // whole split, not the selected week: "current" RP is where the split
+        // stands, and a past week's would read as out of sync with the live RP.
         summary: summarize(
           filtered,
-          currentRpFrom: view.history.where((m) => m.isRanked),
+          currentRpFrom: matches.where((m) => m.isRanked),
         ),
         legends: legendBreakdowns(filtered),
         maps: mapBreakdowns(filtered),

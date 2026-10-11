@@ -9,7 +9,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
 import 'app.dart';
 import 'env/env.dart';
 import 'providers/api_provider.dart';
@@ -40,8 +39,6 @@ void main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
-
-  tz.initializeTimeZones();
 
   final prefs = await SharedPreferences.getInstance();
   // Binder IPC in these plugins blocks the main thread; deferring prevents ANR.
@@ -137,8 +134,13 @@ void _hookFlutterErrors({
   void Function(FlutterErrorDetails)? sentryFlutterHandler,
   bool Function(Object, StackTrace)? sentryPlatformHandler,
 }) {
+  // With Sentry's handler chained, log as a warning (a breadcrumb only): an
+  // error-level log is itself reported, as a *handled* event for the same
+  // exception, and Sentry then drops its own event for it as a duplicate - the
+  // one carrying the unhandled classification and the Flutter error context.
   FlutterError.onError = (details) {
-    log.e(
+    final report = sentryFlutterHandler != null ? log.w : log.e;
+    report(
       'FlutterError: ${details.exceptionAsString()}',
       error: details.exception,
       stackTrace: details.stack,
@@ -151,7 +153,8 @@ void _hookFlutterErrors({
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    log.e('PlatformDispatcher error', error: error, stackTrace: stack);
+    final report = sentryPlatformHandler != null ? log.w : log.e;
+    report('PlatformDispatcher error', error: error, stackTrace: stack);
     return sentryPlatformHandler?.call(error, stack) ?? false;
   };
 }

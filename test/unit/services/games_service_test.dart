@@ -193,4 +193,56 @@ void main() {
       expect(() => service.getMatches('uid123'), throwsA(isA<AppException>()));
     });
   });
+
+  group('the read-only /games views stay on the primary server', () {
+    late MockApiService mockApi;
+    late GamesService service;
+
+    setUp(() {
+      mockApi = MockApiService();
+      service = GamesService(mockApi);
+    });
+
+    // Tracking state and the hourly budget live on each server separately, so
+    // the backup answers "not seen yet" for a profile the primary is tracking.
+    test('eligibility is asked of the primary only', () async {
+      when(
+        () => mockApi.getWithStatus(
+          ApiConstants.gamesEligibilityPath,
+          params: any(named: 'params'),
+          failover: false,
+        ),
+      ).thenAnswer((_) async => (status: 200, data: {'eligible': true}));
+
+      final result = await service.getEligibility('uid123');
+
+      expect(result.eligible, isTrue);
+      verify(
+        () => mockApi.getWithStatus(
+          ApiConstants.gamesEligibilityPath,
+          params: any(named: 'params'),
+          failover: false,
+        ),
+      ).called(1);
+    });
+
+    test('capacity is asked of the primary only', () async {
+      when(
+        () => mockApi.getWithStatus(
+          ApiConstants.gamesCapacityPath,
+          failover: false,
+        ),
+      ).thenAnswer((_) async => (status: 200, data: {'free': 3}));
+
+      final result = await service.getCapacity();
+
+      expect(result?.free, 3);
+      verify(
+        () => mockApi.getWithStatus(
+          ApiConstants.gamesCapacityPath,
+          failover: false,
+        ),
+      ).called(1);
+    });
+  });
 }

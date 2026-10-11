@@ -7,7 +7,7 @@ import 'package:apexlytics/utils/error_messages.dart';
 import 'package:apexlytics/utils/storage/api_cache_store.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../helpers.dart';
 
 /// Replaces the transport only, so requests still run through ApiService's
 /// real interceptors and error handling.
@@ -57,10 +57,7 @@ ResponseBody _json(int status, String body, {Map<String, String>? headers}) =>
     );
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   var dbCounter = 0;
   ApiService apiReturning(ResponseBody Function(RequestOptions) onFetch) =>
@@ -153,6 +150,40 @@ void main() {
       expect(result.data['name'], 'OldName');
       expect(result.staleAt, isNotNull);
     });
+
+    final unusable200s = <String, ResponseBody Function()>{
+      'an HTML page from an intermediary': () => ResponseBody.fromString(
+        '<html>maintenance</html>',
+        200,
+        headers: {
+          Headers.contentTypeHeader: ['text/html'],
+        },
+      ),
+      'the upstream API\'s own Error body': () =>
+          _json(200, '{"Error":"Player not found"}'),
+    };
+    for (final MapEntry(key: name, value: bad) in unusable200s.entries) {
+      test('$name is not saved over the last good copy', () async {
+        var calls = 0;
+        final api = apiReturning((options) {
+          calls++;
+          if (calls == 1) return _json(200, '{"name":"OldName"}');
+          if (calls == 2) return bad();
+          throw DioException.connectionError(
+            requestOptions: options,
+            reason: 'offline',
+          );
+        });
+        await api.get('/player', params: {'player': 'x'});
+        await api.get('/player', params: {'player': 'x'}); // the bad 200
+
+        // Offline now: the fallback must be yesterday's stats, not the bad body.
+        final result = await api.get('/player', params: {'player': 'x'});
+
+        expect(result.data['name'], 'OldName');
+        expect(result.staleAt, isNotNull);
+      });
+    }
 
     test('a 404 with nothing cached is still the plain not-found error', () async {
       final api = apiReturning((_) => _json(404, '{"error":"Player not found"}'));

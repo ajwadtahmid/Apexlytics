@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../helpers.dart';
 
 class MockGamesService extends Mock implements GamesService {}
 
@@ -122,10 +123,7 @@ void main() {
 
   group('rankedSyncProvider outside the backoff window (live fetch)', () {
     // sqflite has no native binding under `flutter test` (host VM) — use FFI.
-    setUpAll(() {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    });
+    setUpAll(useFfiDatabase);
 
     late MockGamesService gamesService;
     late RankedHistoryStore store;
@@ -441,8 +439,9 @@ void main() {
         final result = await readOutcome();
 
         // Rate limiting clears on its own; it must not be reported as a
-        // rejected request that "needs attention".
-        expect(result, RankedSyncOutcome.queued);
+        // rejected request that "needs attention", nor as `queued` (an hourly
+        // slot wait).
+        expect(result, RankedSyncOutcome.busy);
         final nextSync = container
             .read(sharedPreferencesProvider)
             .getInt(PrefsKeys.gamesNextSync(uid))!;

@@ -1,29 +1,7 @@
+import '../constants/api_constants.dart';
 import '../models/player_stats.dart';
 import '../utils/app_logger.dart';
-import '../utils/error_messages.dart';
 import 'api_service.dart';
-
-/// Result from a name-to-UID resolution. The [uid] is stable; [name] reflects
-/// the canonical display name returned by the API.
-class PlayerUidResult {
-  final String name;
-  final String uid;
-  final String avatar;
-
-  PlayerUidResult({
-    required this.name,
-    required this.uid,
-    required this.avatar,
-  });
-
-  factory PlayerUidResult.fromJson(Map<String, dynamic> json) {
-    return PlayerUidResult(
-      name: json['name'] as String? ?? 'Unknown',
-      uid: json['uid']?.toString() ?? '',
-      avatar: json['avatar'] as String? ?? '',
-    );
-  }
-}
 
 /// Domain service for all player-related API calls. Prefer [getPlayerStatsByUid]
 /// over [getPlayerStats] whenever a UID is available — UIDs survive name changes.
@@ -39,8 +17,7 @@ class PlayerService {
   /// Normalizes a name for both the upstream query and the cache key.
   /// Upstream name lookups are case-insensitive, so "Bob" and "bob" are the
   /// same player — sending the lowercased form for both means they also share
-  /// one cache entry and one cooldown instead of two, and it's why
-  /// [nameToUid] normalizes the same way.
+  /// one cache entry and one cooldown instead of two.
   static String _cacheName(String playerName) =>
       playerName.trim().toLowerCase();
 
@@ -52,7 +29,7 @@ class PlayerService {
   ) async {
     log.d('Fetching player stats by name [$platform]');
     final result = await _api.get(
-      '/player',
+      ApiConstants.playerPath,
       params: {'player': _cacheName(playerName), 'platform': platform},
     );
     log.d('Player stats fetched by name, stale=${result.staleAt != null}');
@@ -71,7 +48,9 @@ class PlayerService {
     bool searchByUid = false,
   }) {
     log.d('Cache lookup: byUid=$searchByUid [$platform]');
-    final endpoint = searchByUid ? '/player/uid' : '/player';
+    final endpoint = searchByUid
+        ? ApiConstants.playerUidPath
+        : ApiConstants.playerPath;
     // Must build the key exactly as getPlayerStats/getPlayerStatsByUid do, or
     // a warm cache reads as a miss.
     final params = searchByUid
@@ -105,7 +84,7 @@ class PlayerService {
   ) async {
     log.d('Fetching player stats by UID [$platform]');
     final result = await _api.get(
-      '/player/uid',
+      ApiConstants.playerUidPath,
       params: {'uid': uid, 'platform': platform},
     );
     log.d('Player stats fetched by UID, stale=${result.staleAt != null}');
@@ -113,22 +92,5 @@ class PlayerService {
       PlayerStats.fromJson(result.data),
       staleAt: result.staleAt,
     );
-  }
-
-  // nameToUid is only ever called on user action. noCache:true prevents a
-  // stale UID from being served after a player renames their account.
-  Future<PlayerUidResult> nameToUid(String playerName, String platform) async {
-    final result = await _api.get(
-      '/nametouid',
-      params: {'player': _cacheName(playerName), 'platform': platform},
-      noCache: true,
-    );
-    final lookup = PlayerUidResult.fromJson(result.data);
-    if (lookup.uid.isEmpty) {
-      throw const AppException(
-        'Player not found. Check the name and platform.',
-      );
-    }
-    return lookup;
   }
 }

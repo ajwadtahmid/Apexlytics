@@ -140,6 +140,9 @@ class GamesService {
     final response = await _api.getWithStatus(
       ApiConstants.gamesEligibilityPath,
       params: {'uid': uid},
+      // Tracking state lives on each server separately, so the backup would
+      // answer "not seen yet" for a profile the primary is tracking fine.
+      failover: false,
     );
     final body = response.data is Map ? response.data as Map : const {};
     return (
@@ -155,7 +158,11 @@ class GamesService {
   /// any non-200 response — a nice-to-have, so a failure just degrades to
   /// generic copy.
   Future<GamesCapacity?> getCapacity() async {
-    final response = await _api.getWithStatus(ApiConstants.gamesCapacityPath);
+    // Primary only, like [getEligibility]: the budget is per server.
+    final response = await _api.getWithStatus(
+      ApiConstants.gamesCapacityPath,
+      failover: false,
+    );
     if (response.status != 200 || response.data is! Map) return null;
     final body = response.data as Map;
     final resetsAtMs = (body['windowResetsAt'] as num?)?.toInt();

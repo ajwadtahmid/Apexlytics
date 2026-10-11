@@ -1,5 +1,6 @@
 import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/player_provider.dart';
+import 'package:apexlytics/services/api_service.dart';
 import 'package:apexlytics/services/player_service.dart';
 import 'package:apexlytics/utils/formatting/search_utils.dart';
 import 'package:apexlytics/utils/refresh_cooldown.dart';
@@ -7,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+
+import '../../helpers.dart';
 
 class MockPlayerService extends Mock implements PlayerService {}
 
@@ -127,6 +130,90 @@ void main() {
       await refreshAndMarkSynced(ref, service, 'ACEU', 'PC', false);
 
       verifyNever(() => service.getPlayerStats(any(), any()));
+    });
+  });
+
+  group('refreshAndMarkSynced after a fetch', () {
+    const params = (query: 'uid123', platform: 'PC', searchByUid: true);
+    final cachedAt = DateTime(2026, 10, 1, 9);
+
+    late MockPlayerService service;
+    late ProviderContainer container;
+
+    setUp(() {
+      service = MockPlayerService();
+      // The cache always answers with its save time, as the real one does.
+      when(
+        () => service.getCachedStats(
+          any(),
+          any(),
+          searchByUid: any(named: 'searchByUid'),
+        ),
+      ).thenReturn(ApiResult(buildStats(rankScore: 1000), staleAt: cachedAt));
+      container = ProviderContainer(
+        overrides: [playerServiceProvider.overrideWithValue(service)],
+      );
+      addTearDown(container.dispose);
+      // Keep the provider alive across the refresh, as an open result page does.
+      final sub = container.listen(searchPlayerProvider(params), (_, _) {});
+      addTearDown(sub.close);
+    });
+
+    testWidgets('a live answer replaces the cached, stale one', (tester) async {
+      when(() => service.getPlayerStatsByUid(any(), any())).thenAnswer(
+        (_) async => ApiResult(buildStats(rankScore: 1100)),
+      );
+      final ref = await refFrom(tester, container);
+      await tester.runAsync(() async {
+        final first = await container.read(searchPlayerProvider(params).future);
+        expect(first.staleAt, cachedAt);
+
+        expect(
+          await refreshAndMarkSynced(ref, service, 'uid123', 'PC', true),
+          isTrue,
+        );
+      });
+
+      final after = container.read(searchPlayerProvider(params)).requireValue;
+      expect(after.staleAt, isNull);
+      expect(after.data.rankScore, 1100);
+    });
+
+    testWidgets('a stale fallback is neither success nor "synced"', (
+      tester,
+    ) async {
+      when(() => service.getPlayerStatsByUid(any(), any())).thenAnswer(
+        (_) async => ApiResult(
+          buildStats(rankScore: 1000),
+          staleAt: DateTime(2026, 10, 1, 10),
+        ),
+      );
+      final ref = await refFrom(tester, container);
+
+      late bool result;
+      await tester.runAsync(() async {
+        await container.read(searchPlayerProvider(params).future);
+        result = await refreshAndMarkSynced(ref, service, 'uid123', 'PC', true);
+      });
+
+      // Offline, nothing was fetched: the favourite must not turn "synced".
+      expect(result, isFalse);
+      expect(container.read(sessionRefreshedProvider), isEmpty);
+    });
+
+    testWidgets('a stale fallback stays marked stale', (tester) async {
+      final fallbackAt = DateTime(2026, 10, 1, 10);
+      when(() => service.getPlayerStatsByUid(any(), any())).thenAnswer(
+        (_) async => ApiResult(buildStats(rankScore: 1000), staleAt: fallbackAt),
+      );
+      final ref = await refFrom(tester, container);
+      await tester.runAsync(() async {
+        await container.read(searchPlayerProvider(params).future);
+        await refreshAndMarkSynced(ref, service, 'uid123', 'PC', true);
+      });
+
+      final after = container.read(searchPlayerProvider(params)).requireValue;
+      expect(after.staleAt, cachedAt);
     });
   });
 }

@@ -59,6 +59,7 @@ void main() {
     PlayerStats? stats,
     List<RankedSplitBucket>? splits,
     List<RankedMatch>? splitMatches,
+    void Function()? onSyncRun,
   }) {
     const uid = 'uid123';
     // A single bucket with no user selection always resolves to itself (see
@@ -79,7 +80,10 @@ void main() {
             uid: uid,
             splitId: splitId,
           )).overrideWith((ref) async => splitMatches ?? []),
-        rankedSyncProvider(uid).overrideWith((ref) async => outcome),
+        rankedSyncProvider(uid).overrideWith((ref) async {
+          onSyncRun?.call();
+          return outcome;
+        }),
         gamesEligibilityProvider(uid).overrideWith((ref) async => eligibility),
         gamesCapacityProvider.overrideWith((ref) async => capacity),
       ],
@@ -99,6 +103,40 @@ void main() {
       ),
     );
   }
+
+  group('the view\'s 10-minute sync timer', () {
+    Future<int> syncRunsAfterTenMinutes(
+      WidgetTester tester,
+      int statsRefreshMinutes,
+    ) async {
+      final prefs = await prefsWith({
+        PrefsKeys.statsRefreshMinutes: statsRefreshMinutes,
+      });
+      var runs = 0;
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.synced,
+          onSyncRun: () => runs++,
+        ),
+      );
+      await tester.pump();
+      expect(runs, 1, reason: 'the initial sync');
+
+      await tester.pump(const Duration(minutes: 10));
+      await tester.pump();
+      return runs;
+    }
+
+    testWidgets('leaves the sync to My Stats\' timer when a refresh interval '
+        'is set, instead of firing a second request', (tester) async {
+      expect(await syncRunsAfterTenMinutes(tester, 10), 1);
+    });
+
+    testWidgets('is the retry when no refresh interval is set', (tester) async {
+      expect(await syncRunsAfterTenMinutes(tester, 0), 2);
+    });
+  });
 
   testWidgets('not tracked and not recording prompts to start recording', (
     tester,
@@ -233,6 +271,9 @@ void main() {
       await tester.pump();
 
       expect(find.text('Busy for a moment'), findsOneWidget);
+      // The card cannot be pulled, so it must not say to pull down.
+      expect(find.textContaining('tap Retry'), findsOneWidget);
+      expect(find.textContaining('pull down'), findsNothing);
       expect(find.textContaining('pacing new syncs'), findsOneWidget);
       expect(find.text('Server busy'), findsNothing);
       expect(find.textContaining('history slots free'), findsNothing);

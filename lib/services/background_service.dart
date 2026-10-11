@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:background_fetch/background_fetch.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
 
 import '../constants/api_constants.dart';
 import '../env/env.dart';
@@ -21,6 +20,14 @@ import '../utils/retry_interceptor.dart';
 import 'notification_service.dart';
 
 const int _backgroundFetchIntervalMinutes = 30;
+
+/// The background fetch interval for the smallest active alert timing
+/// ([minNotifyMinutes], 0 = none active, which gets the default cadence).
+/// Raised to the 15-min minimum the OS enforces anyway, and capped at 60.
+@visibleForTesting
+int backgroundFetchIntervalFor(int minNotifyMinutes) => minNotifyMinutes > 0
+    ? minNotifyMinutes.clamp(15, 60)
+    : _backgroundFetchIntervalMinutes;
 
 /// Outcome of the most recent background fetch, as `ok:<iso8601>` or
 /// `error:<iso8601>`. Surfaced in Settings - background fetch is otherwise
@@ -93,7 +100,6 @@ Future<void> _backgroundFetchAndSchedule() async {
   SharedPreferences? prefs;
   try {
     _debugLog('Fetch started');
-    tz.initializeTimeZones();
     await NotificationService.init();
 
     prefs = await SharedPreferences.getInstance();
@@ -201,8 +207,14 @@ class BackgroundService {
 
   static Future<void> init() async {
     if (!_supported) return;
+    // The cadence the user's alert timings call for, not always the default:
+    // a restart used to reset it until an alert setting was touched again.
+    final prefs = await SharedPreferences.getInstance();
+    final interval = backgroundFetchIntervalFor(
+      BackgroundFetchSettings.fromPrefs(prefs)?.minActiveMinutes ?? 0,
+    );
     try {
-      await _configure(_backgroundFetchIntervalMinutes);
+      await _configure(interval);
     } on PlatformException catch (e) {
       // iOS UIBackgroundRefreshStatus: "0" restricted, "1" denied.
       if (Platform.isIOS && (e.code == '0' || e.code == '1')) {
@@ -214,9 +226,7 @@ class BackgroundService {
     if (Platform.isAndroid) {
       BackgroundFetch.registerHeadlessTask(backgroundFetchHeadlessTask);
     }
-    log.i(
-      'BackgroundService initialised (interval: ${_backgroundFetchIntervalMinutes}min)',
-    );
+    log.i('BackgroundService initialised (interval: ${interval}min)');
   }
 
   /// Reconfigures the background fetch interval to the smallest active
@@ -226,9 +236,7 @@ class BackgroundService {
     if (!_supported) return;
     // iOS and Android enforce a 15-min minimum for background fetch — values
     // below 15 (e.g. user picks 5 or 10 min) are silently rounded up by the OS.
-    final interval = minNotifyMinutes > 0
-        ? minNotifyMinutes.clamp(15, 60)
-        : _backgroundFetchIntervalMinutes;
+    final interval = backgroundFetchIntervalFor(minNotifyMinutes);
     await _configure(interval);
     log.i('BackgroundService interval updated to ${interval}min');
   }

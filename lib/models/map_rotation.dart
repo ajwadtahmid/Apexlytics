@@ -19,38 +19,31 @@ class MapRotation {
     this.wildcardNext,
   });
 
+  /// Any block that is not a JSON object (a PHP-style empty block arrives as
+  /// `[]`) counts as absent, rather than failing the whole rotation: a cast
+  /// error here would blank Home for every mode and abort the background
+  /// alert job.
+  static Map<String, dynamic>? _object(Object? v) =>
+      v is Map<String, dynamic> ? v : null;
+
   factory MapRotation.fromJson(Map<String, dynamic> json) {
-    final battleRoyaleJson =
-        json['battle_royale'] as Map<String, dynamic>? ?? {};
-    final ranked = json['ranked'] as Map<String, dynamic>? ?? {};
-    final ltm = json['ltm'] as Map<String, dynamic>?;
-    final wildcard = json['wildcard'] as Map<String, dynamic>?;
+    final battleRoyaleJson = _object(json['battle_royale']) ?? {};
+    final ranked = _object(json['ranked']) ?? {};
+    final ltm = _object(json['ltm']);
+    final wildcard = _object(json['wildcard']);
+
+    MapMode mode(Map<String, dynamic> block, String key) =>
+        MapMode.fromJson(_object(block[key]) ?? {});
 
     return MapRotation(
-      battleRoyaleCurrent: MapMode.fromJson(
-        battleRoyaleJson['current'] as Map<String, dynamic>? ?? {},
-      ),
-      battleRoyaleNext: MapMode.fromJson(
-        battleRoyaleJson['next'] as Map<String, dynamic>? ?? {},
-      ),
-      rankedCurrent: MapMode.fromJson(
-        ranked['current'] as Map<String, dynamic>? ?? {},
-      ),
-      rankedNext: MapMode.fromJson(
-        ranked['next'] as Map<String, dynamic>? ?? {},
-      ),
-      ltmCurrent: ltm != null
-          ? MapMode.fromJson(ltm['current'] as Map<String, dynamic>? ?? {})
-          : null,
-      ltmNext: ltm != null
-          ? MapMode.fromJson(ltm['next'] as Map<String, dynamic>? ?? {})
-          : null,
-      wildcardCurrent: wildcard != null
-          ? MapMode.fromJson(wildcard['current'] as Map<String, dynamic>? ?? {})
-          : null,
-      wildcardNext: wildcard != null
-          ? MapMode.fromJson(wildcard['next'] as Map<String, dynamic>? ?? {})
-          : null,
+      battleRoyaleCurrent: mode(battleRoyaleJson, 'current'),
+      battleRoyaleNext: mode(battleRoyaleJson, 'next'),
+      rankedCurrent: mode(ranked, 'current'),
+      rankedNext: mode(ranked, 'next'),
+      ltmCurrent: ltm != null ? mode(ltm, 'current') : null,
+      ltmNext: ltm != null ? mode(ltm, 'next') : null,
+      wildcardCurrent: wildcard != null ? mode(wildcard, 'current') : null,
+      wildcardNext: wildcard != null ? mode(wildcard, 'next') : null,
     );
   }
 }

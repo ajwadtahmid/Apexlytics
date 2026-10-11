@@ -15,13 +15,16 @@ String playerRefreshKey(String platform, String query) =>
     '$platform:${query.trim().toLowerCase()}';
 
 /// Fetches fresh stats for a player (bypassing the cache-first provider path),
-/// invalidates [searchPlayerProvider] so it reads the updated disk cache, then
-/// marks the player as synced in [sessionRefreshedProvider].
+/// invalidates [searchPlayerProvider] so it serves that result (see
+/// [liveSearchResultProvider]), then marks the player as synced in
+/// [sessionRefreshedProvider].
 ///
 /// Skips the fetch when [query] was refreshed too recently — see
 /// [refreshCooldownProvider] — and in that case still returns true and still
 /// marks the player synced, a recent fetch having already refreshed it.
-/// Returns false only when the request itself failed.
+/// Returns false when nothing was fetched: the request failed, or failed and
+/// the cached copy was served instead. In that case the player is not marked
+/// synced.
 Future<bool> refreshAndMarkSynced(
   WidgetRef ref,
   PlayerService service,
@@ -44,16 +47,25 @@ Future<bool> refreshAndMarkSynced(
   try {
     // Call service directly to force a network fetch, bypassing the
     // cache-first path in searchPlayerProvider.
-    if (byUid) {
-      await service.getPlayerStatsByUid(query.trim(), platform);
-    } else {
-      await service.getPlayerStats(query.trim(), platform);
-    }
+    final result = byUid
+        ? await service.getPlayerStatsByUid(query.trim(), platform)
+        : await service.getPlayerStats(query.trim(), platform);
 
-    // Always invalidate so the provider reflects the latest disk cache,
-    // whether the response was fresh or a stale fallback.
+    // A live answer goes to the provider as it is: re-reading the cache entry
+    // it just wrote would come back with a save time and show as stale. A
+    // stale fallback is left to the cache read, which keeps it marked stale.
+    ref
+        .read(liveSearchResultProvider(params).notifier)
+        .set(result.staleAt == null ? result : null);
+
+    // Always invalidate so the provider reflects the latest result, whether
+    // the response was fresh or a stale fallback.
     ref.invalidate(searchPlayerProvider(params));
     await ref.read(searchPlayerProvider(params).future);
+
+    // The request failed and the service fell back to the cached copy:
+    // nothing was fetched, so the player is not synced.
+    if (result.staleAt != null) return false;
 
     // Mark this player as synced so the favorites list shows live status.
     final stats = ref

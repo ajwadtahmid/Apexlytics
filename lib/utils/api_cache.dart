@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'app_logger.dart';
 import 'storage/api_cache_store.dart';
+import '../constants/api_constants.dart';
 
 class ApiResult<T> {
   final T data;
@@ -23,8 +24,8 @@ class CachedEntry {
 /// always fetches with `noCache: true`, and the background-fetch path
 /// bypasses this cache entirely — no caller could ever hit its TTL.
 const Map<String, int> kEndpointCacheTtlMinutes = {
-  '/predator': 60,
-  '/servers': 5,
+  ApiConstants.predatorPath: 60,
+  ApiConstants.serversPath: 5,
 };
 
 /// One persisted response as held in memory: the JSON text exactly as stored,

@@ -21,6 +21,9 @@ final searchPlayerProvider = FutureProvider.autoDispose
       final (:query, :platform, :searchByUid) = params;
       final service = ref.watch(playerServiceProvider);
 
+      final live = ref.watch(liveSearchResultProvider(params));
+      if (live != null) return live;
+
       final cached = service.getCachedStats(
         query.trim(),
         platform,
@@ -33,6 +36,27 @@ final searchPlayerProvider = FutureProvider.autoDispose
       }
       return service.getPlayerStats(query.trim(), platform);
     }, retry: (_, _) => null);
+
+/// A live result a refresh just fetched, for [searchPlayerProvider] to serve
+/// instead of the cache entry that fetch wrote (which always has a save time,
+/// so it would read back as stale). Null until a live refresh succeeds; a
+/// stale fallback clears it.
+final liveSearchResultProvider = NotifierProvider.autoDispose
+    .family<LiveSearchResultNotifier, ApiResult<PlayerStats>?, PlayerSearchQuery>(
+      LiveSearchResultNotifier.new,
+    );
+
+class LiveSearchResultNotifier extends Notifier<ApiResult<PlayerStats>?> {
+  LiveSearchResultNotifier(this.params);
+
+  // Only identifies the family member; the notifier never reads it.
+  final PlayerSearchQuery params;
+
+  @override
+  ApiResult<PlayerStats>? build() => null;
+
+  void set(ApiResult<PlayerStats>? result) => state = result;
+}
 
 /// Tracks which player UIDs (or "platform:query" keys) were manually synced
 /// this session. Used by the search screen to show grey dots until the user

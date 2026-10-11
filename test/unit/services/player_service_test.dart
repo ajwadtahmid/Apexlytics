@@ -3,7 +3,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:apexlytics/services/api_service.dart';
 import 'package:apexlytics/services/player_service.dart';
-import 'package:apexlytics/utils/error_messages.dart';
 
 class MockApiService extends Mock implements ApiService {}
 
@@ -15,86 +14,6 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     mockApi = MockApiService();
     service = PlayerService(mockApi);
-  });
-
-  group('PlayerService.nameToUid', () {
-    test('throws when API returns empty UID', () async {
-      when(
-        () => mockApi.get(
-          '/nametouid',
-          params: any(named: 'params'),
-          noCache: any(named: 'noCache'),
-        ),
-      ).thenAnswer(
-        (_) async =>
-            const ApiResult({'uid': '', 'name': 'Unknown', 'avatar': ''}),
-      );
-
-      expect(
-        () => service.nameToUid('SomePlayer', 'PC'),
-        throwsA(
-          isA<AppException>().having(
-            (e) => e.toString(),
-            'message',
-            contains('Player not found'),
-          ),
-        ),
-      );
-    });
-
-    test('returns result when API returns valid UID', () async {
-      when(
-        () => mockApi.get(
-          '/nametouid',
-          params: any(named: 'params'),
-          noCache: any(named: 'noCache'),
-        ),
-      ).thenAnswer(
-        (_) async => const ApiResult({
-          'uid': '12345',
-          'name': 'SomePlayer',
-          'avatar': '',
-        }),
-      );
-
-      final result = await service.nameToUid('SomePlayer', 'PC');
-      expect(result.uid, '12345');
-      expect(result.name, 'SomePlayer');
-    });
-
-    test(
-      'passes a lowercased player name and the platform as query params',
-      () async {
-        // Upstream name lookups are case-insensitive, so nameToUid normalizes
-        // casing the same way getPlayerStats/getCachedStats do - otherwise the
-        // two name-based lookup paths could send different strings for the
-        // same input.
-        when(
-          () => mockApi.get(
-            '/nametouid',
-            params: any(named: 'params'),
-            noCache: any(named: 'noCache'),
-          ),
-        ).thenAnswer(
-          (_) async =>
-              const ApiResult({'uid': '99', 'name': 'x', 'avatar': ''}),
-        );
-
-        await service.nameToUid('TestName', 'X1');
-
-        final captured = verify(
-          () => mockApi.get(
-            '/nametouid',
-            params: captureAny(named: 'params'),
-            noCache: true,
-          ),
-        ).captured;
-
-        final params = captured.single as Map<String, dynamic>;
-        expect(params['player'], 'testname');
-        expect(params['platform'], 'X1');
-      },
-    );
   });
 
   group('PlayerService.getPlayerStatsByUid', () {

@@ -100,6 +100,36 @@ void main() {
     expect(calledBaseUrls, [primary, primary, backup]);
   });
 
+  test('a 5xx in the proxy\'s own JSON error shape is not an outage: no '
+      'failover, and no sticky window', () async {
+    // The proxy answered ("Upstream error", "Server busy"), so it is reachable,
+    // and the backup talks to the same upstream.
+    ResponseBody proxyError(int code) => ResponseBody.fromString(
+      '{"error":"Upstream error"}',
+      code,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+    final calledBaseUrls = <String>[];
+    final dio = buildDio(
+      maxRetries: 1,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        return proxyError(502);
+      },
+    );
+
+    await expectLater(dio.get('/player/uid'), throwsA(isA<DioException>()));
+    // The one same-host retry, and nothing on the backup.
+    expect(calledBaseUrls, [primary, primary]);
+
+    // And the next request still starts on the primary.
+    await expectLater(dio.get('/player/uid'), throwsA(isA<DioException>()));
+    expect(calledBaseUrls, [primary, primary, primary, primary]);
+  });
+
   test('a primary timeout fails straight over to the backup', () async {
     // A spun-down free-tier host produces connectionTimeout, not
     // connectionError - treating it as non-retryable skipped the failover.
