@@ -209,12 +209,31 @@ class RankedSummary {
 ///
 /// [currentRpFrom] supplies the newest match for `currentRp`/`latestRankImg`
 /// when it should include matches [matches] leaves out (excluded ones still
-/// moved the player's running RP).
+/// moved the player's running RP, and so did games before an empty window).
 RankedSummary summarize(
   List<RankedMatch> matches, {
   Iterable<RankedMatch>? currentRpFrom,
 }) {
-  if (matches.isEmpty) return RankedSummary.empty;
+  if (matches.isEmpty) {
+    RankedMatch? last;
+    for (final m in currentRpFrom ?? const <RankedMatch>[]) {
+      if (last == null || m.endTime.isAfter(last.endTime)) last = m;
+    }
+    if (last == null) return RankedSummary.empty;
+    return RankedSummary(
+      games: 0,
+      netRp: 0,
+      currentRp: last.cumulativeRp,
+      latestRankImg: last.rankImg,
+      totalKills: 0,
+      totalDamage: 0,
+      killsGames: 0,
+      damageGames: 0,
+      totalLengthSecs: 0,
+      wins: 0,
+      losses: 0,
+    );
+  }
 
   // Find the newest match for currentRp/rankImg without a full sort.
   var newest = matches.first;

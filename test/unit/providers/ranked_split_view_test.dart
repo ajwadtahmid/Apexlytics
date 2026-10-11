@@ -55,28 +55,49 @@ void main() {
     return container;
   }
 
-  test('the whole split\'s current RP is kept when a past week is picked',
-      () async {
-    final container = containerWith([week2, week1]);
-    container.read(rankedPeriodProvider.notifier).selectWeek(0);
-
-    final view = await container.read(
+  Future<RankedSplitView> viewWith(List<RankedMatch> matches, {int? week}) {
+    final container = containerWith(matches);
+    if (week != null) {
+      container.read(rankedPeriodProvider.notifier).selectWeek(week);
+    }
+    return container.read(
       rankedSplitViewProvider((uid: uid, splitId: splitId)).future,
     );
+  }
 
-    // The stats are week 1's, but "current" RP is where the split stands now.
+  test('a past week shows the RP it ended on, not where the split stands now',
+      () async {
+    final view = await viewWith([week2, week1], week: 0);
+
     expect(view.summary.games, 1);
-    expect(view.summary.currentRp, 1500);
+    expect(view.summary.currentRp, 1000);
+    expect(view.rpScope.label, 'RP at end of Week 1');
+    expect(view.rpScope.live, isFalse);
   });
 
   test('with every week selected, current RP is the newest game\'s', () async {
-    final container = containerWith([week2, week1]);
-
-    final view = await container.read(
-      rankedSplitViewProvider((uid: uid, splitId: splitId)).future,
-    );
+    final view = await viewWith([week2, week1]);
 
     expect(view.summary.games, 2);
     expect(view.summary.currentRp, 1500);
+    expect(view.rpScope.label, isNull);
+    expect(view.rpScope.live, isTrue);
+  });
+
+  test('a week with no games stands where the games before it left the player',
+      () async {
+    // Week 3 has nothing; week 2 ended on 1500.
+    final view = await viewWith([week2, week1], week: 2);
+
+    expect(view.summary.games, 0);
+    expect(view.summary.currentRp, 1500);
+    expect(view.rpScope.hasRp, isTrue);
+  });
+
+  test('a week before the first game has no RP to show', () async {
+    final view = await viewWith([week2], week: 0);
+
+    expect(view.summary.games, 0);
+    expect(view.rpScope.hasRp, isFalse);
   });
 }

@@ -200,6 +200,73 @@ class RankedView {
   );
 }
 
+/// What the Overview header's RP figure means for the selected split and week,
+/// and what that allows around it.
+class RankedRpScope {
+  /// Label above the figure; null for the plain "Current RP".
+  final String? label;
+
+  /// Whether the selected split is the newest one.
+  final bool newestSplit;
+
+  /// Whether the figure is today's RP, so comparing it with the live RP (and
+  /// the sync hint that comes with it) makes sense.
+  final bool live;
+
+  /// Whether any ranked game up to the end of the scope gave an RP to show.
+  final bool hasRp;
+
+  /// Whether the rank-goal footer applies. Hidden for a previous season, whose
+  /// ladder is over; kept for earlier splits and weeks of the current season.
+  final bool showGoal;
+
+  const RankedRpScope({
+    this.label,
+    this.newestSplit = true,
+    this.live = true,
+    this.hasRp = true,
+    this.showGoal = true,
+  });
+}
+
+/// The RP scope of [view]: today's RP for the newest split with every week or
+/// the week containing [now] selected, otherwise the RP at the end of the
+/// selected week or split.
+RankedRpScope rankedRpScope(
+  RankedView view, {
+  required bool hasRp,
+  DateTime? now,
+}) {
+  if (view.isEmpty) return RankedRpScope(hasRp: hasRp);
+  final t = now ?? DateTime.now();
+  final bucket = view.splits.firstWhere((b) => b.id == view.effectiveSplitId);
+  final newest = view.splits.firstWhere(
+    (b) => b.id != kLifetimeSplitId,
+    orElse: () => bucket,
+  );
+  final week = view.weekIndex >= 0 ? view.weeks[view.weekIndex] : null;
+  final atPresent =
+      bucket.id == newest.id &&
+      (week == null || (!t.isBefore(week.start) && t.isBefore(week.end)));
+
+  final season = SeasonMeta.seasonNumberOf(bucket.id);
+  final newestSeason = SeasonMeta.seasonNumberOf(newest.id);
+  final previousSeason =
+      season != null && newestSeason != null && season < newestSeason;
+
+  return RankedRpScope(
+    newestSplit: bucket.id == newest.id,
+    label: atPresent
+        ? null
+        : week != null
+        ? 'RP at end of Week ${view.weekIndex + 1}'
+        : 'RP at end of ${bucket.displayName}',
+    live: atPresent,
+    hasRp: hasRp,
+    showGoal: !previousSeason,
+  );
+}
+
 /// Resolves the [RankedView] from the pre-built [splits] (the picker) and the
 /// already-scoped [splitMatches] for the effective split — i.e. exactly one
 /// split's rows, loaded via `RankedHistoryStore.getBySeason`, not the whole

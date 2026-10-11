@@ -77,6 +77,12 @@ class PrefsKeys {
   /// the next division automatically.
   static String rankGoalKeyFor(String uid) => '$rankGoalPrefix$uid';
 
+  /// The goal for one split of [uid]: `rank_goal_<uid>@<splitId>`. A goal
+  /// belongs to the split it was set in. The plain [rankGoalKeyFor] key is what
+  /// older versions wrote for every split at once.
+  static String rankGoalKeyForSplit(String uid, String splitId) =>
+      '$rankGoalPrefix$uid@$splitId';
+
   /// Earliest time (epoch ms) the app may ask `/games` for [uid] again.
   static String gamesNextSync(String uid) => 'games_next_sync_$uid';
 

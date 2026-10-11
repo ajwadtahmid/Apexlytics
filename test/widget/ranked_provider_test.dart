@@ -13,6 +13,7 @@ import 'package:apexlytics/providers/settings_provider.dart';
 /// ProviderContainer.
 void main() {
   const uid = 'uid123';
+  const goalScope = (uid: uid, splitId: 'br_ranked_s30_s2', newestSplit: true);
 
   testWidgets('invalidatePlayerDerivedProviders resets rankGoalProvider', (
     tester,
@@ -37,7 +38,7 @@ void main() {
       ),
     );
 
-    expect(container.read(rankGoalProvider(uid)), 5);
+    expect(container.read(rankGoalProvider(goalScope)), 5);
 
     // Mirrors clearAll()/backup-import changing the pref out from under
     // an already-built provider instance.
@@ -45,7 +46,7 @@ void main() {
     invalidatePlayerDerivedProviders(capturedRef);
 
     expect(
-      container.read(rankGoalProvider(uid)),
+      container.read(rankGoalProvider(goalScope)),
       isNull,
       reason:
           'a stale in-memory goal must not keep being served once the '

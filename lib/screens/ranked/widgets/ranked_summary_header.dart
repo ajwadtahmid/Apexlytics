@@ -8,6 +8,7 @@ import '../../../utils/formatting/format.dart' show formatNumber, formatSigned, 
 import '../../../utils/formatting/rank_utils.dart'
     show rankAssetPathByTier, rankAssetPathFromImageUrl, usablePredatorCutoff;
 import '../../../utils/ranked/ranked_aggregates.dart';
+import '../../../utils/ranked/ranked_period.dart' show RankedRpScope;
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 import '../../../widgets/rank_badge.dart';
@@ -16,6 +17,9 @@ class RankedSummaryHeader extends ConsumerWidget {
   final RankedSummary summary;
   final String uid;
 
+  /// The split on screen; a goal belongs to the split it was set in.
+  final String splitId;
+
   /// Live RP from `/player`. [summary.currentRp] instead comes from match
   /// history, which syncs on a slower cooldown and can lag right after a
   /// session — a small badge explains the gap when they disagree. With zero
@@ -23,11 +27,17 @@ class RankedSummaryHeader extends ConsumerWidget {
   /// [livePlayerRp] is shown directly instead.
   final int? livePlayerRp;
 
+  /// What the RP figure stands for: today's, or the end of a past week or
+  /// split. Only today's is compared with [livePlayerRp].
+  final RankedRpScope rpScope;
+
   const RankedSummaryHeader({
     super.key,
     required this.summary,
     required this.uid,
+    required this.splitId,
     this.livePlayerRp,
+    this.rpScope = const RankedRpScope(),
   });
 
   @override
@@ -35,18 +45,30 @@ class RankedSummaryHeader extends ConsumerWidget {
     final netPositive = summary.netRp >= 0;
     final netColor = AppTheme.signColor(netPositive);
 
-    final goalIndex = ref.watch(rankGoalProvider(uid));
+    final goalScope = (
+      uid: uid,
+      splitId: splitId,
+      newestSplit: rpScope.newestSplit,
+    );
+    final goalIndex = ref.watch(rankGoalProvider(goalScope));
     final predatorRp = _predatorRp(ref);
-    final progress = summary.games == 0
+    // An empty live scope has no RP of its own; an empty past one still stands
+    // where the games before it left the player.
+    final hasProgress = summary.games > 0 || (!rpScope.live && rpScope.hasRp);
+    final progress = !hasProgress
         ? null
         : RankProgress.from(
             summary,
             goalIndex: goalIndex,
             predatorRp: predatorRp,
           );
-    final displayRp = summary.games == 0 && livePlayerRp != null
+    // Only today's RP may stand in for a missing history; a past scope shows
+    // its own figure, or a dash when it has none.
+    final useLive = rpScope.live && livePlayerRp != null;
+    final displayRp = summary.games == 0 && useLive
         ? livePlayerRp!
         : summary.currentRp;
+    final noRp = !rpScope.hasRp && !useLive;
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
@@ -78,16 +100,21 @@ class RankedSummaryHeader extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Current RP',
-                      style: TextStyle(color: AppTheme.muted, fontSize: 11),
+                    Text(
+                      rpScope.label ?? 'Current RP',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 11,
+                      ),
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Flexible(
                           child: Text(
-                            formatNumber(displayRp),
+                            noRp ? '—' : formatNumber(displayRp),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -97,8 +124,7 @@ class RankedSummaryHeader extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        if (livePlayerRp != null &&
-                            livePlayerRp != displayRp) ...[
+                        if (useLive && livePlayerRp != displayRp) ...[
                           const SizedBox(width: 6),
                           Tooltip(
                             message:
@@ -143,9 +169,9 @@ class RankedSummaryHeader extends ConsumerWidget {
             const SizedBox(height: AppTheme.sm),
             _ProgressBars(progress: progress),
             // No goal to set once you're already the top of the ladder.
-            if (!progress.isPredator) ...[
+            if (!progress.isPredator && rpScope.showGoal) ...[
               const Divider(color: AppTheme.surface2, height: AppTheme.lg),
-              _GoalFooter(uid: uid, progress: progress),
+              _GoalFooter(goalScope: goalScope, progress: progress),
             ],
           ],
         ],
@@ -237,9 +263,9 @@ class _ProgressBars extends StatelessWidget {
 // ── Goal footer ────────────────────────────────────────────────────────────
 
 class _GoalFooter extends StatelessWidget {
-  final String uid;
+  final RankGoalScope goalScope;
   final RankProgress progress;
-  const _GoalFooter({required this.uid, required this.progress});
+  const _GoalFooter({required this.goalScope, required this.progress});
 
   @override
   Widget build(BuildContext context) {
@@ -324,7 +350,7 @@ class _GoalFooter extends StatelessWidget {
           child: Consumer(
             builder: (context, ref, _) {
               void choose(int? index) {
-                ref.read(rankGoalProvider(uid).notifier).setGoal(index);
+                ref.read(rankGoalProvider(goalScope).notifier).setGoal(index);
                 Navigator.of(sheetCtx).pop();
               }
 

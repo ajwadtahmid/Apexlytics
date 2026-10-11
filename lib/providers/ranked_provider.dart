@@ -338,6 +338,8 @@ typedef RankedSplitView = ({
   // RankedSessionsEntry used to each call sessionize() on every
   // rebuild of the always-visible Overview tab.
   List<RankedSession> sessions,
+  // What the header's RP figure stands for (today's, or a week's or split's end).
+  RankedRpScope rpScope,
 });
 
 final rankedSplitViewProvider = FutureProvider.autoDispose
@@ -354,15 +356,20 @@ final rankedSplitViewProvider = FutureProvider.autoDispose
         weekIndex: weekIndex,
       );
       final filtered = view.filtered;
+      // Excluded games still moved the player's running RP. Read up to the end
+      // of the selected week, from the whole split: a week with no games still
+      // stands where the games before it left the player.
+      final weekEnd = view.weekIndex >= 0
+          ? view.weeks[view.weekIndex].end
+          : null;
+      final rpGames = [
+        for (final m in matches)
+          if (m.isRanked && (weekEnd == null || m.endTime.isBefore(weekEnd))) m,
+      ];
       return (
         view: view,
-        // Excluded games still moved the player's running RP. Taken from the
-        // whole split, not the selected week: "current" RP is where the split
-        // stands, and a past week's would read as out of sync with the live RP.
-        summary: summarize(
-          filtered,
-          currentRpFrom: matches.where((m) => m.isRanked),
-        ),
+        summary: summarize(filtered, currentRpFrom: rpGames),
+        rpScope: rankedRpScope(view, hasRp: rpGames.isNotEmpty),
         legends: legendBreakdowns(filtered),
         maps: mapBreakdowns(filtered),
         timeOfDay: timeOfDayBuckets(filtered),

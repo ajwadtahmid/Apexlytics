@@ -309,4 +309,80 @@ void main() {
       );
     });
   });
+
+  group('rankedRpScope', () {
+    // Season 28 is over; season 29 has two splits, the second in progress.
+    final all = {
+      ...seasons,
+      'br_ranked_s29_s2': SeasonMeta.fromApi(
+        id: 'br_ranked_s29_s2',
+        startSeconds: 3000000,
+        endSeconds: 4000000,
+      ),
+    };
+    final splits = buildSplitBuckets({
+      'br_ranked_s28_s2': 1,
+      'br_ranked_s29_s1': 1,
+      'br_ranked_s29_s2': 1,
+    }, all);
+    final inSecondSplit = DateTime.fromMillisecondsSinceEpoch(3100000 * 1000);
+
+    RankedRpScope scope(String splitId, {int week = -1}) {
+      final view = resolveRankedView(
+        splits: splits,
+        splitMatches: const [],
+        selectedSplitId: splitId,
+        weekIndex: week,
+      );
+      return rankedRpScope(view, hasRp: true, now: inSecondSplit);
+    }
+
+    test('the newest split with every week is today\'s RP', () {
+      final s = scope('br_ranked_s29_s2');
+      expect(s.label, isNull);
+      expect(s.live, isTrue);
+      expect(s.showGoal, isTrue);
+    });
+
+    test('the week containing today is today\'s RP', () {
+      // 3.1M seconds is day ~1.2 of the split: inside week 1.
+      final s = scope('br_ranked_s29_s2', week: 0);
+      expect(s.label, isNull);
+      expect(s.live, isTrue);
+    });
+
+    test('an earlier split of the current season ends at its own RP, goal kept',
+        () {
+      final s = scope('br_ranked_s29_s1');
+      expect(s.label, 'RP at end of Season 29 (Split 1)');
+      expect(s.live, isFalse);
+      expect(s.showGoal, isTrue);
+    });
+
+    test('a previous season ends at its own RP and drops the goal', () {
+      final s = scope('br_ranked_s28_s2');
+      expect(s.label, 'RP at end of Season 28 (Split 2)');
+      expect(s.live, isFalse);
+      expect(s.showGoal, isFalse);
+    });
+
+    test('a past week of the newest split names the week and keeps the goal',
+        () {
+      final view = resolveRankedView(
+        splits: splits,
+        splitMatches: const [],
+        selectedSplitId: 'br_ranked_s29_s2',
+        weekIndex: 0,
+      );
+      // Two weeks later week 1 is over.
+      final s = rankedRpScope(
+        view,
+        hasRp: true,
+        now: inSecondSplit.add(const Duration(days: 14)),
+      );
+      expect(s.label, 'RP at end of Week 1');
+      expect(s.live, isFalse);
+      expect(s.showGoal, isTrue);
+    });
+  });
 }

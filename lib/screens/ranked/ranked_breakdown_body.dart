@@ -611,7 +611,11 @@ class _OverviewTab extends StatelessWidget {
           RankedSummaryHeader(
             summary: summary,
             uid: uid,
-            livePlayerRp: isCurrentSplit ? stats.rankScore : null,
+            splitId: data.view.effectiveSplitId,
+            livePlayerRp: isCurrentSplit && data.rpScope.live
+                ? stats.rankScore
+                : null,
+            rpScope: data.rpScope,
           ),
           const SizedBox(height: AppTheme.md),
           RankedRpChart(

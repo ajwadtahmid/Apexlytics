@@ -19,6 +19,13 @@ class SeasonMeta {
   /// window can overlap the real one's, permanently misfiling a match.
   static bool isSplitId(String id) => _splitIdPattern.hasMatch(id);
 
+  /// The season number in a split id ("br_ranked_s29_s1" → 29), or null when
+  /// [id] isn't a split.
+  static int? seasonNumberOf(String id) {
+    final m = _splitIdPattern.firstMatch(id);
+    return m == null ? null : int.parse(m.group(1)!);
+  }
+
   // "br_ranked_s29_s1" → "Season 29 (Split 1)"
   //
   // An id that doesn't match falls back to "Other" rather than the raw id —
