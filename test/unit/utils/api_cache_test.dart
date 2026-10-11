@@ -1,16 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:apexlytics/utils/api_cache.dart';
 import 'package:apexlytics/utils/storage/api_cache_store.dart';
+import '../../helpers.dart';
 
 void main() {
   // sqflite has no native binding under `flutter test` (host VM) — use FFI.
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   // Bare `inMemoryDatabasePath` (':memory:') is not enough isolation here:
   // sqflite_common_ffi opens in-memory databases in shared-cache mode, so

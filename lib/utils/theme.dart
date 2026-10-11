@@ -30,6 +30,21 @@ class AppTheme {
   /// Green for a gain, red for a loss. Callers pass their own test for what
   /// counts as positive (some treat 0 as a gain, others don't).
   static Color signColor(bool positive) => positive ? green : red;
+
+  /// The small muted heading at the top of a stats card ("STATS", "Ranked Point
+  /// History"). Casing is the caller's: some titles are Title Case, some upper.
+  static const cardTitle = TextStyle(
+    fontWeight: FontWeight.bold,
+    color: muted,
+    fontSize: 12,
+    letterSpacing: 0.5,
+  );
+
+  /// 1st / 2nd / 3rd place medals (weapon rankings). Their own colours, not the
+  /// rank ladder's, so recolouring a rank tier doesn't recolour a medal.
+  static const medalGold = Color(0xFFFFD54F);
+  static const medalSilver = Color(0xFFB0BEC5);
+  static const medalBronze = Color(0xFFCD853F);
   static const blue = Color(0xFF79c0ff);
   static const orange = Color(0xFFffa657);
   static const shimmerHighlight = Color(0xFF2d3a4a);
@@ -51,9 +66,7 @@ class AppTheme {
   static const double radiusLg = 16;
   static const double radiusFull = 50;
 
-  static const double iconSizeSmall = 14;
   static const double iconSizeMedium = 20;
-  static const double iconSizeLarge = 32;
   static const double rankIconSize = 42;
   static const double newsImageHeight = 160;
 
@@ -65,6 +78,18 @@ class AppTheme {
 
   /// Duration for short UI transitions (pill/tab animations, etc).
   static const Duration shortAnimation = Duration(milliseconds: 200);
+
+  /// Duration for a selection pill / chip changing state.
+  static const Duration chipAnimation = Duration(milliseconds: 150);
+
+  /// [base] grown with the system text size, never shrunk. For a card whose
+  /// height is fixed around its text (over an image, so it cannot just wrap its
+  /// content): at a larger text size the text outgrows a fixed height and its
+  /// bottom row is cut off.
+  static double scaledWithText(BuildContext context, double base) {
+    final scale = MediaQuery.textScalerOf(context).scale(1);
+    return scale > 1 ? base * scale : base;
+  }
 
   // API returns status values in uppercase ('UP', 'DOWN', 'SLOW', 'PARTIAL').
   static Color statusColor(String status) => switch (status) {
@@ -106,6 +131,16 @@ class AppTheme {
       type: BottomNavigationBarType.fixed,
     ),
     cardTheme: const CardThemeData(color: surface),
+    // Every modal bottom sheet: surface background, rounded top, and the same
+    // drag handle wherever one is shown. Calls don't repeat these.
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(radiusLg)),
+      ),
+      dragHandleColor: muted,
+      dragHandleSize: Size(36, 4),
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: surface2,

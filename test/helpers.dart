@@ -2,8 +2,56 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:apexlytics/models/player_stats.dart';
+import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:dio/dio.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+/// Points sqflite at its FFI backend, the only one available under
+/// `flutter test` (the host VM has no native binding). Call it from `setUpAll`.
+void useFfiDatabase() {
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+}
+
+/// Builds a [RankedMatch] in the shape upstream's `/games` serves, for tests.
+/// [start] is Unix seconds; the match ends [length] seconds later. A null
+/// [kills] / [damage] leaves that tracker out, as upstream does for a legend
+/// without it equipped.
+RankedMatch buildMatch({
+  String uid = '1',
+  int start = 1782090000,
+  int rp = 10,
+  int cumulativeRp = 1000,
+  String legend = 'Axle',
+  String map = 'olympus_rotation',
+  int? kills,
+  int? damage,
+  String gameMode = 'BATTLE_ROYALE',
+  int length = 600,
+  bool excluded = false,
+}) {
+  final match = RankedMatch.fromJson({
+    'uid': uid,
+    'name': 'Tester',
+    'legendPlayed': legend,
+    'gameMode': gameMode,
+    'gameLengthSecs': length,
+    'gameStartTimestamp': start,
+    'gameEndTimestamp': start + length,
+    'gameData': [
+      if (kills != null) {'key': 'kills', 'value': kills, 'name': 'BR Kills'},
+      if (damage != null)
+        {'key': 'damage', 'value': damage, 'name': 'BR Damage'},
+    ],
+    'BRScoreChange': rp,
+    'BRScore': cumulativeRp,
+    'BRRankImg': 'https://x/diamond4.png',
+    'isPartyFull': false,
+    'map': map,
+  });
+  return excluded ? match.withExcluded(true) : match;
+}
 
 /// Builds a minimal [PlayerStats] for use in tests. Override only the fields
 /// you care about; everything else gets a sensible default.

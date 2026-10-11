@@ -8,18 +8,11 @@ import '../services/api_service.dart';
 import '../utils/app_logger.dart';
 import 'api_provider.dart';
 import 'settings_provider.dart';
+import '../constants/api_constants.dart';
 
-class MapRotationNotifier extends AsyncNotifier<ApiResult<MapRotation>> {
-  @override
-  Future<ApiResult<MapRotation>> build() {
-    return ref.watch(mapServiceProvider).getMapRotation();
-  }
-}
-
-final mapRotationProvider =
-    AsyncNotifierProvider<MapRotationNotifier, ApiResult<MapRotation>>(
-      MapRotationNotifier.new,
-    );
+final mapRotationProvider = FutureProvider<ApiResult<MapRotation>>(
+  (ref) => ref.watch(mapServiceProvider).getMapRotation(),
+);
 
 class SeasonalMapsNotifier extends AsyncNotifier<SeasonalMaps> {
   static const String _cacheKey = SeasonalMaps.cacheKey;
@@ -32,7 +25,7 @@ class SeasonalMapsNotifier extends AsyncNotifier<SeasonalMaps> {
     final SeasonalMaps? cached = _loadFromCache(prefs);
 
     try {
-      final result = await apiService.get('/maps', noCache: true);
+      final result = await apiService.get(ApiConstants.mapsPath, noCache: true);
       // The server intentionally returns an empty {ranked: [], pubs: []} once
       // its hardcoded map pool goes stale (past MAPS_MAX_AGE_MS in
       // extra/server/*.ts) — the rotation changes every split and nobody

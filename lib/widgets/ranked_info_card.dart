@@ -7,9 +7,14 @@ import '../providers/predator_provider.dart';
 import '../utils/formatting/format.dart';
 import '../utils/formatting/season_utils.dart' show splitContext;
 import '../utils/formatting/rank_utils.dart'
-    show rankIndex, rankAssetPathByTier;
+    show
+        isApexPredatorRp,
+        rankIndex,
+        rankAssetPathByTier,
+        usablePredatorCutoff;
 import '../utils/theme.dart';
 import 'surface_card.dart';
+import 'rank_badge.dart';
 
 class RankedInfoCard extends ConsumerWidget {
   final int myRp;
@@ -29,16 +34,18 @@ class RankedInfoCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final splitLabel = splitContextLabel(splitContext(season));
     final predAsync = ref.watch(predatorProvider);
-    final predVal = predAsync.when(
-      data: (result) => result.data.forPlatform(platform)?.minRp,
-      loading: () => null,
-      error: (e, _) => null,
+    final predVal = usablePredatorCutoff(
+      predAsync.when(
+        data: (result) => result.data.forPlatform(platform)?.minRp,
+        loading: () => null,
+        error: (e, _) => null,
+      ),
     );
 
-    final isPred = predVal != null && myRp >= predVal;
+    final isPred = isApexPredatorRp(myRp, predVal);
     final idx = rankIndex(myRp);
     final current = kRankLadder[idx];
-    final currentColor = isPred ? kPredatorColor : current.color;
+    final currentColor = rankDisplayColor(current, isPredator: isPred);
     final currentLabel = isPred ? kApexPredatorRank : current.label;
 
     int? nextRp;
@@ -79,24 +86,9 @@ class RankedInfoCard extends ConsumerWidget {
                   color: currentColor.withAlpha(30),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Image.asset(
-                  rankAssetPathByTier(isPred, idx),
-                  fit: BoxFit.contain,
-                  cacheWidth:
-                      (AppTheme.rankIconSize *
-                              MediaQuery.devicePixelRatioOf(context))
-                          .ceil(),
-                  errorBuilder: (ctx, err, trace) => Center(
-                    child: Text(
-                      isPred ? 'PR' : (current.division ?? 'M'),
-                      style: TextStyle(
-                        color: currentColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
+                child: RankBadge(
+                  assetPath: rankAssetPathByTier(isPred, idx),
+                  size: AppTheme.rankIconSize,
                 ),
               ),
               const SizedBox(width: 12),

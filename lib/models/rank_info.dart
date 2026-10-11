@@ -19,11 +19,14 @@ class RankInfo {
   });
 
   factory RankInfo.from(PlayerStats s) {
-    if (s.rank == kApexPredatorRank) {
-      return const RankInfo(label: kApexPredatorRank, color: kPredatorColor);
-    }
     final idx = rankIndex(s.rankScore);
     final division = kRankLadder[idx];
+    if (s.rank == kApexPredatorRank) {
+      return RankInfo(
+        label: kApexPredatorRank,
+        color: rankDisplayColor(division, isPredator: true),
+      );
+    }
     final String? nextLabel = idx < kRankLadder.length - 1
         ? kRankLadder[idx + 1].label
         : null;
@@ -32,7 +35,7 @@ class RankInfo {
         : null;
     return RankInfo(
       label: division.label,
-      color: division.color,
+      color: rankDisplayColor(division),
       nextLabel: nextLabel,
       rpToNext: rpToNext,
       tier: division.tier,

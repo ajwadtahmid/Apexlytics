@@ -71,6 +71,18 @@ void main() {
       'leaves the sign alone for negatives',
       () => expect(formatSigned(-4.2), '-4.2'),
     );
+    test('a value that rounds to zero is zero, never "-0.0"', () {
+      // -1 RP over 30 games is -0.033 per game.
+      expect(formatSigned(-1 / 30), '+0.0');
+      expect(formatSigned(-0.04), '+0.0');
+    });
+    test('negative zero is zero, never "+-0.0"', () {
+      expect(formatSigned(-0.0), '+0.0');
+    });
+    test('the first value that rounds away from zero keeps its sign', () {
+      expect(formatSigned(-0.06), '-0.1');
+      expect(formatSigned(0.06), '+0.1');
+    });
   });
 
   group('formatSignedInt', () {
@@ -196,6 +208,53 @@ void main() {
 
     test('empty string when there is no split', () {
       expect(splitContextLabel(null), '');
+    });
+  });
+
+  group('plural', () {
+    test('only exactly one is singular', () {
+      expect(plural(1, 'game'), '1 game');
+      expect(plural(0, 'game'), '0 games');
+      expect(plural(2, 'game'), '2 games');
+    });
+
+    test('an explicit plural form wins', () {
+      expect(plural(1, 'ranked game', 'ranked games'), '1 ranked game');
+      expect(plural(3, 'ranked game', 'ranked games'), '3 ranked games');
+      expect(plural(2, 'match', 'matches'), '2 matches');
+    });
+  });
+
+  group('formatPercent', () {
+    test('turns a ratio into a percentage', () {
+      expect(formatPercent(0.4), '40%');
+      expect(formatPercent(0), '0%');
+      expect(formatPercent(1), '100%');
+    });
+
+    test('keeps the requested decimals', () {
+      expect(formatPercent(0.4567, decimals: 1), '45.7%');
+      expect(formatPercent(0.4567), '46%');
+    });
+  });
+
+  group('kills/damage with no reading', () {
+    test('an average that does not exist shows as a dash, not 0', () {
+      expect(formatAvgKills(null), kNoReading);
+      expect(formatAvgDamage(null), kNoReading);
+    });
+
+    test('a real average, including a real zero, is formatted', () {
+      expect(formatAvgKills(2.345), '2.3');
+      expect(formatAvgKills(0), '0.0');
+      expect(formatAvgDamage(1234.6), '1,235');
+      expect(formatAvgDamage(0), '0');
+    });
+
+    test('a total is a dash only when no game reported it', () {
+      expect(formatTotalOrNone(0, 0), kNoReading);
+      expect(formatTotalOrNone(0, 5), '0');
+      expect(formatTotalOrNone(1500, 3), '1,500');
     });
   });
 }

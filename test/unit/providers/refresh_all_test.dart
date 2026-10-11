@@ -64,10 +64,7 @@ const b = PlayerProfile(name: 'Bravo', uid: '1000000002', platform: 'PC');
 const c = PlayerProfile(name: 'Charlie', uid: '1000000003', platform: 'PC');
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   var dbCounter = 0;
   late RankedHistoryStore store;

@@ -4,15 +4,13 @@ import 'package:apexlytics/utils/crash_report_scrubber.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../../helpers.dart';
 
 const _uid = '1006838015507';
 const _name = 'SomePlayerName';
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   group('scrubForCrashReport', () {
     test('drops the source excerpt a FormatException carries', () {

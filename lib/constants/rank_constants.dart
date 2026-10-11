@@ -10,9 +10,26 @@ class RankDivision {
 
   String get label => division != null ? '$tier $division' : tier;
 
-  String get assetPath =>
-      'assets/ranks/${tier.toLowerCase().replaceAll(' ', '_')}.webp';
+  /// The bundled badge for this tier, or null when none is bundled (Rookie).
+  /// Callers show no badge for null; they don't each pick their own stand-in.
+  String? get assetPath {
+    final name = tier.toLowerCase().replaceAll(' ', '_');
+    return kBundledRankTiers.contains(name) ? 'assets/ranks/$name.webp' : null;
+  }
 }
+
+/// Tiers with badge art in `assets/ranks/<tier>.webp`. Rookie has none.
+const kBundledRankTiers = {
+  'bronze',
+  'silver',
+  'gold',
+  'platinum',
+  'diamond',
+  'master',
+};
+
+/// The Apex Predator badge, which sits outside the ladder.
+const kPredatorBadgeAsset = 'assets/ranks/apex_predator.webp';
 
 const kRookieColor = Color(0xFF616161);
 const kBronzeColor = Color(0xFFCD853F);
@@ -24,6 +41,13 @@ const kMasterColor = Color(0xFFAB47BC);
 
 const kPredatorColor = Color(0xFFFF4500);
 const kApexPredatorRank = 'Apex Predator';
+
+/// The one place that decides which colour a rank is shown in: Apex
+/// Predator's own colour, otherwise [division]'s. Rank colours are defined
+/// above and nowhere else; read them through this (or `kRankLadder`), don't
+/// copy the values.
+Color rankDisplayColor(RankDivision division, {bool isPredator = false}) =>
+    isPredator ? kPredatorColor : division.color;
 
 const List<RankDivision> kRankLadder = [
   RankDivision('Rookie', 'IV', 0, kRookieColor),

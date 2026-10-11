@@ -39,10 +39,7 @@ const _twoProfiles =
 const _oneProfile = '[{"name":"Alpha","uid":"1000000001","platform":"PC"}]';
 
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   var dbCounter = 0;
 

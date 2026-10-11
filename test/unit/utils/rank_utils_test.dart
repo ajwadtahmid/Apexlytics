@@ -20,6 +20,36 @@ PlayerStats _stubStats({required String rank, required int rankScore}) =>
     );
 
 void main() {
+  group('Apex Predator rules', () {
+    final masterFloor = kRankLadder.last.rp;
+
+    test('a cutoff below the Master floor is no cutoff', () {
+      // Missing parses to 0; a negative value is a "no data" placeholder.
+      for (final bad in [null, 0, -1, 500, masterFloor - 1]) {
+        expect(usablePredatorCutoff(bad), isNull, reason: '$bad');
+      }
+      expect(usablePredatorCutoff(masterFloor), masterFloor);
+      expect(usablePredatorCutoff(17500), 17500);
+    });
+
+    test('nobody below Master is Predator, whatever the cutoff', () {
+      expect(isApexPredatorRp(5600, 0), isFalse);
+      expect(isApexPredatorRp(5600, 500), isFalse);
+      expect(isApexPredatorRp(masterFloor - 1, masterFloor), isFalse);
+    });
+
+    test('Master and above need to reach the cutoff', () {
+      expect(isApexPredatorRp(17000, 17500), isFalse);
+      expect(isApexPredatorRp(17500, 17500), isTrue);
+      expect(isApexPredatorRp(20000, 17500), isTrue);
+    });
+
+    test('no usable cutoff means nobody is promoted to Predator', () {
+      expect(isApexPredatorRp(50000, null), isFalse);
+      expect(isApexPredatorRp(50000, 0), isFalse);
+    });
+  });
+
   group('rankIndex', () {
     test('returns 0 for 0 RP (Rookie IV)', () => expect(rankIndex(0), 0));
     test('returns correct index for Bronze IV threshold', () {
@@ -51,16 +81,55 @@ void main() {
     });
   });
 
-  group('rankColor', () {
-    test('predator returns kPredatorColor', () {
-      final stats = _stubStats(rank: kApexPredatorRank, rankScore: 20000);
-      expect(rankColor(stats).toARGB32(), kPredatorColor.toARGB32());
+  group('rank badge assets', () {
+    test('every ladder rung either has its badge on disk or none at all', () {
+      for (final d in kRankLadder) {
+        final path = d.assetPath;
+        if (path != null) {
+          expect(
+            File(path).existsSync(),
+            isTrue,
+            reason: '$path for ${d.label}',
+          );
+        }
+      }
+      expect(File(kPredatorBadgeAsset).existsSync(), isTrue);
     });
 
-    test('non-predator returns ladder color', () {
-      final stats = _stubStats(rank: 'Gold', rankScore: 5500);
-      final expected = kRankLadder[rankIndex(5500)].color;
-      expect(rankColor(stats).toARGB32(), expected.toARGB32());
+    test('Rookie has no badge, and nothing else is missing one', () {
+      for (final d in kRankLadder) {
+        expect(d.assetPath == null, d.tier == 'Rookie', reason: d.label);
+      }
+    });
+
+    test('the helpers agree: no art is null, Predator is its own badge', () {
+      expect(rankAssetPathByTier(false, 0), isNull);
+      expect(rankAssetPathByTier(true, 0), kPredatorBadgeAsset);
+      expect(
+        rankAssetPathByTier(false, kRankLadder.length - 1),
+        'assets/ranks/master.webp',
+      );
+    });
+  });
+
+  group('rankDisplayColor', () {
+    final gold = kRankLadder[rankIndex(5500)];
+
+    test('Predator is shown in the Predator colour', () {
+      expect(
+        rankDisplayColor(gold, isPredator: true).toARGB32(),
+        kPredatorColor.toARGB32(),
+      );
+    });
+
+    test('any other rank is shown in its own division colour', () {
+      expect(rankDisplayColor(gold).toARGB32(), gold.color.toARGB32());
+    });
+
+    test('every rung of the ladder resolves to its colour', () {
+      for (final d in kRankLadder) {
+        expect(rankDisplayColor(d), d.color);
+      }
     });
   });
 

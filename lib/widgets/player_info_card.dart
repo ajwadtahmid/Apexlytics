@@ -12,6 +12,7 @@ import '../utils/theme.dart';
 import 'legend_icon.dart';
 import 'status_dot.dart';
 import 'surface_card.dart';
+import 'rank_badge.dart';
 
 class PlayerInfoCard extends StatelessWidget {
   final PlayerStats stats;
@@ -59,20 +60,7 @@ class PlayerInfoCard extends StatelessWidget {
                   ],
                 ),
               ),
-              SizedBox(
-                width: 14,
-                height: 14,
-                // Source rank badges are several hundred px across; without
-                // cacheWidth this decodes at full resolution to render a
-                // 14×14 icon.
-                child: Image.asset(
-                  rankAssetPath(stats),
-                  fit: BoxFit.contain,
-                  cacheWidth: (14 * MediaQuery.devicePixelRatioOf(context))
-                      .ceil(),
-                  errorBuilder: (ctx, err, trace) => const SizedBox.shrink(),
-                ),
-              ),
+              RankBadge(assetPath: rankAssetPath(stats), size: 14),
               const SizedBox(width: 4),
               Text.rich(
                 TextSpan(

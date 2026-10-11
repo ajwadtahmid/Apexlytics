@@ -1,4 +1,3 @@
-import 'dart:ui';
 import '../../constants/rank_constants.dart';
 import '../../models/player_stats.dart';
 
@@ -10,21 +9,39 @@ int rankIndex(int rankPoints) {
   return 0;
 }
 
+// ── Apex Predator ───────────────────────────────────────────────────────────
+//
+// Every "is this player Predator?" check on RP goes through here:
+//   1. Predator sits above Master: below the Master floor (the ladder's last
+//      entry) nobody is one, whatever the cutoff says.
+//   2. The cutoff is the live RP of the lowest Predator, from `/predator`. One
+//      below the Master floor is a missing or placeholder value (parsed as 0),
+//      so it counts as no cutoff, not as "everyone qualifies".
+//   3. So: Predator = a usable cutoff, and RP at or above it.
+// The API's own rank name (see [rankLabel]) is a separate source.
+
+/// [cutoff] if it can be a real Predator cutoff (at or above the Master
+/// floor), otherwise null.
+int? usablePredatorCutoff(int? cutoff) =>
+    cutoff != null && cutoff >= kRankLadder.last.rp ? cutoff : null;
+
+/// Whether [rp] is Apex Predator given the live [cutoff] (raw, as served).
+bool isApexPredatorRp(int rp, int? cutoff) {
+  final usable = usablePredatorCutoff(cutoff);
+  return usable != null && rp >= usable;
+}
+
 /// Returns the display label for [stats.rank], using the Apex Predator
 /// constant when the rank string matches it.
 String rankLabel(PlayerStats stats) => stats.rank == kApexPredatorRank
     ? kApexPredatorRank
     : kRankLadder[rankIndex(stats.rankScore)].label;
 
-/// Returns the color associated with [stats.rank].
-Color rankColor(PlayerStats stats) {
-  if (stats.rank == kApexPredatorRank) return kPredatorColor;
-  return kRankLadder[rankIndex(stats.rankScore)].color;
-}
-
 /// Returns the asset path for the rank icon associated with [stats.rank].
-String rankAssetPath(PlayerStats stats) {
-  if (stats.rank == kApexPredatorRank) return 'assets/ranks/apex_predator.webp';
+///
+/// Null when the tier has no bundled art (Rookie): show no badge.
+String? rankAssetPath(PlayerStats stats) {
+  if (stats.rank == kApexPredatorRank) return kPredatorBadgeAsset;
   return kRankLadder[rankIndex(stats.rankScore)].assetPath;
 }
 
@@ -34,20 +51,12 @@ String rankAssetPath(PlayerStats stats) {
 /// pass a [rankIndex]-derived value, but this is a public helper next to
 /// [kPredatorGoalIndex] — a sentinel stored in prefs the same way real ladder
 /// indices are — so an out-of-range value must degrade, not throw.
-String rankAssetPathByTier(bool isPredator, int tierIndex) {
-  if (isPredator) return 'assets/ranks/apex_predator.webp';
+///
+/// Null when the tier has no bundled art (Rookie): show no badge.
+String? rankAssetPathByTier(bool isPredator, int tierIndex) {
+  if (isPredator) return kPredatorBadgeAsset;
   return kRankLadder[tierIndex.clamp(0, kRankLadder.length - 1)].assetPath;
 }
-
-/// Tiers bundled as `assets/ranks/<tier>.webp`.
-const _bundledRankTiers = {
-  'bronze',
-  'silver',
-  'gold',
-  'platinum',
-  'diamond',
-  'master',
-};
 
 /// The bundled badge for a rank image URL (`…/platinum3.png`), or null for an unbundled
 /// tier or unusable URL. Only the file name is read, so nothing is fetched; the division
@@ -62,7 +71,7 @@ String? rankAssetPathFromImageUrl(String url) {
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z]'), '');
   if (tier == 'apexpredator' || tier == 'predator') {
-    return 'assets/ranks/apex_predator.webp';
+    return kPredatorBadgeAsset;
   }
-  return _bundledRankTiers.contains(tier) ? 'assets/ranks/$tier.webp' : null;
+  return kBundledRankTiers.contains(tier) ? 'assets/ranks/$tier.webp' : null;
 }

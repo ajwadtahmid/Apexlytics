@@ -4,12 +4,13 @@ import '../../../constants/rank_constants.dart';
 import '../../../providers/predator_provider.dart';
 import '../../../providers/rank_goal_provider.dart';
 import '../../../providers/settings_provider.dart';
-import '../../../utils/formatting/format.dart' show formatNumber;
+import '../../../utils/formatting/format.dart' show formatNumber, formatSigned, plural;
 import '../../../utils/formatting/rank_utils.dart'
-    show rankAssetPathByTier, rankAssetPathFromImageUrl;
+    show rankAssetPathByTier, rankAssetPathFromImageUrl, usablePredatorCutoff;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
+import '../../../widgets/rank_badge.dart';
 
 class RankedSummaryHeader extends ConsumerWidget {
   final RankedSummary summary;
@@ -60,30 +61,17 @@ class RankedSummaryHeader extends ConsumerWidget {
               if (progress != null) ...[
                 // Source rank badges run up to 705×739px; without cacheWidth
                 // this decodes at full resolution to render at 36×36.
-                Image.asset(
-                  rankAssetPathByTier(
+                RankBadge(
+                  assetPath: rankAssetPathByTier(
                     progress.isPredator,
                     progress.currentIndex,
                   ),
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.contain,
-                  cacheWidth: (36 * MediaQuery.devicePixelRatioOf(context))
-                      .ceil(),
-                  errorBuilder: (_, _, _) => const SizedBox(width: 36),
+                  size: 36,
                 ),
                 const SizedBox(width: AppTheme.sm),
               ] else if (rankAssetPathFromImageUrl(summary.latestRankImg)
                   case final badge?) ...[
-                Image.asset(
-                  badge,
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.contain,
-                  cacheWidth: (36 * MediaQuery.devicePixelRatioOf(context))
-                      .ceil(),
-                  errorBuilder: (_, _, _) => const SizedBox(width: 36),
-                ),
+                RankBadge(assetPath: badge, size: 36),
                 const SizedBox(width: AppTheme.sm),
               ],
               Expanded(
@@ -171,7 +159,7 @@ class RankedSummaryHeader extends ConsumerWidget {
     );
     final async = ref.watch(predatorProvider);
     final data = async.asData?.value.data;
-    return data?.forPlatform(platform)?.minRp;
+    return usablePredatorCutoff(data?.forPlatform(platform)?.minRp);
   }
 }
 
@@ -224,7 +212,7 @@ class _ProgressBars extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(100),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
           child: LinearProgressIndicator(
             value: progress.progressToNext,
             minHeight: 6,
@@ -275,21 +263,11 @@ class _GoalFooter extends StatelessWidget {
       children: [
         // Source rank badges run up to 705×739px; without cacheWidth this
         // decodes at full resolution to render at 24×24.
-        Image.asset(
-          progress.isPredatorGoal
-              ? 'assets/ranks/apex_predator.webp'
+        RankBadge(
+          assetPath: progress.isPredatorGoal
+              ? kPredatorBadgeAsset
               : goal.assetPath,
-          width: 24,
-          height: 24,
-          cacheWidth: (24 * MediaQuery.devicePixelRatioOf(context)).ceil(),
-          errorBuilder: (_, _, _) => Container(
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              color: goal.color,
-              shape: BoxShape.circle,
-            ),
-          ),
+          size: 24,
         ),
         const SizedBox(width: AppTheme.sm),
         Expanded(
@@ -340,7 +318,6 @@ class _GoalFooter extends StatelessWidget {
     ];
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.surface,
       showDragHandle: true,
       builder: (sheetCtx) {
         return SafeArea(
@@ -394,17 +371,9 @@ class _GoalFooter extends StatelessWidget {
                             // Source rank badges run up to 705×739px; without
                             // cacheWidth this decodes at full resolution to
                             // render at 28×28.
-                            leading: Image.asset(
-                              kRankLadder[i].assetPath,
-                              width: 28,
-                              height: 28,
-                              cacheWidth:
-                                  (28 * MediaQuery.devicePixelRatioOf(context))
-                                      .ceil(),
-                              errorBuilder: (_, _, _) => Icon(
-                                Icons.military_tech,
-                                color: kRankLadder[i].color,
-                              ),
+                            leading: RankBadge(
+                              assetPath: kRankLadder[i].assetPath,
+                              size: 28,
                             ),
                             title: Text(
                               kRankLadder[i].label,
@@ -424,17 +393,9 @@ class _GoalFooter extends StatelessWidget {
                           ),
                         if (predatorRp != null && predatorRp > 0)
                           ListTile(
-                            leading: Image.asset(
-                              'assets/ranks/apex_predator.webp',
-                              width: 24,
-                              height: 24,
-                              cacheWidth:
-                                  (24 * MediaQuery.devicePixelRatioOf(context))
-                                      .ceil(),
-                              errorBuilder: (_, _, _) => const Icon(
-                                Icons.military_tech,
-                                color: kPredatorColor,
-                              ),
+                            leading: const RankBadge(
+                              assetPath: kPredatorBadgeAsset,
+                              size: 24,
                             ),
                             title: const Text(
                               kApexPredatorRank,
@@ -468,7 +429,7 @@ class _GoalFooter extends StatelessWidget {
     );
     final async = ref.watch(predatorProvider);
     final data = async.asData?.value.data;
-    return data?.forPlatform(platform)?.minRp;
+    return usablePredatorCutoff(data?.forPlatform(platform)?.minRp);
   }
 }
 
@@ -485,7 +446,7 @@ class _GoalButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: AppTheme.surface2,
-          borderRadius: BorderRadius.circular(100),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -539,7 +500,7 @@ Widget _estimateWidget(int rp, int? games, RankDivision target) {
     spans = [
       TextSpan(text: '${formatNumber(rp)} RP ', style: white),
       TextSpan(
-        text: '(~$games ${games == 1 ? 'game' : 'games'}) ',
+        text: '(~${plural(games, 'game')}) ',
         style: muted,
       ),
       const TextSpan(text: 'to ', style: muted),
@@ -559,6 +520,5 @@ Widget _estimateWidget(int rp, int? games, RankDivision target) {
 String _pacePhrase(int? games, double avg) {
   if (games == null) return 'No estimate at this pace';
   if (games == 0) return 'Within reach';
-  final sign = avg >= 0 ? '+' : '';
-  return '~$games ${games == 1 ? 'game' : 'games'} at $sign${avg.toStringAsFixed(1)} RP/game';
+  return '~${plural(games, 'game')} at ${formatSigned(avg)} RP/game';
 }

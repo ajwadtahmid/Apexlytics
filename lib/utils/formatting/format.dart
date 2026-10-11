@@ -8,12 +8,46 @@ String formatNumber(int number) => _rpFormat.format(number);
 
 /// Formats a delta-style number with an explicit '+' for non-negative values
 /// (e.g. RP/game, a comparison delta) — negatives already carry their own '-'.
-String formatSigned(double value) =>
-    '${value >= 0 ? '+' : ''}${value.toStringAsFixed(1)}';
+///
+/// A value that rounds to zero reads as zero ('+0.0'), never as '-0.0' (a tiny
+/// negative) or '+-0.0' (negative zero).
+String formatSigned(double value) {
+  final text = value.toStringAsFixed(1);
+  if (text == '-0.0') return '+0.0';
+  return value >= 0 ? '+$text' : text;
+}
 
 /// [formatSigned], for an already-integer delta (e.g. total RP).
 String formatSignedInt(int value) =>
     '${value >= 0 ? '+' : ''}${formatNumber(value)}';
+
+/// A ratio (0..1) as a percentage with [decimals] places: `0.4` is `40%`.
+String formatPercent(double ratio, {int decimals = 0}) =>
+    '${(ratio * 100).toStringAsFixed(decimals)}%';
+
+/// A count with its noun, pluralised: `plural(1, 'game')` is `1 game`,
+/// `plural(3, 'game')` is `3 games`. [many] overrides the default `word + s`
+/// for the plural form (`plural(2, 'ranked game', 'ranked games')`).
+String plural(int n, String word, [String? many]) =>
+    n == 1 ? '$n $word' : '$n ${many ?? '${word}s'}';
+
+/// Shown where a stat has no reading at all (e.g. no game reported the kills
+/// tracker), instead of a 0 that would read as a measured value.
+const kNoReading = '—';
+
+/// An average kills figure to one decimal, or [kNoReading] when null.
+String formatAvgKills(double? avg) =>
+    avg == null ? kNoReading : avg.toStringAsFixed(1);
+
+/// An average damage figure as a whole number, or [kNoReading] when null.
+String formatAvgDamage(double? avg) =>
+    avg == null ? kNoReading : formatNumber(avg.round());
+
+/// A kills/damage [total], or [kNoReading] when none of the games it covers
+/// ([reportedGames]) reported the tracker. A partial total (some games
+/// reported) is shown as is.
+String formatTotalOrNone(int total, int reportedGames) =>
+    reportedGames == 0 ? kNoReading : formatNumber(total);
 
 /// Returns a relative time string (e.g., '2h ago', '5m ago') based on elapsed time.
 String timeAgo(DateTime timestamp) {

@@ -11,6 +11,7 @@ import '../../utils/formatting/search_utils.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
+import '../../widgets/rank_badge.dart';
 
 class FavoritesPane extends ConsumerWidget {
   final ValueChanged<PlayerRef> onPick;
@@ -250,7 +251,7 @@ class _RankSubtitle extends StatelessWidget {
   final String platformLabel;
   final String rankText;
   final String rpText;
-  final String rankAsset;
+  final String? rankAsset;
 
   const _RankSubtitle({
     required this.platformLabel,
@@ -270,18 +271,7 @@ class _RankSubtitle extends StatelessWidget {
         const SizedBox(width: AppTheme.xs),
         const Text('·', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
         const SizedBox(width: AppTheme.xs),
-        SizedBox(
-          width: 12,
-          height: 12,
-          child: Image.asset(
-            rankAsset,
-            fit: BoxFit.contain,
-            // Decoded at display size, as every other rank badge is — one
-            // of these renders per favourite.
-            cacheWidth: (12 * MediaQuery.devicePixelRatioOf(context)).ceil(),
-            errorBuilder: (ctx, err, trace) => const SizedBox.shrink(),
-          ),
-        ),
+        RankBadge(assetPath: rankAsset, size: 12),
         const SizedBox(width: AppTheme.xs),
         Expanded(
           child: Text(

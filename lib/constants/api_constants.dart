@@ -31,6 +31,15 @@ class ApiConstants {
 
   static bool isUidOnly(String platform) => uidOnlyPlatforms.contains(platform);
 
+  // Proxy routes. The response-cache TTL table matches request paths by prefix,
+  // so a path is spelled once, here, and the table keys off the same constant.
+  static const String playerPath = '/player';
+  static const String playerUidPath = '/player/uid';
+  static const String predatorPath = '/predator';
+  static const String serversPath = '/servers';
+  static const String mapsPath = '/maps';
+  static const String newsPath = '/news';
+
   static const String mapRotationPath = '/maprotation';
   static const String mapRotationVersion = '2';
 

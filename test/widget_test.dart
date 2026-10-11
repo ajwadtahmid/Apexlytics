@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:apexlytics/app.dart';
 import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/providers/api_provider.dart';
@@ -55,10 +54,7 @@ void main() {
   // sqflite has no native binding under `flutter test` (host VM) — use FFI.
   // ApiService now opens an ApiCacheStore (sqlite) on construction, which
   // needs this even though these tests never inspect its contents.
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
