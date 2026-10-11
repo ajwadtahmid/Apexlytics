@@ -227,14 +227,15 @@ void main() {
 
   group('formatPercent', () {
     test('turns a ratio into a percentage', () {
-      expect(formatPercent(0.4), '40%');
-      expect(formatPercent(0), '0%');
-      expect(formatPercent(1), '100%');
+      expect(formatPercent(0.4), '40.0%');
+      expect(formatPercent(0), '0.0%');
+      expect(formatPercent(1), '100.0%');
+      expect(formatPercent(0.3994), '39.9%', reason: 'not rounded up to 40');
     });
 
     test('keeps the requested decimals', () {
       expect(formatPercent(0.4567, decimals: 1), '45.7%');
-      expect(formatPercent(0.4567), '46%');
+      expect(formatPercent(0.4567, decimals: 0), '46%');
     });
   });
 

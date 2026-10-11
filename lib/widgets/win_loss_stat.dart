@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/formatting/format.dart' show formatPercent;
 import '../utils/theme.dart';
 
 /// Single win-rate chip: the win rate as the headline value with the raw win
@@ -39,7 +40,7 @@ class WinLossStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final decided = wins + losses;
-    final rateText = decided == 0 ? '—' : '${(wins / decided * 100).round()}%';
+    final rateText = decided == 0 ? '—' : formatPercent(wins / decided);
     final valueSize = compact ? 12.0 : (onImage ? 14.0 : 15.0);
 
     final value = Text.rich(

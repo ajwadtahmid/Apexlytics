@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
+import 'package:apexlytics/utils/theme.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart' show kSessionGap;
 import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_tags.dart';
@@ -558,6 +559,42 @@ void main() {
       await tester.tap(find.text('Axle').first);
       await tester.pumpAndSettle();
       expect(find.textContaining('Tuesday, March 11, 2025'), findsOneWidget);
+    });
+
+    testWidgets('a session\'s average RP is green when positive and red when '
+        'negative', (tester) async {
+      Color? colorOf(String text) {
+        Color? found;
+        for (final e in find.byType(RichText).evaluate()) {
+          final rich = e.widget as RichText;
+          if (rich.text.toPlainText() != text) continue;
+          rich.text.visitChildren((span) {
+            if (span is TextSpan && span.text == text) {
+              found = span.style?.color;
+            }
+            return true;
+          });
+        }
+        return found;
+      }
+
+      final up = [game(dayOffset: 0, slot: 1, rp: 10)];
+      final down = [game(dayOffset: 0, slot: 1, rp: -10)];
+      for (final (games, text, color) in [
+        (up, '+10.0', AppTheme.green),
+        (down, '-10.0', AppTheme.red),
+      ]) {
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Scaffold(
+                body: MatchHistoryList(matches: games, onRefresh: () async {}),
+              ),
+            ),
+          ),
+        );
+        expect(colorOf(text), color, reason: text);
+      }
     });
 
     testWidgets('scrolls with pinned headers without errors', (tester) async {

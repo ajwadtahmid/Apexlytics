@@ -21,8 +21,10 @@ String formatSigned(double value) {
 String formatSignedInt(int value) =>
     '${value >= 0 ? '+' : ''}${formatNumber(value)}';
 
-/// A ratio (0..1) as a percentage with [decimals] places: `0.4` is `40%`.
-String formatPercent(double ratio, {int decimals = 0}) =>
+/// A ratio (0..1) as a percentage with [decimals] places: `0.3994` is `39.9%`.
+/// One decimal by default, so a rate isn't rounded to a neighbouring whole
+/// number (`39.94%` as `40%`).
+String formatPercent(double ratio, {int decimals = 1}) =>
     '${(ratio * 100).toStringAsFixed(decimals)}%';
 
 /// A count with its noun, pluralised: `plural(1, 'game')` is `1 game`,

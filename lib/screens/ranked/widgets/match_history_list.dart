@@ -545,7 +545,9 @@ class _SessionStats extends StatelessWidget {
               'Avg RP',
               TextSpan(
                 text: formatSigned(avg),
-                style: _value,
+                style: avg == 0
+                    ? _value
+                    : _value.copyWith(color: AppTheme.signColor(avg > 0)),
               ),
             ),
           _stat(
