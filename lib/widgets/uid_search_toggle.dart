@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../constants/api_constants.dart';
 import '../utils/theme.dart';
+import '../utils/navigation_utils.dart';
 
 /// Apply to a [TextField.inputFormatters] whenever UID search mode is active,
 /// so a mistyped character or a pasted name never reaches the network as a
@@ -89,12 +89,8 @@ class UidSearchToggle extends StatelessWidget {
     required this.onChanged,
   });
 
-  Future<void> _openLink() async {
-    await launchUrl(
-      Uri.parse(ApiConstants.alsProfileSearchUrl),
-      mode: LaunchMode.externalApplication,
-    );
-  }
+  Future<void> _openLink(BuildContext context) =>
+      openExternalLink(context, Uri.parse(ApiConstants.alsProfileSearchUrl));
 
   @override
   Widget build(BuildContext context) {
@@ -103,14 +99,17 @@ class UidSearchToggle extends StatelessWidget {
         const Icon(Icons.numbers, size: 16, color: AppTheme.muted),
         const SizedBox(width: AppTheme.sm),
         Expanded(
-          child: Row(
+          // Wraps, rather than a Row, so a narrow screen or larger text moves
+          // "(Find your UID)" to a second line instead of pushing it off.
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text(
                 'Search by UID ',
                 style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
               ),
               InkWell(
-                onTap: _openLink,
+                onTap: () => _openLink(context),
                 borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                 child: const Text(
                   '(Find your UID)',

@@ -20,12 +20,6 @@ void showMapAlertsSheet(BuildContext context) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppTheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (_) => const _MapAlertsSheetContent(),
   );
 }

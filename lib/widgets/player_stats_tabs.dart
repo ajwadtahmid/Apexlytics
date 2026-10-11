@@ -33,21 +33,14 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
   List<String>? _prevLegendStack;
   _LegendSortOrder? _prevSort;
 
-  // Sort order depends only on legend names (not tracker values), so compare
-  // by name to avoid spurious re-sorts when the provider emits new instances
-  // containing identical data.
+  // The memo holds the stat objects themselves, which the Legends list
+  // renders, and the Kills/Damage/Wins sorts read their values - so a new list
+  // (a refresh) must replace it even when the legend names are unchanged.
+  // Rebuilds that pass the same list keep it.
   static bool _legendStatsChanged(
     List<LegendStat>? prev,
     List<LegendStat> next,
-  ) {
-    if (prev == null) return true;
-    if (identical(prev, next)) return false;
-    if (prev.length != next.length) return true;
-    for (var i = 0; i < next.length; i++) {
-      if (prev[i].name != next[i].name) return true;
-    }
-    return false;
-  }
+  ) => prev == null || !identical(prev, next);
 
   List<LegendStat> get _sortedLegends {
     if (_legendStatsChanged(_prevLegendStats, widget.legendStats) ||
@@ -175,7 +168,7 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
                   ),
                   decoration: BoxDecoration(
                     color: AppTheme.surface2,
-                    borderRadius: BorderRadius.circular(100),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -272,12 +265,12 @@ class _RoleChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        duration: AppTheme.chipAnimation,
         margin: const EdgeInsets.only(right: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: selected ? color.withAlpha(40) : AppTheme.surface2,
-          borderRadius: BorderRadius.circular(100),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
           border: Border.all(
             color: selected ? color : Colors.transparent,
             width: 1,
@@ -329,7 +322,7 @@ class _SegmentedCapsule extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(100),
+        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
       ),
       padding: const EdgeInsets.all(3),
       child: Row(
@@ -344,7 +337,7 @@ class _SegmentedCapsule extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
               decoration: BoxDecoration(
                 color: isSelected ? AppTheme.accent : Colors.transparent,
-                borderRadius: BorderRadius.circular(100),
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
               ),
               child: Text(
                 option,

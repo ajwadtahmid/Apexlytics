@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../constants/legend_constants.dart';
-import '../constants/rank_constants.dart';
 import '../constants/tracker_constants.dart';
 import '../models/player_stats.dart';
 import '../utils/formatting/format.dart';
@@ -382,10 +381,10 @@ class _WeaponRankCard extends StatelessWidget {
   const _WeaponRankCard({required this.weapons});
 
   // Medal colors: 1st place (gold), 2nd place (silver), 3rd place (bronze)
-  static final _rankColors = [
-    kRankLadder.firstWhere((r) => r.tier == 'Gold').color, // gold
-    kRankLadder.firstWhere((r) => r.tier == 'Silver').color, // silver
-    kRankLadder.firstWhere((r) => r.tier == 'Bronze').color, // bronze
+  static const _rankColors = [
+    AppTheme.medalGold,
+    AppTheme.medalSilver,
+    AppTheme.medalBronze,
   ];
 
   @override

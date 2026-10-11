@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/server_status.dart';
-import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
+import '../../utils/navigation_utils.dart';
 
 // ── Latency color helper ──────────────────────────────────────────────────────
 
@@ -103,15 +102,8 @@ class ServerStatusPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
             child: GestureDetector(
-              onTap: () async {
-                final ok = await launchUrl(
-                  Uri.parse(ApiConstants.apexStatusUrl),
-                  mode: LaunchMode.externalApplication,
-                );
-                if (!ok && context.mounted) {
-                  context.showMessage('Could not open link');
-                }
-              },
+              onTap: () =>
+                  openExternalLink(context, Uri.parse(ApiConstants.apexStatusUrl)),
               child: const Text(
                 'Data from apexlegendsstatus.com',
                 textAlign: TextAlign.center,

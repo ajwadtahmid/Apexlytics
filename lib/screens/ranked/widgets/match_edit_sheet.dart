@@ -21,13 +21,7 @@ Future<RankedMatch?> showMatchEditSheet(
 ) {
   return showModalBottomSheet<RankedMatch>(
     context: context,
-    backgroundColor: AppTheme.surface,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (_) => MatchEditSheet(match: match),
   );
 }

@@ -79,7 +79,7 @@ class _WeekTabStripState extends State<WeekTabStrip> {
             return GestureDetector(
               onTap: isFuture ? null : () => widget.onSelected(i),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
+                duration: AppTheme.chipAnimation,
                 margin: const EdgeInsets.only(right: 6),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -91,7 +91,7 @@ class _WeekTabStripState extends State<WeekTabStrip> {
                       : isFuture
                       ? AppTheme.surface2.withAlpha(80)
                       : AppTheme.surface2,
-                  borderRadius: BorderRadius.circular(100),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                 ),
                 child: Text(
                   'W${i + 1}',

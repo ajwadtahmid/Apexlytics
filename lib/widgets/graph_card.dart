@@ -24,12 +24,6 @@ Future<void> showSnapshotBackupSheet(
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppTheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (_) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(AppTheme.lg),
@@ -250,12 +244,7 @@ class _GraphCardState extends State<GraphCard> {
             children: [
               const Text(
                 'Ranked Point History',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.muted,
-                  fontSize: 12,
-                  letterSpacing: 0.5,
-                ),
+                style: AppTheme.cardTitle,
               ),
               SeasonPicker(
                 selectedId: season.id,
@@ -275,7 +264,8 @@ class _GraphCardState extends State<GraphCard> {
                 '${_fmtDate(week.start)} – ${_fmtDate(week.end)}',
                 style: const TextStyle(color: AppTheme.muted, fontSize: 11),
               ),
-              if (delta != null) _DeltaBadge(delta: delta),
+              if (delta != null)
+                _DeltaBadge(delta: delta, isLiveWeek: isLiveWeek),
             ],
           ),
 
@@ -365,12 +355,7 @@ class _GraphCardState extends State<GraphCard> {
       padding: EdgeInsets.all(AppTheme.md),
       child: Text(
         'Ranked Point History',
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          color: AppTheme.muted,
-          fontSize: 12,
-          letterSpacing: 0.5,
-        ),
+        style: AppTheme.cardTitle,
       ),
     );
   }
@@ -382,7 +367,11 @@ class _GraphCardState extends State<GraphCard> {
 
 class _DeltaBadge extends StatelessWidget {
   final int delta;
-  const _DeltaBadge({required this.delta});
+
+  /// Whether the shown week is the one in progress; any other week is past.
+  final bool isLiveWeek;
+
+  const _DeltaBadge({required this.delta, required this.isLiveWeek});
 
   @override
   Widget build(BuildContext context) {
@@ -396,7 +385,8 @@ class _DeltaBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       ),
       child: Text(
-        '$sign${formatNumber(delta.abs())} RP this week',
+        '$sign${formatNumber(delta.abs())} RP '
+        '${isLiveWeek ? 'this week' : 'that week'}',
         style: TextStyle(
           color: color,
           fontSize: 10,

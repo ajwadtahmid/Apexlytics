@@ -1,23 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../constants/api_constants.dart';
 import '../../../utils/theme.dart';
+import '../../../utils/navigation_utils.dart';
 
-Future<void> _openProfileSearch() async {
-  await launchUrl(
-    Uri.parse(ApiConstants.alsProfileSearchUrl),
-    mode: LaunchMode.externalApplication,
-  );
-}
+Future<void> _openProfileSearch(BuildContext context) =>
+    openExternalLink(context, Uri.parse(ApiConstants.alsProfileSearchUrl));
 
-Future<void> _openFullGuide() async {
-  await launchUrl(
-    Uri.parse(
-      'https://github.com/ajwadtahmid/Apexlytics#ranked-breakdown-guide',
-    ),
-    mode: LaunchMode.externalApplication,
-  );
-}
+Future<void> _openFullGuide(BuildContext context) => openExternalLink(
+  context,
+  Uri.parse('https://github.com/ajwadtahmid/Apexlytics#ranked-breakdown-guide'),
+);
 
 /// "How ranked tracking works" — explains the mechanics behind the empty
 /// states in RankedBreakdownBody so a confused user has somewhere to look
@@ -26,12 +18,6 @@ void showRankedInfoSheet(BuildContext context) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppTheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (context) => DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.6,
@@ -72,7 +58,7 @@ void showRankedInfoSheet(BuildContext context) {
           Padding(
             padding: const EdgeInsets.only(top: AppTheme.sm),
             child: InkWell(
-              onTap: _openProfileSearch,
+              onTap: () => _openProfileSearch(context),
               borderRadius: BorderRadius.circular(AppTheme.radiusSm),
               child: const Text(
                 'Find your profile →',
@@ -107,7 +93,7 @@ void showRankedInfoSheet(BuildContext context) {
           const SizedBox(height: AppTheme.lg),
           Center(
             child: InkWell(
-              onTap: _openFullGuide,
+              onTap: () => _openFullGuide(context),
               borderRadius: BorderRadius.circular(AppTheme.radiusSm),
               child: const Text(
                 'Full guide on GitHub →',

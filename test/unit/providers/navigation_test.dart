@@ -30,6 +30,29 @@ void main() {
       expect(appTabForDefault(3), AppTab.settings);
     });
 
+    test('stored values are exactly the ones already saved in settings and '
+        'backups', () {
+      // Never renumber these: a user's chosen default tab is stored as one.
+      expect({for (final t in AppTab.values) t.name: t.storedValue}, {
+        'home': 0,
+        'stats': 1,
+        'search': 2,
+        'settings': 3,
+      });
+    });
+
+    test('every tab round-trips through its stored value', () {
+      for (final t in AppTab.values) {
+        expect(appTabForDefault(t.storedValue), t);
+      }
+    });
+
+    test('every visible tab has a distinct, non-empty label', () {
+      final labels = [for (final t in AppTab.values) t.label];
+      expect(labels, ['Home', 'My Stats', 'Search', 'Settings']);
+      expect(labels.toSet(), hasLength(labels.length));
+    });
+
     test('falls back to Home for out-of-range values', () {
       expect(appTabForDefault(99), AppTab.home);
       expect(appTabForDefault(-1), AppTab.home);

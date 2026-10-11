@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/player_stats.dart';
 import '../../providers/api_provider.dart';
@@ -18,6 +17,7 @@ import '../../utils/theme.dart';
 import '../../widgets/legend_icon.dart';
 import '../../widgets/widgets.dart';
 import 'player_compare_sheet.dart';
+import '../../utils/navigation_utils.dart';
 
 class PlayerResultPage extends ConsumerStatefulWidget {
   final String query;
@@ -92,13 +92,7 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
     String platform,
   ) async {
     final url = '${ApiConstants.alsProfileBaseUrl}/$platform/$uid';
-    final success = await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
-    );
-    if (!success && context.mounted) {
-      context.showMessage('Could not open link');
-    }
+    await openExternalLink(context, Uri.parse(url));
   }
 
   @override
@@ -214,12 +208,6 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
   ) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppTheme.radiusLg),
-        ),
-      ),
       builder: (sheetCtx) {
         return SafeArea(
           child: Column(
@@ -329,7 +317,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     return ref.read(searchStateProvider).favorites.any((f) => f.uid == uid);
   }
 
-  // A season learned here (a different provider subtree than the ranked tab)
+  // A season learned here (a different provider subtree than the Ranked section of My Stats)
   // won't otherwise reach rankedSeasonsProvider's frozen snapshot until the
   // next app launch — invalidate it so the ranked split picker picks it up
   // this session too.

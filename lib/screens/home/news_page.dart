@@ -1,11 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/news_article.dart';
-import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart' show SectionLabel;
+import '../../utils/navigation_utils.dart';
 
 class NewsPage extends StatelessWidget {
   final List<NewsArticle> articles;
@@ -94,13 +93,7 @@ class _CardTile extends StatelessWidget {
                 if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
                   return;
                 }
-                final ok = await launchUrl(
-                  uri,
-                  mode: LaunchMode.externalApplication,
-                );
-                if (!ok && context.mounted) {
-                  context.showMessage('Could not open link');
-                }
+                await openExternalLink(context, uri);
               },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

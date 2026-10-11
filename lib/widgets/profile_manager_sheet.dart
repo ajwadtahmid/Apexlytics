@@ -61,35 +61,39 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
     );
     final insets = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        AppTheme.md,
-        AppTheme.md,
-        AppTheme.md,
-        AppTheme.md + insets,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.muted,
-                borderRadius: BorderRadius.circular(2),
+    // Scrollable: with the keyboard up the sheet is taller than what is left of
+    // the screen, and the submit button must stay reachable.
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppTheme.md,
+          AppTheme.md,
+          AppTheme.md,
+          AppTheme.md + insets,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.muted,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: AppTheme.md),
-          if (_editingIndex != null || _isAdding) ...[
-            _buildLookupView(profiles),
-          ] else ...[
-            _buildProfileList(profiles, activeProfileIndex),
+            const SizedBox(height: AppTheme.md),
+            if (_editingIndex != null || _isAdding) ...[
+              _buildLookupView(profiles),
+            ] else ...[
+              _buildProfileList(profiles, activeProfileIndex),
+            ],
+            const SizedBox(height: AppTheme.sm),
           ],
-          const SizedBox(height: AppTheme.sm),
-        ],
+        ),
       ),
     );
   }

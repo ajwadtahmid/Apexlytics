@@ -84,13 +84,7 @@ Future<void> showHistoryFilterSheet(
     );
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppTheme.surface,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (_) => _FilterSheet(
       initial: filter,
       legends: legends,

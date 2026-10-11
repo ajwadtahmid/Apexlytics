@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'dart:async' show unawaited;
 import '../utils/theme.dart';
 import 'icon_text_row.dart';
 import 'surface_card.dart';
+import '../utils/navigation_utils.dart';
 
 class SectionLabel extends StatelessWidget {
   final String label;
@@ -88,9 +87,7 @@ class LinkRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      onTap: () => unawaited(
-        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-      ),
+      onTap: () => openExternalLink(context, Uri.parse(url)),
       child: Row(
         children: [
           Expanded(

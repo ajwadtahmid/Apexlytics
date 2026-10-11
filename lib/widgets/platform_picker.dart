@@ -28,7 +28,7 @@ class PlatformPicker extends StatelessWidget {
           expanded ? AppTheme.radiusMd : AppTheme.radiusSm,
         ),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: AppTheme.chipAnimation,
           padding: EdgeInsets.symmetric(
             horizontal: expanded ? 0 : 14,
             vertical: expanded ? 10 : 6,

@@ -157,25 +157,25 @@ class _AppShellState extends ConsumerState<_AppShell>
   }
 
   BottomNavigationBarItem _navItemFor(AppTab tab) => switch (tab) {
-    AppTab.home => const BottomNavigationBarItem(
-      icon: Icon(Icons.home_outlined),
-      activeIcon: Icon(Icons.home),
-      label: 'Home',
+    AppTab.home => BottomNavigationBarItem(
+      icon: const Icon(Icons.home_outlined),
+      activeIcon: const Icon(Icons.home),
+      label: AppTab.home.label,
     ),
-    AppTab.stats => const BottomNavigationBarItem(
-      icon: Icon(Icons.bar_chart_outlined),
-      activeIcon: Icon(Icons.bar_chart),
-      label: 'My Stats',
+    AppTab.stats => BottomNavigationBarItem(
+      icon: const Icon(Icons.bar_chart_outlined),
+      activeIcon: const Icon(Icons.bar_chart),
+      label: AppTab.stats.label,
     ),
-    AppTab.search => const BottomNavigationBarItem(
-      icon: Icon(Icons.search_outlined),
-      activeIcon: Icon(Icons.search),
-      label: 'Search',
+    AppTab.search => BottomNavigationBarItem(
+      icon: const Icon(Icons.search_outlined),
+      activeIcon: const Icon(Icons.search),
+      label: AppTab.search.label,
     ),
-    AppTab.settings => const BottomNavigationBarItem(
-      icon: Icon(Icons.settings_outlined),
-      activeIcon: Icon(Icons.settings),
-      label: 'Settings',
+    AppTab.settings => BottomNavigationBarItem(
+      icon: const Icon(Icons.settings_outlined),
+      activeIcon: const Icon(Icons.settings),
+      label: AppTab.settings.label,
     ),
   };
 

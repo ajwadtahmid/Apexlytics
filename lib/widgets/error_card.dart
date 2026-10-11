@@ -37,7 +37,6 @@ class ErrorCard extends StatelessWidget {
   /// Retry [TextButton], shown when set. Optional everywhere — a [fullScreen]
   /// state that navigates away instead (e.g. "Back") can omit this.
   final VoidCallback? onRetry;
-  final String retryLabel;
 
   /// Optional promoted action, rendered as a filled button above Retry.
   final String? actionLabel;
@@ -54,7 +53,6 @@ class ErrorCard extends StatelessWidget {
 
   /// Optional trailing text link. [fullScreen] only.
   final VoidCallback? onLearnMore;
-  final String learnMoreLabel;
 
   const ErrorCard({
     super.key,
@@ -66,7 +64,6 @@ class ErrorCard extends StatelessWidget {
     this.compact = false,
     this.fullScreen = false,
     this.onRetry,
-    this.retryLabel = 'Retry',
     this.actionLabel,
     this.onAction,
     this.extra,
@@ -74,7 +71,6 @@ class ErrorCard extends StatelessWidget {
     this.secondaryActionIcon,
     this.onSecondaryAction,
     this.onLearnMore,
-    this.learnMoreLabel = 'How does this work?',
   }) : assert(
          !(compact && fullScreen),
          'compact and fullScreen are mutually exclusive',
@@ -144,9 +140,9 @@ class ErrorCard extends StatelessWidget {
             if (onRetry != null)
               TextButton(
                 onPressed: onRetry,
-                child: Text(
-                  retryLabel,
-                  style: const TextStyle(color: AppTheme.accent, fontSize: 13),
+                child: const Text(
+                  'Retry',
+                  style: TextStyle(color: AppTheme.accent, fontSize: 13),
                 ),
               ),
           ],
@@ -174,9 +170,9 @@ class ErrorCard extends StatelessWidget {
           if (onRetry != null)
             TextButton(
               onPressed: onRetry,
-              child: Text(
-                retryLabel,
-                style: const TextStyle(color: AppTheme.accent),
+              child: const Text(
+                'Retry',
+                style: TextStyle(color: AppTheme.accent),
               ),
             ),
         ],
@@ -185,78 +181,95 @@ class ErrorCard extends StatelessWidget {
   }
 
   Widget _buildFullScreen() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _resolvedIcon,
-              color: _resolvedIconColor,
-              size: _resolvedIconSize,
-            ),
-            const SizedBox(height: AppTheme.md),
-            if (title != null) ...[
-              Text(
-                title!,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: AppTheme.xs),
-            ],
+    final content = _fullScreenContent();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Without a bounded height there is nothing to scroll within.
+        if (!constraints.hasBoundedHeight) return Center(child: content);
+        // Scrollable so the buttons stay reachable on a short screen or with
+        // larger text; still centred when everything fits.
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: content),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _fullScreenContent() {
+    return Padding(
+      padding: const EdgeInsets.all(AppTheme.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _resolvedIcon,
+            color: _resolvedIconColor,
+            size: _resolvedIconSize,
+          ),
+          const SizedBox(height: AppTheme.md),
+          if (title != null) ...[
             Text(
-              message,
-              textAlign: TextAlign.center,
+              title!,
               style: const TextStyle(
-                color: AppTheme.muted,
-                fontSize: 13,
-                height: 1.4,
+                color: AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            ?extra,
-            const SizedBox(height: AppTheme.md),
-            if (onSecondaryAction != null) ...[
-              OutlinedButton.icon(
-                onPressed: onSecondaryAction,
-                icon: Icon(secondaryActionIcon ?? Icons.bar_chart, size: 16),
-                label: Text(secondaryActionLabel ?? ''),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppTheme.accent,
-                  side: const BorderSide(color: AppTheme.accent),
-                ),
-              ),
-              const SizedBox(height: AppTheme.xs),
-            ],
-            if (actionLabel != null && onAction != null) ...[
-              FilledButton(
-                onPressed: onAction,
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
-                child: Text(actionLabel!),
-              ),
-              const SizedBox(height: AppTheme.xs),
-            ],
-            if (onRetry != null)
-              TextButton(
-                onPressed: onRetry,
-                child: Text(
-                  retryLabel,
-                  style: const TextStyle(color: AppTheme.accent),
-                ),
-              ),
-            if (onLearnMore != null)
-              TextButton(
-                onPressed: onLearnMore,
-                child: Text(
-                  learnMoreLabel,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-                ),
-              ),
+            const SizedBox(height: AppTheme.xs),
           ],
-        ),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.muted,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          ?extra,
+          const SizedBox(height: AppTheme.md),
+          if (onSecondaryAction != null) ...[
+            OutlinedButton.icon(
+              onPressed: onSecondaryAction,
+              icon: Icon(secondaryActionIcon ?? Icons.bar_chart, size: 16),
+              label: Text(secondaryActionLabel ?? ''),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.accent,
+                side: const BorderSide(color: AppTheme.accent),
+              ),
+            ),
+            const SizedBox(height: AppTheme.xs),
+          ],
+          if (actionLabel != null && onAction != null) ...[
+            FilledButton(
+              onPressed: onAction,
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
+              child: Text(actionLabel!),
+            ),
+            const SizedBox(height: AppTheme.xs),
+          ],
+          if (onRetry != null)
+            TextButton(
+              onPressed: onRetry,
+              child: const Text(
+                'Retry',
+                style: TextStyle(color: AppTheme.accent),
+              ),
+            ),
+          if (onLearnMore != null)
+            TextButton(
+              onPressed: onLearnMore,
+              child: const Text(
+                'How does this work?',
+                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              ),
+            ),
+        ],
       ),
     );
   }

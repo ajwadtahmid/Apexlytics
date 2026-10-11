@@ -68,6 +68,50 @@ void main() {
       expect(doneCalls, 1);
     });
 
+    testWidgets('every slide fits a small phone without overflowing, and its '
+        'text can be reached', (tester) async {
+      // 360x616 body is what a 360x640 phone leaves under the header.
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(360, 640),
+              textScaler: TextScaler.linear(1.5),
+            ),
+            child: OnboardingScreen(onDone: () async {}),
+          ),
+        ),
+      );
+
+      for (var i = 0; i < 20; i++) {
+        expect(tester.takeException(), isNull, reason: 'slide $i');
+        if (find.text('Next').evaluate().isEmpty) break;
+        await tester.tap(find.text('Next'));
+        await tester.pumpAndSettle();
+      }
+      // The last slide's small print is reachable by scrolling.
+      expect(find.text('Get started'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+    });
+
+    testWidgets('promises the profile limit the app enforces', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onDone: () async {})),
+      );
+      await tester.tap(find.text('Next'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining(
+          'Save up to ${PlayerSettingsNotifier.maxProfileCount} profiles',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('Skip calls onDone', (tester) async {
       var doneCalls = 0;
       await tester.pumpWidget(

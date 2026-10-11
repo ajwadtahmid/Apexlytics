@@ -2,6 +2,7 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 
+import '../../providers/settings_provider.dart' show PlayerSettingsNotifier;
 import '../../utils/theme.dart';
 
 /// A single orientation slide.
@@ -41,7 +42,8 @@ const _pages = <_OnboardingPage>[
     title: 'See your progress',
     body:
         'Add your player profile to track your legends, weapons, and career '
-        'stats. Save up to 5 profiles and switch between them anytime.',
+        'stats. Save up to ${PlayerSettingsNotifier.maxProfileCount} profiles '
+        'and switch between them anytime.',
     tip:
         'Tip: equip the Apex Kills and Apex Damage trackers for legends you '
         'play. Stats only update for trackers that are equipped.',
@@ -210,72 +212,79 @@ class _OnboardingPageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: const BoxDecoration(
-              color: AppTheme.surface,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(page.icon, size: 44, color: AppTheme.accent),
-          ),
-          const SizedBox(height: AppTheme.xl),
-          Text(
-            page.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: AppTheme.md),
-          Text(
-            page.body,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppTheme.muted,
-              fontSize: 15,
-              height: 1.5,
-            ),
-          ),
-          if (page.tip != null) ...[
-            const SizedBox(height: AppTheme.lg),
-            Container(
-              padding: const EdgeInsets.all(AppTheme.sm),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+    // Scrolls when the slide is taller than the space between the header and
+    // the buttons (a small phone, larger text); still centred when it fits.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: const BoxDecoration(
+                  color: AppTheme.surface,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(page.icon, size: 44, color: AppTheme.accent),
               ),
-              child: Text(
-                page.tip!,
+              const SizedBox(height: AppTheme.xl),
+              Text(
+                page.title,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: AppTheme.accent2,
-                  fontSize: 12.5,
-                  height: 1.4,
+                  color: AppTheme.textPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ),
-          ],
-          if (page.footnote != null) ...[
-            const SizedBox(height: AppTheme.lg),
-            Text(
-              page.footnote!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppTheme.muted,
-                fontSize: 11,
-                height: 1.4,
+              const SizedBox(height: AppTheme.md),
+              Text(
+                page.body,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.muted,
+                  fontSize: 15,
+                  height: 1.5,
+                ),
               ),
-            ),
-          ],
-        ],
+              if (page.tip != null) ...[
+                const SizedBox(height: AppTheme.lg),
+                Container(
+                  padding: const EdgeInsets.all(AppTheme.sm),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  ),
+                  child: Text(
+                    page.tip!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.accent2,
+                      fontSize: 12.5,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+              if (page.footnote != null) ...[
+                const SizedBox(height: AppTheme.lg),
+                Text(
+                  page.footnote!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.muted,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

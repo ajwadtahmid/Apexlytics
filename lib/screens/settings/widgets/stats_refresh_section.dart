@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../providers/navigation_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/widgets.dart';
@@ -7,15 +8,7 @@ import '../../../widgets/widgets.dart';
 class StatsRefreshSection extends ConsumerWidget {
   const StatsRefreshSection({super.key});
 
-  static const _tabOptions = [
-    (0, 'Home'),
-    (1, 'My Stats'),
-    (2, 'Search'),
-    (3, 'Settings'),
-  ];
-
-  static String _tabLabel(int tab) =>
-      _tabOptions.firstWhere((t) => t.$1 == tab, orElse: () => (0, 'Home')).$2;
+  static String _tabLabel(int storedTab) => appTabForDefault(storedTab).label;
 
   static String _refreshLabel(int minutes) =>
       minutes <= 0 ? 'Manual' : 'Every $minutes min';
@@ -145,16 +138,17 @@ class StatsRefreshSection extends ConsumerWidget {
     WidgetRef ref,
     int current,
   ) {
-    final currentIndex = _tabOptions.indexWhere((t) => t.$1 == current);
+    final tabs = ref.read(visibleTabsProvider);
+    final currentIndex = tabs.indexOf(appTabForDefault(current));
     return _showPickerDialog(
       context: context,
       title: 'Default tab',
-      labels: _tabOptions.map((t) => t.$2).toList(),
+      labels: [for (final t in tabs) t.label],
       currentIndex: currentIndex < 0 ? 0 : currentIndex,
       onSelect: (i) async {
         await ref
             .read(playerSettingsProvider.notifier)
-            .setDefaultTab(_tabOptions[i].$1);
+            .setDefaultTab(tabs[i].storedValue);
       },
     );
   }

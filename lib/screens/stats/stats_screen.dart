@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../constants/api_constants.dart';
 import '../../models/player_stats.dart';
 import '../../providers/owner_provider.dart';
@@ -22,6 +21,7 @@ import '../ranked/widgets/ranked_info_sheet.dart';
 import '../ranked/widgets/ranked_period_selector.dart'
     show RankedSplitDropdown, RankedWeekStrip;
 import 'refresh_all_sheet.dart';
+import '../../utils/navigation_utils.dart';
 
 /// My Stats — the app's default tab. Hosts the player's own snapshot info
 /// plus the full Ranked Breakdown (rank header, RP graph, and every Ranked
@@ -205,25 +205,13 @@ class _StatsViewState extends ConsumerState<_StatsView> {
     String platform,
   ) async {
     final url = '${ApiConstants.alsProfileBaseUrl}/$platform/$uid';
-    final ok = await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
-    );
-    if (!ok && context.mounted) {
-      context.showMessage('Could not open link');
-    }
+    await openExternalLink(context, Uri.parse(url));
   }
 
   void _openChangePlayer(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppTheme.radiusLg),
-        ),
-      ),
       builder: (_) => const ProfileManagerSheet(),
     );
   }

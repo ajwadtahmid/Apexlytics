@@ -12,6 +12,7 @@ import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/stat_display.dart';
 import 'match_edit_sheet.dart';
 import 'match_tags.dart';
+import '../../../widgets/rank_badge.dart';
 
 /// Opens the detail sheet for `matches[index]`. [matches] is the list in the
 /// order the user sees it (already filtered/grouped), so the prev/next arrows
@@ -27,13 +28,7 @@ Future<RankedMatch?> showMatchDetailSheet(
 }) {
   return showModalBottomSheet<RankedMatch>(
     context: context,
-    backgroundColor: AppTheme.surface,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (_) => _MatchDetailSheet(
       matches: matches,
       initialIndex: index,
@@ -224,14 +219,7 @@ class _RpBlock extends StatelessWidget {
     return Row(
       children: [
         if (rankAssetPathFromImageUrl(match.rankImg) case final badge?) ...[
-          Image.asset(
-            badge,
-            width: 34,
-            height: 34,
-            fit: BoxFit.contain,
-            cacheWidth: (34 * MediaQuery.devicePixelRatioOf(context)).ceil(),
-            errorBuilder: (_, _, _) => const SizedBox(width: 34),
-          ),
+          RankBadge(assetPath: badge, size: 34),
           const SizedBox(width: AppTheme.sm),
         ],
         Column(

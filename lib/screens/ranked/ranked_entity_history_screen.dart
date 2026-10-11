@@ -143,7 +143,7 @@ class _SortToggle extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppTheme.surface2,
-                borderRadius: BorderRadius.circular(100),
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

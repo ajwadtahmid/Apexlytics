@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../providers/api_provider.dart';
 import '../../utils/onboarding.dart';
 import '../../utils/theme.dart';
@@ -13,6 +12,7 @@ import 'widgets/cache_settings_section.dart';
 import 'widgets/general_settings_section.dart';
 import 'widgets/notification_settings_section.dart';
 import 'widgets/stats_refresh_section.dart';
+import '../../utils/navigation_utils.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -149,9 +149,7 @@ class _SupportRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      onTap: () => unawaited(
-        launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-      ),
+      onTap: () => openExternalLink(context, Uri.parse(url)),
       child: Row(
         children: [
           Icon(icon, color: AppTheme.textPrimary, size: 20),

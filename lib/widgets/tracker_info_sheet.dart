@@ -6,12 +6,6 @@ void showTrackerInfoSheet(BuildContext context) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppTheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (context) => DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.6,
