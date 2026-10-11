@@ -81,36 +81,6 @@ int? lastResetIndex(List<StatSnapshot> snaps, {DateTime? splitStart}) {
   return null;
 }
 
-/// Returns the RP gained over the last 24 hours.
-/// Uses the most recent snapshot from 24+ hours ago as baseline; falls back
-/// to the first available snapshot if all data is within the last 24 hours.
-int? computeDelta(List<StatSnapshot> rawSnaps, int currentRp) {
-  final snaps = trustedSnapshots(rawSnaps);
-  if (snaps.isEmpty) return null;
-  final now = DateTime.now();
-  final dayAgo = now.subtract(const Duration(days: 1));
-
-  // Find the most recent snapshot from 24+ hours ago.
-  StatSnapshot? baseline;
-  for (final s in snaps.reversed) {
-    if (s.timestamp.isBefore(dayAgo)) {
-      baseline = s;
-      break;
-    }
-  }
-
-  // Fall back to the first (oldest) snapshot if all data is within 24h.
-  baseline ??= snaps.first;
-
-  // A reset since the baseline would make the difference *be* the reset.
-  final resetIdx = lastResetIndex(snaps);
-  if (resetIdx != null &&
-      snaps[resetIdx].timestamp.isAfter(baseline.timestamp)) {
-    baseline = snaps[resetIdx];
-  }
-  return currentRp - baseline.rp;
-}
-
 /// Aggregated snapshot metadata for a ranked season.
 class SeasonSnapshot {
   final SeasonMeta season;

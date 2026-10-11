@@ -260,13 +260,6 @@ const List<Weapon> kAllWeapons = [
   p2020, re45, wingman,
 ];
 
-final Map<String, Weapon> kWeaponsByName = {
-  for (final w in kAllWeapons) w.name.toLowerCase(): w,
-  for (final w in kAllWeapons) w.fullName.toLowerCase(): w,
-  for (final w in kAllWeapons)
-    for (final alt in w.altNames) alt.toLowerCase(): w,
-};
-
 List<Weapon> _byType(WeaponType t) =>
     kAllWeapons.where((w) => w.type == t).toList();
 

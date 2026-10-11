@@ -6,5 +6,4 @@ class TrackerKeys {
   static const brRevives = 'br revives';
   static const brTop3 = 'br top 3';
   static const brKillsAsKillLeader = 'br kills as kill leader';
-  static const arKills = 'apex ar kills';
 }

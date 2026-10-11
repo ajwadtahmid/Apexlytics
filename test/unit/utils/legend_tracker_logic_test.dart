@@ -67,7 +67,6 @@ void main() {
     });
 
     test('includes AR kills tracker (apex ar kills key)', () {
-      // TrackerKeys.arKills == 'apex ar kills'
       final trackers = [cat('Apex AR Kills', 300)];
       expect(findTopWeaponCategories(trackers), hasLength(1));
     });

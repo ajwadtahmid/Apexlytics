@@ -16,10 +16,7 @@ SeasonMeta _split(String id) =>
 
 void main() {
   // sqflite has no native binding under `flutter test` (host VM) - use FFI.
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
+  setUpAll(useFfiDatabase);
 
   late RankedHistoryStore store;
 
@@ -394,58 +391,6 @@ void main() {
         expect(prefs.getString('stat_snapshots_bad'), '{"a":1}');
       },
     );
-  });
-
-  group('computeDelta', () {
-    test('returns null for empty snapshot list', () {
-      expect(computeDelta([], 1000), isNull);
-    });
-
-    test('returns current minus oldest when all snapshots are within 24h', () {
-      final now = DateTime.now();
-      final snaps = [
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 2)),
-          rp: 1000,
-        ),
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 1)),
-          rp: 1200,
-        ),
-      ];
-      expect(computeDelta(snaps, 1300), 300);
-    });
-
-    test('uses most-recent snapshot older than 24h as baseline', () {
-      final now = DateTime.now();
-      final snaps = [
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 48)),
-          rp: 800,
-        ),
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 25)),
-          rp: 1000,
-        ),
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 1)),
-          rp: 1300,
-        ),
-      ];
-      // Baseline = most recent before 24h = 1000
-      expect(computeDelta(snaps, 1400), 400);
-    });
-
-    test('handles negative delta (demotion)', () {
-      final now = DateTime.now();
-      final snaps = [
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 25)),
-          rp: 2000,
-        ),
-      ];
-      expect(computeDelta(snaps, 1800), -200);
-    });
   });
 
   test('resetSnapshotCache notifies listeners, so a view holding its own copy '

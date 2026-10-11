@@ -384,35 +384,6 @@ void main() {
     });
   });
 
-  group('computeDelta across a reset', () {
-    test('reports RP earned since the reset, not the reset itself', () {
-      final snaps = [
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 30)),
-          rp: _prevSplitFinalRp,
-          seasonId: _prevSplit,
-        ),
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 10)),
-          rp: _postResetRp,
-          seasonId: _newSplit,
-        ),
-      ];
-      expect(computeDelta(snaps, _currentRp), _rpEarnedSinceReset);
-    });
-
-    test('leaves an ordinary 24h delta alone', () {
-      final snaps = [
-        StatSnapshot(
-          timestamp: now.subtract(const Duration(hours: 30)),
-          rp: 6000,
-          seasonId: _newSplit,
-        ),
-      ];
-      expect(computeDelta(snaps, 6400), 400);
-    });
-  });
-
   group('seasonIdForEndTime', () {
     final s1 = SeasonMeta(
       id: 'br_ranked_s1_s1',
