@@ -6,7 +6,7 @@ import 'match_history_items.dart';
 import 'match_history_list.dart';
 
 /// History tab: every match in the selected period (ranked + casual), grouped by
-/// day with session breaks. A mode filter scopes the list; tap a row for the
+/// play session with day dividers. A mode filter scopes the list; tap a row for the
 /// full match detail.
 class RankedMatchList extends StatefulWidget {
   final List<RankedMatch> matches; // all-in-period, newest first
@@ -45,6 +45,9 @@ class _RankedMatchListState extends State<RankedMatchList> {
       // The whole period, not the filtered view: a legend's average shouldn't
       // shrink because the list is filtered to one map.
       averagePool: widget.matches,
+      // Sessions come from every game played, so the filter hides games
+      // without reshaping them.
+      sessionPool: widget.matches,
       header: _HistoryControls(
         filter: _filter,
         sort: _sort,

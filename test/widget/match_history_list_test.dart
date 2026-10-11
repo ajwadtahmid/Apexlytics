@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
+import 'package:apexlytics/utils/ranked/ranked_aggregates.dart' show kSessionGap;
 import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_tags.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_history_items.dart';
@@ -76,14 +77,14 @@ void main() {
     });
   });
 
-  group('day header summary', () {
+  group('session header summary', () {
     test('rolls up record, average RP, kills, damage and time', () {
       final day = [
         game(dayOffset: 0, slot: 3, rp: 20, kills: 4, damage: 900),
         game(dayOffset: 0, slot: 2, rp: -10, kills: 1, damage: 300),
         game(dayOffset: 0, slot: 1, rp: 30, kills: 3, damage: 800),
       ];
-      final h = buildDayItems(day).whereType<DayHeaderItem>().single;
+      final h = buildSessionItems(day).whereType<SessionHeaderItem>().single;
       expect(h.wins, 2);
       expect(h.losses, 1);
       expect(h.avgRp, closeTo(40 / 3, 0.001));
@@ -99,8 +100,8 @@ void main() {
         game(dayOffset: 0, slot: 2, rp: 20, kills: 2, damage: 400),
         game(dayOffset: 0, slot: 1, rp: -10, kills: 1, damage: 200),
       ];
-      final h = buildDayItems(day).whereType<DayHeaderItem>().single;
-      expect(h.games, 3, reason: 'still listed in the day');
+      final h = buildSessionItems(day).whereType<SessionHeaderItem>().single;
+      expect(h.games, 3, reason: 'still listed in the session');
       expect(h.kills, 3);
       expect(h.damage, 600);
       expect(h.wins, 1);
@@ -114,7 +115,7 @@ void main() {
         game(dayOffset: 0, slot: 2, rp: 20, kills: 5, excluded: true),
         game(dayOffset: 0, slot: 1, rp: 0, kills: 2, damage: 100),
       ];
-      final h = buildDayItems(day).whereType<DayHeaderItem>().single;
+      final h = buildSessionItems(day).whereType<SessionHeaderItem>().single;
       expect(h.kills, 2);
       expect(h.wins, 0);
       expect(h.avgRp, isNull);
@@ -187,6 +188,136 @@ void main() {
     });
   });
 
+  group('sessions', () {
+    int secs(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
+
+    RankedMatch at(DateTime start, {bool ranked = true, int length = 600}) =>
+        RankedMatch.fromJson({
+          'uid': '1',
+          'name': 'Tester',
+          'legendPlayed': 'Axle',
+          'gameMode': 'BATTLE_ROYALE',
+          'gameLengthSecs': length,
+          'gameStartTimestamp': secs(start),
+          'gameEndTimestamp': secs(start) + length,
+          'gameData': const [],
+          'BRScoreChange': ranked ? 10 : 0,
+          'BRScore': 1000,
+          'map': 'olympus_rotation',
+          'isPartyFull': false,
+        });
+
+    // Newest first, as the list expects.
+    List<RankedMatch> newestFirst(Iterable<RankedMatch> ms) =>
+        ms.toList()..sort((a, b) => b.endTime.compareTo(a.endTime));
+
+    List<SessionHeaderItem> headers(List<HistoryItem> items) =>
+        items.whereType<SessionHeaderItem>().toList();
+
+    test('a session that crosses midnight is one entry with a divider inside', () {
+      final day = DateTime(2025, 3, 10);
+      final games = newestFirst([
+        for (var i = 0; i < 10; i++) at(day.add(Duration(hours: 22, minutes: i * 12))),
+        at(DateTime(2025, 3, 11, 0, 5)),
+      ]);
+      final items = buildSessionItems(games);
+
+      expect(headers(items), hasLength(1));
+      expect(headers(items).single.games, 11);
+      final dividers = items.whereType<DayDividerItem>().toList();
+      expect(dividers, hasLength(1));
+      expect(dividers.single.later, DateTime(2025, 3, 11));
+      expect(dividers.single.earlier, day);
+      // Between the last game of the 10th and the first of the 11th.
+      final i = items.indexOf(dividers.single);
+      expect((items[i - 1] as MatchItem).match.startTime.toLocal().day, 11);
+      expect((items[i + 1] as MatchItem).match.startTime.toLocal().day, 10);
+      expect(headers(items).single.start.toLocal().day, 10);
+    });
+
+    test('a gap over the session limit splits, one at the limit does not', () {
+      final first = at(DateTime(2025, 3, 10, 10));
+      final atLimit = at(first.endTime.toLocal().add(kSessionGap));
+      final pastLimit = at(
+        first.endTime.toLocal().add(kSessionGap + const Duration(seconds: 1)),
+      );
+
+      expect(headers(buildSessionItems(newestFirst([first, atLimit]))), hasLength(1));
+
+      final items = buildSessionItems(newestFirst([first, pastLimit]));
+      expect(headers(items), hasLength(2));
+      final breaks = items.whereType<SessionBreakItem>().toList();
+      expect(breaks.single.gapSecs, kSessionGap.inSeconds + 1);
+    });
+
+    test('separate sessions on different days get a break row, no divider', () {
+      final games = newestFirst([
+        at(DateTime(2025, 3, 10, 9)),
+        at(DateTime(2025, 3, 10, 15)),
+        at(DateTime(2025, 3, 11, 10)),
+      ]);
+      final items = buildSessionItems(games);
+
+      expect(headers(items), hasLength(3));
+      expect(items.whereType<DayDividerItem>(), isEmpty);
+      expect(items.whereType<SessionBreakItem>(), hasLength(2));
+      final i = items.indexWhere((x) => x is SessionHeaderItem && x.start.toLocal().day == 10);
+      expect(items[i - 1], isA<SessionBreakItem>());
+    });
+
+    test('no divider inside a session that stays within one day', () {
+      final games = newestFirst([
+        at(DateTime(2025, 3, 10, 9)),
+        at(DateTime(2025, 3, 10, 10)),
+      ]);
+      expect(buildSessionItems(games).whereType<DayDividerItem>(), isEmpty);
+    });
+
+    test('a filtered list keeps the sessions of the whole history', () {
+      final a = at(DateTime(2025, 3, 10, 10));
+      final casual = at(DateTime(2025, 3, 10, 11, 30), ranked: false);
+      final b = at(DateTime(2025, 3, 10, 13));
+      final pool = newestFirst([a, casual, b]);
+      final filtered = newestFirst([a, b]);
+
+      expect(headers(buildSessionItems(filtered)), hasLength(2));
+      final withPool = headers(buildSessionItems(filtered, sessionPool: pool));
+      expect(withPool, hasLength(1));
+      expect(withPool.single.games, 2);
+    });
+
+    test('a page cut never splits a session, even across midnight', () {
+      final games = newestFirst([
+        for (var i = 0; i < 6; i++) at(DateTime(2025, 3, 10, 23, i * 15)),
+        at(DateTime(2025, 3, 9, 12)),
+      ]);
+      final items = buildSessionItems(games, limit: 3);
+
+      expect(items.whereType<MatchItem>(), hasLength(6));
+      expect(headers(items).single.games, 6);
+    });
+
+    test('a session keeps its collapse key as newer games join it', () {
+      final older = at(DateTime(2025, 3, 10, 10));
+      final mid = at(DateTime(2025, 3, 10, 10, 20));
+      final newer = at(DateTime(2025, 3, 10, 10, 40));
+
+      final before = headers(buildSessionItems(newestFirst([older, mid]))).single;
+      final after = headers(buildSessionItems(newestFirst([older, mid, newer]))).single;
+      expect(after.key, before.key);
+    });
+
+    test('the span runs from the first start to the last end', () {
+      final games = newestFirst([
+        at(DateTime(2025, 3, 10, 23, 30)),
+        at(DateTime(2025, 3, 11, 0, 10)),
+      ]);
+      final h = headers(buildSessionItems(games)).single;
+      expect(h.start.toLocal(), DateTime(2025, 3, 10, 23, 30));
+      expect(h.end.toLocal(), DateTime(2025, 3, 11, 0, 20));
+    });
+  });
+
   group('paging', () {
     // Twenty days of four games each, newest first.
     final history = [
@@ -194,25 +325,29 @@ void main() {
         for (var s = 0; s < 4; s++) game(dayOffset: d, slot: 4 - s),
     ];
 
-    test('a page cut mid-day runs on to the end of that day', () {
-      final items = buildDayItems(history, limit: 6);
-      final headers = items.whereType<DayHeaderItem>().toList();
+    test('a page cut mid-session runs on to the end of that session', () {
+      final items = buildSessionItems(history, limit: 6);
+      final headers = items.whereType<SessionHeaderItem>().toList();
 
       expect(items.whereType<MatchItem>().length, 8);
       expect(headers.length, 2);
       expect(
         headers.last.games,
         4,
-        reason: 'the last header must not total a half-shown day',
+        reason: 'the last header must not total a half-shown session',
       );
     });
 
-    test('a cut on a day boundary adds nothing', () {
-      expect(buildDayItems(history, limit: 8).whereType<MatchItem>().length, 8);
+    test('a cut on a session boundary adds nothing', () {
+      expect(buildSessionItems(history, limit: 8).whereType<MatchItem>().length, 8);
     });
   });
 
   group('MatchHistoryList', () {
+    // The pinned title shows the span, e.g. "Oct 9 12:10 PM – 12:50 PM".
+    final firstSessionTitle =
+        find.textContaining(' – ', findRichText: true).first;
+
     // Eleven days of games, so the pinned headers have something to pin to.
     final matches = [
       for (var d = 0; d < 11; d++)
@@ -236,28 +371,32 @@ void main() {
       );
     }
 
-    testWidgets('collapsing a day hides its matches and keeps its header', (
+    testWidgets('collapsing a session hides its matches and keeps its header', (
       tester,
     ) async {
+      // Tall enough to build every row, so collapsing can't pull more into view.
+      tester.view.physicalSize = const Size(800, 30000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final container = ProviderContainer();
       addTearDown(container.dispose);
       await pump(tester, container);
 
-      expect(find.text('Today'), findsOneWidget);
+      expect(firstSessionTitle, findsOneWidget);
       expect(find.text('Axle'), findsWidgets);
       final rowsBefore = find.text('Axle').evaluate().length;
 
-      await tester.tap(find.text('Today'));
+      await tester.tap(firstSessionTitle);
       await tester.pump();
-      expect(find.text('Today'), findsOneWidget);
+      expect(firstSessionTitle, findsOneWidget);
       expect(find.text('Axle').evaluate().length, lessThan(rowsBefore));
 
-      await tester.tap(find.text('Today'));
+      await tester.tap(firstSessionTitle);
       await tester.pump();
       expect(find.text('Axle').evaluate().length, rowsBefore);
     });
 
-    testWidgets('each day shows its numbers as labelled columns, in full words '
+    testWidgets('each session shows its numbers as labelled columns, in full words '
         'rather than a dotted line of abbreviations', (tester) async {
       await pump(tester, null);
 
@@ -273,18 +412,23 @@ void main() {
       expect(find.textContaining('avg dmg'), findsNothing);
     });
 
-    testWidgets('collapsing a day keeps its record but drops the other '
+    testWidgets('collapsing a session keeps its record but drops the other '
         'columns', (tester) async {
+      // Tall enough to build every session, so collapsing one can't pull
+      // another into view and keep the count the same.
+      tester.view.physicalSize = const Size(800, 30000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       final container = ProviderContainer();
       addTearDown(container.dispose);
       await pump(tester, container);
       final killsBefore = find.text('Kills').evaluate().length;
 
-      await tester.tap(find.text('Today'));
+      await tester.tap(firstSessionTitle);
       await tester.pump();
 
       expect(find.text('Kills').evaluate().length, killsBefore - 1);
-      // The day's record is still there under its title.
+      // The session's record is still there under its title.
       expect(find.textContaining('3W', findRichText: true), findsWidgets);
     });
 
@@ -363,6 +507,57 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Axle'), findsNWidgets(80));
+    });
+
+    testWidgets('a session header gives both dates when it crosses midnight, '
+        'and the detail sheet names the weekday', (tester) async {
+      RankedMatch at(DateTime start) => RankedMatch.fromJson({
+        'uid': '1',
+        'name': 'Tester',
+        'legendPlayed': 'Axle',
+        'gameMode': 'BATTLE_ROYALE',
+        'gameLengthSecs': 600,
+        'gameStartTimestamp': start.millisecondsSinceEpoch ~/ 1000,
+        'gameEndTimestamp': start.millisecondsSinceEpoch ~/ 1000 + 600,
+        'gameData': const [],
+        'BRScoreChange': 10,
+        'BRScore': 1000,
+        'map': 'olympus_rotation',
+        'isPartyFull': false,
+      });
+      final games = [
+        at(DateTime(2025, 3, 11, 0, 10)),
+        at(DateTime(2025, 3, 10, 23, 30)),
+      ];
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(matches: games, onRefresh: () async {}),
+            ),
+          ),
+        ),
+      );
+
+      // intl may put a narrow no-break space before AM/PM.
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              (w.data ?? '')
+                  .replaceAll('\u202f', ' ')
+                  .startsWith(
+                    'Mar 10, 2025 11:30 PM – Mar 11, 2025 12:20 AM',
+                  ),
+        ),
+        findsOneWidget,
+      );
+      // The counts sit on their own line, so they never get cut off.
+      expect(find.text('2 games · 20m'), findsOneWidget);
+
+      await tester.tap(find.text('Axle').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Tuesday, March 11, 2025'), findsOneWidget);
     });
 
     testWidgets('scrolls with pinned headers without errors', (tester) async {

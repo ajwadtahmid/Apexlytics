@@ -3,7 +3,7 @@ import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/ranked/ranked_aggregates.dart' show kSessionGap;
 
-/// How to bucket matches when not grouping by day. [keyOf] decides which
+/// How to bucket matches when not grouping by session. [keyOf] decides which
 /// section a match belongs to; [nameOf] is that section's display title.
 class MatchGrouping {
   final String Function(RankedMatch) keyOf;
@@ -30,29 +30,39 @@ class MatchGrouping {
 
 sealed class HistoryItem {}
 
-class DayHeaderItem extends HistoryItem {
-  final DateTime day;
+/// One play session: games separated from the next session by more than
+/// [kSessionGap]. A session may cross midnight; its header shows the day it
+/// started.
+class SessionHeaderItem extends HistoryItem {
+  /// Names this session in the collapsed set; stable as newer games arrive.
+  final String key;
+
+  /// First game's start and last game's end, over the games listed.
+  final DateTime start;
+  final DateTime end;
   final int netRp;
   final bool hasRanked;
   final int games;
   final bool isFirst;
 
   /// Decided ranked games (effective RP above / below zero) and the average RP
-  /// over the ranked games played; null avg when the day had none.
+  /// over the ranked games played; null avg when the session had none.
   final int wins;
   final int losses;
   final double? avgRp;
 
-  /// Totals over the day's counted games (excluded matches skipped, like every
-  /// other stat rollup). Kills/damage skip games that didn't report them.
+  /// Totals over the session's counted games (excluded matches skipped, like
+  /// every other stat rollup). Kills/damage skip games that didn't report them.
   final int kills;
   final int damage;
   final int playSecs;
 
   /// Average damage over the counted games that reported it; null when none did.
   final double? avgDamage;
-  DayHeaderItem({
-    required this.day,
+  SessionHeaderItem({
+    required this.key,
+    required this.start,
+    required this.end,
     required this.netRp,
     required this.hasRanked,
     required this.games,
@@ -65,6 +75,15 @@ class DayHeaderItem extends HistoryItem {
     this.playSecs = 0,
     this.avgDamage,
   });
+}
+
+/// Marks where the calendar day changes inside a session that runs past
+/// midnight. The list is newest first, so [later] is the day of the rows above
+/// the divider and [earlier] the day of the rows below it.
+class DayDividerItem extends HistoryItem {
+  final DateTime later;
+  final DateTime earlier;
+  DayDividerItem({required this.later, required this.earlier});
 }
 
 class GroupHeaderItem extends HistoryItem {
@@ -90,64 +109,114 @@ class MatchItem extends HistoryItem {
   MatchItem(this.match);
 }
 
-/// Default (and incremental) number of matches shown in day-grouped history
-/// before scrolling near the bottom loads the next page. Chosen so a typical
-/// week/session's worth of games renders up front, while a multi-thousand-
+/// Default (and incremental) number of matches shown in session-grouped
+/// history before scrolling near the bottom loads the next page. Chosen so a
+/// typical week's worth of games renders up front, while a multi-thousand-
 /// match history stays cheap to flatten and lay out.
 const int kHistoryPageSize = 50;
 
-/// The local calendar day [m] is listed under (as in [buildDayItems]).
-DateTime _dayOf(RankedMatch m) {
-  final lm = m.endTime.toLocal();
-  return DateTime(lm.year, lm.month, lm.day);
+/// Which session each match belongs to, found over [pool] (newest first).
+class _Sessions {
+  final Map<String, int> indexOf = {};
+
+  /// Per session, the id of its earliest game: a name that stays put as newer
+  /// games join the session.
+  final List<String> keys = [];
+
+  _Sessions(List<RankedMatch> pool) {
+    for (var i = 0; i < pool.length; i++) {
+      // newest-first: pool[i - 1] is later than pool[i].
+      final gap = i == 0
+          ? Duration.zero
+          : pool[i - 1].startTime.difference(pool[i].endTime);
+      if (i == 0 || gap > kSessionGap) {
+        keys.add(pool[i].id);
+      } else {
+        keys[keys.length - 1] = pool[i].id;
+      }
+      indexOf[pool[i].id] = keys.length - 1;
+    }
+  }
+
+  int of(RankedMatch m) => indexOf[m.id] ?? -1;
 }
 
-/// Extends [limit] to the end of the day the cut lands in, so a day header's totals cover
-/// all its games. Session breaks only sit within a day, so none is split either.
-List<RankedMatch> _extendToDayBoundary(List<RankedMatch> matches, int limit) {
+/// Extends [limit] to the end of the session the cut lands in, so a session
+/// header's totals cover all its games.
+List<RankedMatch> _extendToSessionBoundary(
+  List<RankedMatch> matches,
+  int limit,
+  _Sessions sessions,
+) {
   if (limit >= matches.length) return matches;
-  final day = _dayOf(matches[limit - 1]);
+  final session = sessions.of(matches[limit - 1]);
   var end = limit;
-  while (end < matches.length && _dayOf(matches[end]) == day) {
+  while (end < matches.length && sessions.of(matches[end]) == session) {
     end++;
   }
   return matches.sublist(0, end);
 }
 
-/// Flattens matches (newest first) into day headers, session breaks and rows.
+DateTime _dayOf(DateTime t) {
+  final l = t.toLocal();
+  return DateTime(l.year, l.month, l.day);
+}
+
+/// Flattens matches (newest first) into session headers with their rows, a
+/// break row between sessions, and a day divider inside a session wherever it
+/// crosses midnight.
 ///
-/// When [limit] is set, only the first [limit] matches are shown — extended to
-/// the end of whatever day they land in, so a day's header totals are complete.
-List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
+/// Sessions are found over [sessionPool] (newest first; defaults to [matches]),
+/// so a filtered list keeps the sessions the whole history has. When [limit] is
+/// set, only the first [limit] matches are shown — extended to the end of the
+/// session they land in, so a session's header totals are complete.
+List<HistoryItem> buildSessionItems(
+  List<RankedMatch> matches, {
+  int? limit,
+  List<RankedMatch>? sessionPool,
+}) {
+  final sessions = _Sessions(sessionPool ?? matches);
   final visible = limit == null
       ? matches
-      : _extendToDayBoundary(matches, limit);
-  final items = <HistoryItem>[];
-  DateTime? curDay;
-  final dayBuckets = <List<RankedMatch>>[];
+      : _extendToSessionBoundary(matches, limit, sessions);
+
+  final buckets = <List<RankedMatch>>[];
+  int? current;
   for (final m in visible) {
-    final lm = m.endTime.toLocal();
-    final day = DateTime(lm.year, lm.month, lm.day);
-    if (curDay == null || day != curDay) {
-      dayBuckets.add(<RankedMatch>[]);
-      curDay = day;
+    final s = sessions.of(m);
+    if (current == null || s != current) {
+      buckets.add(<RankedMatch>[]);
+      current = s;
     }
-    dayBuckets.last.add(m);
+    buckets.last.add(m);
   }
 
-  for (final bucket in dayBuckets) {
+  final items = <HistoryItem>[];
+  for (var b = 0; b < buckets.length; b++) {
+    final bucket = buckets[b]; // newest first
+    final start = bucket.last.startTime;
+    final end = bucket.first.endTime;
+    if (b > 0) {
+      items.add(
+        SessionBreakItem(
+          buckets[b - 1].last.startTime.difference(end).inSeconds,
+        ),
+      );
+    }
+
     final netRp = bucket.fold<int>(0, (a, m) => a + m.effectiveRpChange);
-    final hasRanked = bucket.any((m) => m.isRanked);
-    final day = bucket.first.endTime.toLocal();
     final counted = bucket.where((m) => m.countsTowardStats).toList();
     final rankedGames = counted.where((m) => m.isRanked).length;
+    final key = sessions.of(bucket.first);
     items.add(
-      DayHeaderItem(
-        day: DateTime(day.year, day.month, day.day),
+      SessionHeaderItem(
+        key: key < 0 ? bucket.last.id : sessions.keys[key],
+        start: start,
+        end: end,
         netRp: netRp,
-        hasRanked: hasRanked,
+        hasRanked: bucket.any((m) => m.isRanked),
         games: bucket.length,
-        isFirst: identical(bucket, dayBuckets.first),
+        isFirst: b == 0,
         wins: counted.where((m) => m.effectiveRpChange > 0).length,
         losses: counted.where((m) => m.effectiveRpChange < 0).length,
         avgRp: rankedGames == 0 ? null : netRp / rankedGames,
@@ -162,10 +231,11 @@ List<HistoryItem> buildDayItems(List<RankedMatch> matches, {int? limit}) {
     );
     for (var i = 0; i < bucket.length; i++) {
       if (i > 0) {
-        // newest-first: bucket[i-1] is later than bucket[i].
-        final gap = bucket[i - 1].startTime.difference(bucket[i].endTime);
-        if (gap > kSessionGap) {
-          items.add(SessionBreakItem(gap.inSeconds));
+        // newest-first: bucket[i - 1] is later than bucket[i].
+        final later = _dayOf(bucket[i - 1].startTime);
+        final earlier = _dayOf(bucket[i].startTime);
+        if (later != earlier) {
+          items.add(DayDividerItem(later: later, earlier: earlier));
         }
       }
       items.add(MatchItem(bucket[i]));

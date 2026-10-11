@@ -52,7 +52,7 @@ class _MatchDetailSheet extends StatefulWidget {
 }
 
 class _MatchDetailSheetState extends State<_MatchDetailSheet> {
-  static final _fmt = DateFormat('MMM d, yyyy h:mm a');
+  static final _fmt = DateFormat('EEEE, MMMM d, y · h:mm a');
   static const _swipeVelocity = 300.0;
 
   late int _index = widget.initialIndex;

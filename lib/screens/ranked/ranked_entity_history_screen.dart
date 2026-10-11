@@ -5,11 +5,11 @@ import 'widgets/match_history_items.dart';
 import 'widgets/match_history_list.dart';
 
 /// Full-screen ranked history for a single legend or map, reached by tapping a
-/// card in the Legends/Maps tabs. Shows the same day-grouped rows as the
+/// card in the Legends/Maps tabs. Shows the same session-grouped rows as the
 /// History tab, but pre-filtered to one entity (ranked games only, matching the
 /// breakdown it was opened from).
 ///
-/// A sort toggle switches between date grouping (default) and grouping by a
+/// A sort toggle switches between session grouping (default) and grouping by a
 /// secondary entity — maps within a legend, or legends within a map — turning
 /// the page into a focused mini-breakdown.
 class RankedEntityHistoryScreen extends StatefulWidget {

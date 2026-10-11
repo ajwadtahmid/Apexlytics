@@ -5,7 +5,7 @@ import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/history_collapse_provider.dart';
 import '../../../utils/formatting/format.dart'
-    show calendarDaysBetween, formatNumber, timeAgo, formatDuration, plural, formatSigned;
+    show formatNumber, timeAgo, formatDuration, plural, formatSigned;
 import '../../../utils/theme.dart';
 import '../../../widgets/rp_pill.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -13,22 +13,25 @@ import 'match_detail_sheet.dart';
 import 'match_history_items.dart';
 import 'match_tags.dart';
 
-/// Day-grouped match list with session breaks and tap-through detail sheets.
+/// Session-grouped match list with tap-through detail sheets.
 /// Reused by the History tab (with a filter bar header) and the legend/map
 /// drill-down screens (no header, pre-filtered list).
 ///
-/// Each day (or entity section) has a header that pins to the top while its
-/// matches scroll underneath; a day header also collapses its matches on tap.
+/// Each session (or entity section) has a header that pins to the top while its
+/// matches scroll underneath; a session header also collapses its matches on
+/// tap, and gives the dates it spanned. A break row shows the time
+/// between sessions, and a small divider marks midnight inside a session that
+/// runs past it.
 ///
 /// When [grouping] is supplied, matches are instead sectioned by that entity
 /// (e.g. map within a legend), each section headed by its games/net-RP/avg-RP
-/// summary and ordered by net RP descending. Day grouping is the default.
+/// summary and ordered by net RP descending. Session grouping is the default.
 ///
-/// Day-grouped mode paginates in increments of [kHistoryPageSize], loading the
-/// next page automatically as the user scrolls near the bottom, extended to a
-/// day boundary (see [buildDayItems]) — grouped mode shows everything,
-/// since it's already a filtered, RP-sorted subset rather than a long
-/// chronological feed.
+/// Session-grouped mode paginates in increments of [kHistoryPageSize], loading
+/// the next page automatically as the user scrolls near the bottom, extended
+/// to a session boundary (see [buildSessionItems]) — grouped mode shows
+/// everything, since it's already a filtered, RP-sorted subset rather than a
+/// long chronological feed.
 class MatchHistoryList extends ConsumerStatefulWidget {
   final List<RankedMatch> matches; // newest first
   final Future<void> Function() onRefresh;
@@ -37,7 +40,7 @@ class MatchHistoryList extends ConsumerStatefulWidget {
   final Widget? header;
   final String emptyLabel;
 
-  /// Null → group by day (default). Set → group into entity sections.
+  /// Null → group by session (default). Set → group into entity sections.
   final MatchGrouping? grouping;
 
   /// Called when a row's detail sheet saves or clears a correction. Callers
@@ -52,9 +55,14 @@ class MatchHistoryList extends ConsumerStatefulWidget {
   /// the legend's whole history (e.g. one map's games).
   final List<RankedMatch>? averagePool;
 
-  /// Names this list when remembering collapsed days, so the same date
+  /// Names this list when remembering collapsed sessions, so a session
   /// collapsed here doesn't also collapse in another list.
   final String collapseScope;
+
+  /// Newest-first games that sessions are found over. Null → [matches]. Set it
+  /// when [matches] is a filtered view, so the filter hides games without
+  /// reshaping the sessions.
+  final List<RankedMatch>? sessionPool;
 
   const MatchHistoryList({
     super.key,
@@ -66,6 +74,7 @@ class MatchHistoryList extends ConsumerStatefulWidget {
     this.onMatchUpdated,
     this.averagePool,
     this.collapseScope = 'history',
+    this.sessionPool,
   });
 
   @override
@@ -76,11 +85,12 @@ class MatchHistoryList extends ConsumerStatefulWidget {
 // pixels of the bottom, so the next batch is ready before they hit the edge.
 const double _kLoadMoreThreshold = 400;
 
-/// A pinned header and the rows beneath it.
+/// A pinned header and the rows beneath it, after any break row that leads it.
 class _Section {
+  final List<HistoryItem> lead;
   final HistoryItem header;
   final List<HistoryItem> body = [];
-  _Section(this.header);
+  _Section(this.lead, this.header);
 }
 
 class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
@@ -89,6 +99,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
 
   // Flattened list, rebuilt only when matches, page limit or grouping change.
   List<RankedMatch>? _builtFrom;
+  List<RankedMatch>? _builtPool;
   int _builtLimit = -1;
   MatchGrouping? _builtGrouping;
   List<_Section> _sections = const [];
@@ -130,7 +141,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   /// Loads the next page near the end of the list. Also run after each build: a list too
   /// short to scroll never fires a scroll event.
   void _loadMoreIfNeeded() {
-    if (!mounted || widget.grouping != null) return; // day-mode only
+    if (!mounted || widget.grouping != null) return; // session-mode only
     if (_pageLimit >= widget.matches.length) return;
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
@@ -139,13 +150,17 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
     }
   }
 
-  /// Splits the flat item list into header-led sections. Both builders open
-  /// every section with its header, so nothing precedes the first one.
+  /// Splits the flat item list into header-led sections. A break row sits
+  /// between sections, so it leads the header that follows.
   List<_Section> _sectionsOf(List<HistoryItem> items) {
     final sections = <_Section>[];
+    var lead = <HistoryItem>[];
     for (final item in items) {
-      if (item is DayHeaderItem || item is GroupHeaderItem) {
-        sections.add(_Section(item));
+      if (item is SessionHeaderItem || item is GroupHeaderItem) {
+        sections.add(_Section(lead, item));
+        lead = [];
+      } else if (item is SessionBreakItem) {
+        lead.add(item);
       } else if (sections.isNotEmpty) {
         sections.last.body.add(item);
       }
@@ -165,16 +180,21 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
     if (updated != null) widget.onMatchUpdated?.call(updated);
   }
 
-  /// Rebuilds [_sections] and [_ordered] only if matches (by identity), limit or grouping changed.
+  /// Rebuilds [_sections] and [_ordered] only if matches or pool (by identity), limit or grouping changed.
   void _refreshItems() {
     final g = widget.grouping;
     if (identical(_builtFrom, widget.matches) &&
+        identical(_builtPool, widget.sessionPool) &&
         _builtLimit == _pageLimit &&
         identical(_builtGrouping, g)) {
       return;
     }
     final items = g == null
-        ? buildDayItems(widget.matches, limit: _pageLimit)
+        ? buildSessionItems(
+            widget.matches,
+            limit: _pageLimit,
+            sessionPool: widget.sessionPool,
+          )
         : buildGroupedItems(widget.matches, g);
     _sections = _sectionsOf(items);
     // What prev/next in the detail sheet walks: the full list in display
@@ -186,6 +206,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
               if (item is MatchItem) item.match,
           ];
     _builtFrom = widget.matches;
+    _builtPool = widget.sessionPool;
     _builtLimit = _pageLimit;
     _builtGrouping = g;
   }
@@ -254,7 +275,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   }
 }
 
-/// A header and its rows; watches only its own day's collapsed state.
+/// A header and its rows; watches only its own session's collapsed state.
 class _SectionSliver extends ConsumerWidget {
   final _Section section;
   final String collapseScope;
@@ -271,21 +292,24 @@ class _SectionSliver extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final header = section.header;
-    final dayKey = header is DayHeaderItem
-        ? historyDayKey(collapseScope, header.day)
+    final sessionKey = header is SessionHeaderItem
+        ? historySessionKey(collapseScope, header.key)
         : null;
     final isCollapsed =
-        dayKey != null &&
+        sessionKey != null &&
         ref.watch(
-          collapsedHistoryDaysProvider.select((days) => days.contains(dayKey)),
+          collapsedHistorySessionsProvider.select(
+            (sessions) => sessions.contains(sessionKey),
+          ),
         );
 
     final Widget headerWidget = switch (header) {
-      final DayHeaderItem h => _DayTitle(
+      final SessionHeaderItem h => _SessionTitle(
         item: h,
         collapsed: isCollapsed,
-        onToggle: () =>
-            ref.read(collapsedHistoryDaysProvider.notifier).toggle(dayKey!),
+        onToggle: () => ref
+            .read(collapsedHistorySessionsProvider.notifier)
+            .toggle(sessionKey!),
       ),
       final GroupHeaderItem h => _GroupHeader(item: h),
       _ => const SizedBox.shrink(),
@@ -293,20 +317,30 @@ class _SectionSliver extends ConsumerWidget {
 
     return SliverMainAxisGroup(
       slivers: [
+        for (final item in section.lead)
+          SliverToBoxAdapter(
+            child: switch (item) {
+              final SessionBreakItem b => _SessionBreak(gapSecs: b.gapSecs),
+              _ => const SizedBox.shrink(),
+            },
+          ),
         // Opaque so rows scrolling underneath don't show through the pin.
         PinnedHeaderSliver(
           child: ColoredBox(color: AppTheme.bg, child: headerWidget),
         ),
-        // The labelled stats scroll with the day rather than pinning.
-        if (header is DayHeaderItem)
+        // The labelled stats scroll with the session rather than pinning.
+        if (header is SessionHeaderItem)
           SliverToBoxAdapter(
-            child: _DayStats(item: header, collapsed: isCollapsed),
+            child: _SessionStats(item: header, collapsed: isCollapsed),
           ),
         if (!isCollapsed)
           SliverList.builder(
             itemCount: section.body.length,
             itemBuilder: (_, i) => switch (section.body[i]) {
-              final SessionBreakItem s => _SessionBreak(gapSecs: s.gapSecs),
+              final DayDividerItem d => _DayChange(
+                later: d.later,
+                earlier: d.earlier,
+              ),
               final MatchItem m => _MatchRow(
                 match: m.match,
                 onTap: () => onOpen(ordered, m.match),
@@ -319,28 +353,68 @@ class _SectionSliver extends ConsumerWidget {
   }
 }
 
-// ── Day header ──────────────────────────────────────────────────────────────
+// ── Dates ───────────────────────────────────────────────────────────────────
 
-final _dayFmt = DateFormat('EEE, MMM d');
+final _shortDayFmt = DateFormat('MMM d');
+final _shortDayYearFmt = DateFormat('MMM d, y');
+final _timeFmt = DateFormat.jm();
 
-String _dayLabel(DateTime day) {
-  final diff = calendarDaysBetween(DateTime.now(), day);
-  if (diff == 0) return 'Today';
-  if (diff == 1) return 'Yesterday';
-  return _dayFmt.format(day);
+/// "Oct 9 9:40 PM"; the year only when it isn't the current one.
+String _stamp(DateTime t) {
+  final l = t.toLocal();
+  final day = (l.year == DateTime.now().year ? _shortDayFmt : _shortDayYearFmt)
+      .format(l);
+  return '$day ${_timeFmt.format(l)}';
 }
 
-/// A day's title row: collapse chevron, the day, "N games · time played", and
-/// the day's net RP as a pill that matches the per-match RP badges below.
+bool _sameDay(DateTime a, DateTime b) {
+  final x = a.toLocal(), y = b.toLocal();
+  return x.year == y.year && x.month == y.month && x.day == y.day;
+}
+
+/// A small divider where a session runs past midnight, naming the day on
+/// each side: the rows above it are the later day.
+class _DayChange extends StatelessWidget {
+  final DateTime later;
+  final DateTime earlier;
+  const _DayChange({required this.later, required this.earlier});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          const Expanded(child: Divider(color: AppTheme.surface2, height: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm),
+            child: Text(
+              '${_shortDayFmt.format(later)} ↑ · ${_shortDayFmt.format(earlier)} ↓',
+              style: const TextStyle(color: AppTheme.muted, fontSize: 10),
+            ),
+          ),
+          const Expanded(child: Divider(color: AppTheme.surface2, height: 1)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Session header ──────────────────────────────────────────────────────────
+
+/// A session's title row: collapse chevron, when it started and ended over a
+/// muted "N games · time played", and the session's net RP as a pill that
+/// matches the per-match RP badges below.
 ///
-/// This is the only part of a day's header that pins while scrolling; the
-/// labelled stats ([_DayStats]) scroll away with the day, so the pinned bar
-/// stays small and calm. Tapping it collapses or expands the day's matches.
-class _DayTitle extends StatelessWidget {
-  final DayHeaderItem item;
+/// This is the only part of a session's header that pins while scrolling; the
+/// labelled stats ([_SessionStats]) scroll away with the session, so the pinned
+/// bar stays small and calm. Tapping it collapses or expands the session's
+/// matches.
+class _SessionTitle extends StatelessWidget {
+  final SessionHeaderItem item;
   final bool collapsed;
   final VoidCallback onToggle;
-  const _DayTitle({
+  const _SessionTitle({
     required this.item,
     required this.collapsed,
     required this.onToggle,
@@ -351,45 +425,46 @@ class _DayTitle extends StatelessWidget {
     final played = item.playSecs > 0
         ? ' · ${formatDuration(item.playSecs)}'
         : '';
+    final sameDay = _sameDay(item.start, item.end);
+    // The end repeats the date only when the session crossed midnight.
+    final span =
+        '${_stamp(item.start)} – '
+        '${sameDay ? _timeFmt.format(item.end.toLocal()) : _stamp(item.end)}';
 
-    return Column(
-      children: [
-        // Separate one day's session from the previous one.
-        if (!item.isFirst)
-          const Padding(
-            padding: EdgeInsets.only(top: AppTheme.sm),
-            child: Divider(color: AppTheme.surface2, height: 1, thickness: 1),
-          ),
-        InkWell(
-          onTap: onToggle,
-          child: Padding(
-            padding: EdgeInsets.only(
-              top: item.isFirst ? AppTheme.sm : AppTheme.md,
-              bottom: 6,
+    return InkWell(
+      onTap: onToggle,
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: item.isFirst ? AppTheme.sm : AppTheme.xs,
+          bottom: 6,
+        ),
+        child: Row(
+          children: [
+            AnimatedRotation(
+              turns: collapsed ? -0.25 : 0,
+              duration: AppTheme.chipAnimation,
+              child: const Icon(
+                Icons.expand_more,
+                size: 18,
+                color: AppTheme.muted,
+              ),
             ),
-            child: Row(
-              children: [
-                AnimatedRotation(
-                  turns: collapsed ? -0.25 : 0,
-                  duration: AppTheme.chipAnimation,
-                  child: const Icon(
-                    Icons.expand_more,
-                    size: 18,
-                    color: AppTheme.muted,
+            const SizedBox(width: 2),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    span,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  _dayLabel(item.day),
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: AppTheme.sm),
-                Expanded(
-                  child: Text(
+                  Text(
                     '${plural(item.games, 'game')}$played',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -398,27 +473,28 @@ class _DayTitle extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
-                ),
-                if (item.hasRanked) RpPill(totalRp: item.netRp, compact: true),
-              ],
+                ],
+              ),
             ),
-          ),
+            const SizedBox(width: AppTheme.sm),
+            if (item.hasRanked) RpPill(totalRp: item.netRp, compact: true),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
-/// The day's numbers as equal columns, each a value over a small label, so
-/// they line up from day to day and read without decoding abbreviations:
-/// record, average RP, kills and damage (record and average only on days with
-/// ranked games). Collapsed, only the record remains.
-class _DayStats extends StatelessWidget {
-  final DayHeaderItem item;
+/// The session's numbers as equal columns, each a value over a small label, so
+/// they line up from session to session and read without decoding abbreviations:
+/// record, average RP, kills and damage (record and average only on sessions
+/// with ranked games). Collapsed, only the record remains.
+class _SessionStats extends StatelessWidget {
+  final SessionHeaderItem item;
   final bool collapsed;
-  const _DayStats({required this.item, required this.collapsed});
+  const _SessionStats({required this.item, required this.collapsed});
 
-  /// Aligns under the day name, past the chevron.
+  /// Aligns under the time span, past the chevron.
   static const _indent = 20.0;
 
   static const _value = TextStyle(
