@@ -9,15 +9,36 @@ on:
     tags:
       - "v*"
 
+# Read-only by default; the job that publishes the release asks for write
+# access itself.
+permissions:
+  contents: read
+
 jobs:
   extract-version:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      - uses: actions/checkout@v7
+
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      # The builds take their version from pubspec.yaml but name artifacts (and
+      # register the Windows installer's version) from the tag; a mismatch would
+      # publish files whose names disagree with the app inside them. The part
+      # after "+" is the build number, which a tag does not carry.
+      - name: Check the tag matches pubspec.yaml
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pubspec_version="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
+          if [ "$TAG_VERSION" != "$pubspec_version" ]; then
+            echo "::error::Tag v$TAG_VERSION does not match pubspec.yaml version $pubspec_version. Bump pubspec.yaml (and its build number) before tagging."
+            exit 1
+          fi
 
   test:
     runs-on: ubuntu-latest
@@ -27,17 +48,28 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # The version releases are verified with locally; bump it together
+          # with the local toolchain, not whenever stable moves.
+          flutter-version: "3.47.6"
           channel: "stable"
+          cache: true
 
       - name: Get dependencies
         run: flutter pub get
 
       - name: Create .env from secrets
+        # Through env, not pasted into the script: a secret containing a quote
+        # or $( would otherwise break the step or be evaluated by the shell.
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL_BACKUP: ${{ secrets.PROXY_URL_BACKUP }}
+          CLIENT_TOKEN: ${{ secrets.CLIENT_TOKEN }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
-          echo "PROXY_URL_BACKUP=${{ secrets.PROXY_URL_BACKUP }}" >> .env
-          echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
-          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
+          printf 'PROXY_URL=%s\n' "$PROXY_URL" > .env
+          printf 'PROXY_URL_BACKUP=%s\n' "$PROXY_URL_BACKUP" >> .env
+          printf 'CLIENT_TOKEN=%s\n' "$CLIENT_TOKEN" >> .env
+          printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN" >> .env
 
       - name: Generate env code
         run: dart run build_runner build
@@ -65,17 +97,28 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # The version releases are verified with locally; bump it together
+          # with the local toolchain, not whenever stable moves.
+          flutter-version: "3.47.6"
           channel: "stable"
+          cache: true
 
       - name: Get dependencies
         run: flutter pub get
 
       - name: Create .env from secrets
+        # Through env, not pasted into the script: a secret containing a quote
+        # or $( would otherwise break the step or be evaluated by the shell.
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL_BACKUP: ${{ secrets.PROXY_URL_BACKUP }}
+          CLIENT_TOKEN: ${{ secrets.CLIENT_TOKEN }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
-          echo "PROXY_URL_BACKUP=${{ secrets.PROXY_URL_BACKUP }}" >> .env
-          echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
-          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
+          printf 'PROXY_URL=%s\n' "$PROXY_URL" > .env
+          printf 'PROXY_URL_BACKUP=%s\n' "$PROXY_URL_BACKUP" >> .env
+          printf 'CLIENT_TOKEN=%s\n' "$CLIENT_TOKEN" >> .env
+          printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN" >> .env
 
       - name: Generate env code
         run: dart run build_runner build
@@ -116,18 +159,29 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # The version releases are verified with locally; bump it together
+          # with the local toolchain, not whenever stable moves.
+          flutter-version: "3.47.6"
           channel: "stable"
+          cache: true
 
       - name: Get dependencies
         run: flutter pub get
 
       - name: Create .env from secrets
         shell: bash
+        # Through env, not pasted into the script: a secret containing a quote
+        # or $( would otherwise break the step or be evaluated by the shell.
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL_BACKUP: ${{ secrets.PROXY_URL_BACKUP }}
+          CLIENT_TOKEN: ${{ secrets.CLIENT_TOKEN }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
-          echo "PROXY_URL_BACKUP=${{ secrets.PROXY_URL_BACKUP }}" >> .env
-          echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
-          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
+          printf 'PROXY_URL=%s\n' "$PROXY_URL" > .env
+          printf 'PROXY_URL_BACKUP=%s\n' "$PROXY_URL_BACKUP" >> .env
+          printf 'CLIENT_TOKEN=%s\n' "$CLIENT_TOKEN" >> .env
+          printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN" >> .env
 
       - name: Generate env code
         shell: bash
@@ -181,7 +235,11 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          # The version releases are verified with locally; bump it together
+          # with the local toolchain, not whenever stable moves.
+          flutter-version: "3.47.6"
           channel: "stable"
+          cache: true
 
       - name: Install Linux dependencies
         run: |
@@ -208,11 +266,18 @@ jobs:
         run: flutter pub get
 
       - name: Create .env from secrets
+        # Through env, not pasted into the script: a secret containing a quote
+        # or $( would otherwise break the step or be evaluated by the shell.
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_URL_BACKUP: ${{ secrets.PROXY_URL_BACKUP }}
+          CLIENT_TOKEN: ${{ secrets.CLIENT_TOKEN }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          echo "PROXY_URL=${{ secrets.PROXY_URL }}" > .env
-          echo "PROXY_URL_BACKUP=${{ secrets.PROXY_URL_BACKUP }}" >> .env
-          echo "CLIENT_TOKEN=${{ secrets.CLIENT_TOKEN }}" >> .env
-          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> .env
+          printf 'PROXY_URL=%s\n' "$PROXY_URL" > .env
+          printf 'PROXY_URL_BACKUP=%s\n' "$PROXY_URL_BACKUP" >> .env
+          printf 'CLIENT_TOKEN=%s\n' "$CLIENT_TOKEN" >> .env
+          printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN" >> .env
 
       - name: Generate env code
         run: dart run build_runner build

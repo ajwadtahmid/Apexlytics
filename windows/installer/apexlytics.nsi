@@ -30,6 +30,26 @@ Function .onInit
     MessageBox MB_OK|MB_ICONSTOP "Apexlytics requires 64-bit Windows."
     Abort
   ${EndIf}
+
+  ; NSIS still honours `installer.exe /D=D:\Games` with no directory page, and
+  ; the uninstaller removes $INSTDIR recursively. Always use the fixed folder.
+  StrCpy $INSTDIR "$PROGRAMFILES64\Apexlytics"
+
+  ; A running copy keeps its exe and DLLs locked, so files would be skipped and
+  ; a mix of versions left behind. The window class is the Flutter runner's.
+  FindWindow $0 "FLUTTER_RUNNER_WIN32_WINDOW" "Apexlytics"
+  ${If} $0 <> 0
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Apexlytics is running. Close it, then run this installer again."
+    Abort
+  ${EndIf}
+FunctionEnd
+
+Function un.onInit
+  FindWindow $0 "FLUTTER_RUNNER_WIN32_WINDOW" "Apexlytics"
+  ${If} $0 <> 0
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Apexlytics is running. Close it, then run the uninstaller again."
+    Abort
+  ${EndIf}
 FunctionEnd
 
 Section "Install"

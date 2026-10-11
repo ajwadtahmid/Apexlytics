@@ -77,9 +77,6 @@
 			<string>UIInterfaceOrientationLandscapeLeft</string>
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
-		<!-- Permissions for notifications -->
-		<key>NSNotificationUsageDescription</key>
-		<string>This app sends notifications for map rotations and rank updates.</string>
 		<key>UIStatusBarHidden</key>
 		<false/>
 	</dict>
