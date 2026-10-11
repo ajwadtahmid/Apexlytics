@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/theme.dart';
 import 'history_filter.dart';
@@ -32,14 +31,8 @@ class _RankedMatchListState extends State<RankedMatchList> {
 
   MatchGrouping? get _grouping => switch (_sort) {
     _HistorySort.date => null,
-    _HistorySort.legend => MatchGrouping(
-      keyOf: (m) => m.legend,
-      nameOf: (m) => m.legend,
-    ),
-    _HistorySort.map => MatchGrouping(
-      keyOf: (m) => m.mapKey,
-      nameOf: (m) => battleRoyaleMapName(m.mapKey),
-    ),
+    _HistorySort.legend => MatchGrouping.byLegend,
+    _HistorySort.map => MatchGrouping.byMap,
   };
 
   @override
@@ -170,7 +163,7 @@ class _ControlPill extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.surface2,
-              borderRadius: BorderRadius.circular(100),
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

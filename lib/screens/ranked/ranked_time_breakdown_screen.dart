@@ -144,17 +144,19 @@ class _SessionSparklines extends StatelessWidget {
             children: [
               const Text(
                 'RECENT TREND',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.muted,
-                  fontSize: 12,
-                  letterSpacing: 0.5,
-                ),
+                style: AppTheme.cardTitle,
               ),
-              Text(
-                '${_rangeFmt.format(oldest)} – ${_rangeFmt.format(newest)}'
-                ' · last ${shown.length} sessions',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              const SizedBox(width: AppTheme.sm),
+              // Flexible, so a narrow screen or larger text shortens the range
+              // instead of overflowing the row.
+              Flexible(
+                child: Text(
+                  '${_rangeFmt.format(oldest)} – ${_rangeFmt.format(newest)}'
+                  ' · last ${shown.length} sessions',
+                  textAlign: TextAlign.end,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                ),
               ),
             ],
           ),
@@ -176,7 +178,7 @@ class _SessionSparklines extends StatelessWidget {
             unit: 'kills',
             steadyBand: kKillsSteadyBand,
             valuesOf: (s) => s.totalKills,
-            gamesOf: (s) => s.games,
+            gamesOf: (s) => s.killsGames,
             formatValue: (v) => v.toStringAsFixed(1),
             formatDelta: formatSigned,
             sessions: sessions,
@@ -187,7 +189,7 @@ class _SessionSparklines extends StatelessWidget {
             unit: 'damage',
             steadyBand: kDamageSteadyBand,
             valuesOf: (s) => s.totalDamage,
-            gamesOf: (s) => s.games,
+            gamesOf: (s) => s.damageGames,
             formatValue: (v) => v.toStringAsFixed(0),
             formatDelta: (v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(0)}',
             sessions: sessions,
@@ -208,6 +210,9 @@ class _SparklineRow extends StatelessWidget {
   final String? Function(TrendVerdict verdict, double recent)? caveat;
   final double steadyBand;
   final int Function(RankedSession) valuesOf;
+
+  /// Games in a session that [valuesOf] actually covers; 0 means the session
+  /// has no reading for this stat (no point is plotted for it).
   final int Function(RankedSession) gamesOf;
   final String Function(double) formatValue;
 
@@ -236,9 +241,10 @@ class _SparklineRow extends StatelessWidget {
   Widget build(BuildContext context) {
     // Oldest → newest within the shown window, for a left-to-right chart.
     final shown = sessions.take(_kSparklineSessions).toList().reversed.toList();
-    final points = [
-      for (final s in shown) gamesOf(s) == 0 ? 0.0 : valuesOf(s) / gamesOf(s),
+    final points = <double?>[
+      for (final s in shown) gamesOf(s) == 0 ? null : valuesOf(s) / gamesOf(s),
     ];
+    final plotted = points.nonNulls.toList();
 
     final trend = sessionTrend(
       sessions,
@@ -249,8 +255,12 @@ class _SparklineRow extends StatelessWidget {
     final verdict = trend == null
         ? null
         : trendVerdict(trend.delta, steadyBand: steadyBand);
-    final minY = points.reduce((a, b) => a < b ? a : b);
-    final maxY = points.reduce((a, b) => a > b ? a : b);
+    final minY = plotted.isEmpty
+        ? 0.0
+        : plotted.reduce((a, b) => a < b ? a : b);
+    final maxY = plotted.isEmpty
+        ? 0.0
+        : plotted.reduce((a, b) => a > b ? a : b);
     // A flat window (every point equal) needs artificial padding, else
     // fl_chart's min==max range renders nothing.
     final pad = (maxY - minY).abs() < 0.01 ? 1.0 : (maxY - minY) * 0.15;
@@ -261,12 +271,15 @@ class _SparklineRow extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             if (trend != null && verdict != null)
@@ -283,10 +296,12 @@ class _SparklineRow extends StatelessWidget {
             style: const TextStyle(color: AppTheme.muted, fontSize: 11),
             children: [
               if (trend == null || verdict == null)
-                const TextSpan(
-                  text:
-                      'Play at least ${_kTrendWindow * 2} sessions to see a '
-                      'trend.',
+                TextSpan(
+                  text: sessions.length < _kTrendWindow * 2
+                      ? 'Play at least ${_kTrendWindow * 2} sessions to see a '
+                            'trend.'
+                      : 'Not enough games with $unit reported to show a '
+                            'trend.',
                 )
               else ...[
                 TextSpan(
@@ -308,53 +323,59 @@ class _SparklineRow extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 4),
-        SizedBox(
-          height: 36,
-          child: LineChart(
-            LineChartData(
-              minY: minY - pad,
-              maxY: maxY + pad,
-              gridData: const FlGridData(show: false),
-              borderData: FlBorderData(show: false),
-              titlesData: const FlTitlesData(show: false),
-              lineTouchData: LineTouchData(
-                touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => AppTheme.surface2,
-                  getTooltipItems: (touched) => touched.map((s) {
-                    final idx = s.x.isNaN
-                        ? 0
-                        : s.x.toInt().clamp(0, shown.length - 1);
-                    return LineTooltipItem(
-                      '${formatValue(points[idx])} · '
-                      '${_rangeFmt.format(shown[idx].start.toLocal())}',
-                      const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 11,
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              lineBarsData: [
-                LineChartBarData(
-                  spots: [
-                    for (final (i, v) in points.indexed)
-                      FlSpot(i.toDouble(), v),
-                  ],
-                  color: AppTheme.accent,
-                  barWidth: 2,
-                  dotData: const FlDotData(show: false),
-                  belowBarData: BarAreaData(
-                    show: true,
-                    color: AppTheme.accent.withAlpha(25),
+        if (plotted.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 36,
+            child: LineChart(
+              LineChartData(
+                minY: minY - pad,
+                maxY: maxY + pad,
+                gridData: const FlGridData(show: false),
+                borderData: FlBorderData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => AppTheme.surface2,
+                    getTooltipItems: (touched) => touched.map((s) {
+                      final idx = s.x.isNaN
+                          ? 0
+                          : s.x.toInt().clamp(0, shown.length - 1);
+                      final value = points[idx];
+                      if (value == null) return null;
+                      return LineTooltipItem(
+                        '${formatValue(value)} · '
+                        '${_rangeFmt.format(shown[idx].start.toLocal())}',
+                        const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 11,
+                        ),
+                      );
+                    }).toList(),
                   ),
-                  isCurved: true,
                 ),
-              ],
+                lineBarsData: [
+                  LineChartBarData(
+                    // Sessions with no reading are skipped, not plotted as 0;
+                    // x stays the session index so the tooltip lookup holds.
+                    spots: [
+                      for (final (i, v) in points.indexed)
+                        if (v != null) FlSpot(i.toDouble(), v),
+                    ],
+                    color: AppTheme.accent,
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: AppTheme.accent.withAlpha(25),
+                    ),
+                    isCurved: true,
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -436,12 +457,7 @@ class _PlayTimeInsights extends StatelessWidget {
           children: [
             const Text(
               'WHEN YOU PLAY BEST',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppTheme.muted,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
+              style: AppTheme.cardTitle,
             ),
             const SizedBox(height: 2),
             const Text(

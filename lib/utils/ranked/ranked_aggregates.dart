@@ -8,7 +8,8 @@ import '../../constants/legend_constants.dart';
 import '../../constants/rank_constants.dart';
 import '../../constants/map_constants.dart';
 import '../../models/ranked_match.dart';
-import '../formatting/rank_utils.dart' show rankIndex;
+import '../formatting/rank_utils.dart'
+    show isApexPredatorRp, rankIndex, usablePredatorCutoff;
 
 /// Default gap that separates one play session from the next.
 const Duration kSessionGap = Duration(hours: 2);
@@ -175,13 +176,11 @@ class RankedSummary {
   });
 
   double get avgRpPerGame => games == 0 ? 0 : netRp / games;
-  double get avgKills => killsGames == 0 ? 0 : totalKills / killsGames;
-  double get avgDamage => damageGames == 0 ? 0 : totalDamage / damageGames;
+  // Null, not 0, when no game reported the tracker: a zero would read as a
+  // measured "no kills" rather than "not recorded".
+  double? get avgKills => killsGames == 0 ? null : totalKills / killsGames;
+  double? get avgDamage => damageGames == 0 ? null : totalDamage / damageGames;
   double get avgGameLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
-
-  /// Games with no kills/damage reported, for the "based on N games" note.
-  int get killsGamesMissing => games - killsGames;
-  int get damageGamesMissing => games - damageGames;
 
   /// Games that count toward win rate: wins + losses. Excludes RP-neutral games
   /// (pubs and neutralized end-of-split reset artifacts), so it can be < [games].
@@ -265,8 +264,10 @@ class LegendBreakdown {
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
-  double get avgKills => killsGames == 0 ? 0 : totalKills / killsGames;
-  double get avgDamage => damageGames == 0 ? 0 : totalDamage / damageGames;
+  // Null, not 0, when no game reported the tracker: a zero would read as a
+  // measured "no kills" rather than "not recorded".
+  double? get avgKills => killsGames == 0 ? null : totalKills / killsGames;
+  double? get avgDamage => damageGames == 0 ? null : totalDamage / damageGames;
   double get avgLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
   int get decidedGames => wins + losses;
   double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
@@ -340,8 +341,10 @@ class MapBreakdown {
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
-  double get avgKills => killsGames == 0 ? 0 : totalKills / killsGames;
-  double get avgDamage => damageGames == 0 ? 0 : totalDamage / damageGames;
+  // Null, not 0, when no game reported the tracker: a zero would read as a
+  // measured "no kills" rather than "not recorded".
+  double? get avgKills => killsGames == 0 ? null : totalKills / killsGames;
+  double? get avgDamage => damageGames == 0 ? null : totalDamage / damageGames;
   double get avgLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
   int get decidedGames => wins + losses;
   double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
@@ -441,6 +444,12 @@ class RankedSession {
   final int totalKills;
   final int totalDamage;
 
+  /// Games in this session that reported a kills / damage tracker. Any
+  /// per-game average of [totalKills] / [totalDamage] must divide by these,
+  /// not by [games]: upstream only reports the tracker a legend has equipped.
+  final int killsGames;
+  final int damageGames;
+
   /// The matches in this session, newest first — drives the session drill-down.
   final List<RankedMatch> matches;
 
@@ -451,6 +460,8 @@ class RankedSession {
     required this.netRp,
     required this.totalKills,
     required this.totalDamage,
+    required this.killsGames,
+    required this.damageGames,
     required this.matches,
   });
 
@@ -494,13 +505,18 @@ List<RankedSession> sessionize(
   var bucket = <RankedMatch>[chrono.first];
 
   void flush() {
-    var rp = 0, kills = 0, damage = 0;
+    var rp = 0, kills = 0, damage = 0, killsGames = 0, damageGames = 0;
     for (final m in bucket) {
       rp += m.effectiveRpChange;
-      // Session totals are sums, not averages, so an unreported match simply
-      // contributes nothing rather than needing its own coverage count.
-      kills += m.kills ?? 0;
-      damage += m.damage ?? 0;
+      final k = m.kills, d = m.damage;
+      if (k != null) {
+        kills += k;
+        killsGames++;
+      }
+      if (d != null) {
+        damage += d;
+        damageGames++;
+      }
     }
     sessions.add(
       RankedSession(
@@ -515,6 +531,8 @@ List<RankedSession> sessionize(
         netRp: rp,
         totalKills: kills,
         totalDamage: damage,
+        killsGames: killsGames,
+        damageGames: damageGames,
         // bucket is chronological; expose newest-first for the drill-down list.
         matches: bucket.reversed.toList(),
       ),
@@ -577,11 +595,10 @@ class RankProgress {
     );
   }
 
-  /// True once [currentRp] has crossed the live Predator cutoff — mirrors the
-  /// My Stats tab's `isPred` check, which reads straight off the RP value
-  /// rather than assuming Master is the ceiling.
-  bool get isPredator =>
-      predatorRp != null && predatorRp! > 0 && currentRp >= predatorRp!;
+  /// True once [currentRp] has crossed the live Predator cutoff — the same
+  /// rule as everywhere else (see [isApexPredatorRp]): Master or above, and a
+  /// usable cutoff, which a 0 or missing value from `/predator` is not.
+  bool get isPredator => isApexPredatorRp(currentRp, predatorRp);
 
   RankDivision get current => isPredator
       ? RankDivision(kApexPredatorRank, null, predatorRp!, kPredatorColor)
@@ -596,8 +613,8 @@ class RankProgress {
     if (currentIndex + 1 < kRankLadder.length) {
       return kRankLadder[currentIndex + 1];
     }
-    final rp = predatorRp;
-    if (rp != null && rp > 0) {
+    final rp = usablePredatorCutoff(predatorRp);
+    if (rp != null) {
       return RankDivision(kApexPredatorRank, null, rp, kPredatorColor);
     }
     return null;
@@ -611,15 +628,13 @@ class RankProgress {
     final i = goalIndex;
     if (i == null) return null;
     if (isPredatorGoal) {
-      final rp = predatorRp;
-      if (rp == null || rp <= 0) return null;
+      final rp = usablePredatorCutoff(predatorRp);
+      if (rp == null) return null;
       return RankDivision(kApexPredatorRank, null, rp, kPredatorColor);
     }
     if (i <= currentIndex || i >= kRankLadder.length) return null;
     return kRankLadder[i];
   }
-
-  bool get atTop => next == null;
 
   /// Fill fraction (0..1) between the current division floor and the next.
   double get progressToNext {
@@ -857,8 +872,10 @@ PersonalRecords personalRecords(List<RankedMatch> all) {
 /// Avg-per-game comparison between the most recent [window] sessions and the
 /// [window] before that, for whichever total [totalOf] extracts (net RP,
 /// kills, damage, ...). Null below `window * 2` sessions — not enough data
-/// for two windows. [sessions] must be newest-first, matching [sessionize]'s
-/// output.
+/// for two windows, or when either window has no games ([gamesOf] sums to 0,
+/// e.g. no session in it reported the tracker). [gamesOf] must count only the
+/// games that contributed to [totalOf]. [sessions] must be newest-first,
+/// matching [sessionize]'s output.
 class SessionTrend {
   final double recent;
   final double previous;
@@ -875,16 +892,16 @@ SessionTrend? sessionTrend(
 }) {
   if (sessions.length < window * 2) return null;
 
-  double avgPerGame(Iterable<RankedSession> range) {
+  double? avgPerGame(Iterable<RankedSession> range) {
     final games = range.fold(0, (s, e) => s + gamesOf(e));
     final total = range.fold(0, (s, e) => s + totalOf(e));
-    return games == 0 ? 0 : total / games;
+    return games == 0 ? null : total / games;
   }
 
-  return SessionTrend(
-    recent: avgPerGame(sessions.take(window)),
-    previous: avgPerGame(sessions.skip(window).take(window)),
-  );
+  final recent = avgPerGame(sessions.take(window));
+  final previous = avgPerGame(sessions.skip(window).take(window));
+  if (recent == null || previous == null) return null;
+  return SessionTrend(recent: recent, previous: previous);
 }
 
 /// Recent-games window [entityTrends] compares against the rest of an
@@ -907,7 +924,8 @@ class TrendChange {
 /// each match. [current] is the average across all of [matches]; [older] is
 /// the average across everything before the most recent [window] games.
 /// Null below `window * 2` games - not enough history for "older" to mean
-/// anything. A null [valueOf] (e.g. untracked kills/damage) excludes that
+/// anything - and when either side has no match with a value at all, so a stat
+/// that was never reported isn't shown as "was 0". A null [valueOf] (e.g. untracked kills/damage) excludes that
 /// match from both the total and the game count, rather than as a zero.
 /// Windowed by game count, not sessions, so a legend/map played in just a
 /// couple of long sessions still gets a meaningful "recent" slice.
@@ -921,7 +939,7 @@ TrendChange? _trendChange(
   final chrono = matches.toList()
     ..sort((a, b) => b.startTime.compareTo(a.startTime)); // newest first
 
-  double avgOf(Iterable<RankedMatch> range) {
+  double? avgOf(Iterable<RankedMatch> range) {
     var total = 0, games = 0;
     for (final m in range) {
       final v = valueOf(m);
@@ -930,10 +948,14 @@ TrendChange? _trendChange(
         games++;
       }
     }
-    return games == 0 ? 0 : total / games;
+    return games == 0 ? null : total / games;
   }
 
-  return TrendChange(older: avgOf(chrono.skip(window)), current: avgOf(chrono));
+  final older = avgOf(chrono.skip(window));
+  final current = avgOf(chrono);
+  // No reading in a range is "no data", not an average of 0.
+  if (older == null || current == null) return null;
+  return TrendChange(older: older, current: current);
 }
 
 /// RP/kills/damage [TrendChange]s for one legend's or map's [matches]

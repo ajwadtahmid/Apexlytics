@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:apexlytics/constants/legend_constants.dart';
+import 'package:apexlytics/constants/map_constants.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 
@@ -10,8 +12,8 @@ void main() {
     required String mapKey,
     required int rpChange,
     required int cumulativeRp,
-    required int kills,
-    required int damage,
+    required int? kills,
+    required int? damage,
     required int startOffset,
     String gameMode = 'BATTLE_ROYALE',
     bool axleTracker = false,
@@ -26,8 +28,9 @@ void main() {
       'gameStartTimestamp': t0 + startOffset,
       'gameEndTimestamp': t0 + startOffset + length,
       'gameData': [
-        {'key': 'kills', 'value': kills, 'name': 'BR Kills'},
-        {'key': 'damage', 'value': damage, 'name': 'BR Damage'},
+        if (kills != null) {'key': 'kills', 'value': kills, 'name': 'BR Kills'},
+        if (damage != null)
+          {'key': 'damage', 'value': damage, 'name': 'BR Damage'},
         if (axleTracker)
           {
             'key': 'axle_tactical',
@@ -651,6 +654,106 @@ void main() {
     });
   });
 
+  group('canonical legend and map keys', () {
+    List<RankedMatch> games(List<({String legend, String map})> rows) => [
+      for (final (i, r) in rows.indexed)
+        match(
+          legend: r.legend,
+          mapKey: r.map,
+          rpChange: 10,
+          cumulativeRp: 1000 + i,
+          kills: 1,
+          damage: 100,
+          startOffset: i * 10800,
+        ),
+    ];
+
+    test('a blank map key is the same Unknown map as UNKNOWN', () {
+      expect(canonicalMapKey(''), canonicalMapKey('UNKNOWN'));
+      expect(canonicalMapKey('  '), canonicalMapKey('unknown'));
+
+      final maps = mapBreakdowns(
+        rankedOnly(
+          games([
+            (legend: 'Axle', map: ''),
+            (legend: 'Axle', map: 'UNKNOWN'),
+            (legend: 'Axle', map: 'olympus_rotation'),
+          ]),
+        ),
+      );
+      expect(maps, hasLength(2), reason: 'Unknown once, plus Olympus');
+      expect(maps.firstWhere((m) => isUnknownMapKey(m.mapKey)).games, 2);
+    });
+
+    test('a blank legend is Unknown, and padding does not split a legend', () {
+      expect(canonicalLegendName(''), 'Unknown');
+      expect(canonicalLegendName('   '), 'Unknown');
+      expect(canonicalLegendName('Wraith '), 'Wraith');
+      expect(canonicalLegendName(' wraith'), 'Wraith');
+
+      final legends = legendBreakdowns(
+        rankedOnly(
+          games([
+            (legend: 'Wraith', map: 'olympus_rotation'),
+            (legend: 'Wraith ', map: 'olympus_rotation'),
+            (legend: '', map: 'olympus_rotation'),
+            (legend: 'Unknown', map: 'olympus_rotation'),
+          ]),
+        ),
+      );
+      expect(legends.map((l) => (l.legend, l.games)).toSet(), {
+        ('Wraith', 2),
+        ('Unknown', 2),
+      });
+    });
+  });
+
+  group('kills/damage averages when nothing was reported', () {
+    List<RankedMatch> untrackedGames(String legend) => [
+      for (var i = 0; i < 3; i++)
+        match(
+          legend: legend,
+          mapKey: 'olympus_rotation',
+          rpChange: 10,
+          cumulativeRp: 1000 + i,
+          kills: null,
+          damage: null,
+          startOffset: i * 10800,
+        ),
+    ];
+
+    test('are null, not 0, in the summary, legend and map breakdowns', () {
+      final games = rankedOnly(untrackedGames('Axle'));
+
+      final s = summarize(games);
+      expect(s.avgKills, isNull);
+      expect(s.avgDamage, isNull);
+      expect(legendBreakdowns(games).single.avgKills, isNull);
+      expect(legendBreakdowns(games).single.avgDamage, isNull);
+      expect(mapBreakdowns(games).single.avgKills, isNull);
+      expect(mapBreakdowns(games).single.avgDamage, isNull);
+    });
+
+    test('exist as soon as one game reported them', () {
+      final games = rankedOnly([
+        ...untrackedGames('Axle'),
+        match(
+          legend: 'Axle',
+          mapKey: 'olympus_rotation',
+          rpChange: 10,
+          cumulativeRp: 1100,
+          kills: 4,
+          damage: 400,
+          startOffset: 99999,
+        ),
+      ]);
+
+      final s = summarize(games);
+      expect(s.avgKills, 4.0, reason: 'over the one game that reported');
+      expect(s.avgDamage, 400.0);
+    });
+  });
+
   group('sessionTrend', () {
     test('returns null below window * 2 sessions', () {
       final sessions = sessionize(ranked); // only 2 sessions in the fixture
@@ -693,6 +796,53 @@ void main() {
       expect(t!.recent, closeTo(50, 0.01));
       expect(t.previous, closeTo(6.6667, 0.01));
       expect(t.delta, closeTo(43.33, 0.01));
+    });
+
+    test('kills/damage divide by the games that reported them, and a window '
+        'with none yields no trend', () {
+      // Six single-session days, oldest first. The three oldest sessions
+      // have 2 games each, only one of which reported kills (3 per game);
+      // the three newest report both games (3 per game).
+      List<RankedMatch> day(int i, {required bool bothTracked}) => [
+        for (var g = 0; g < 2; g++)
+          match(
+            legend: 'Axle',
+            mapKey: 'olympus_rotation',
+            rpChange: 10,
+            cumulativeRp: 1000,
+            kills: bothTracked || g == 0 ? 3 : null,
+            damage: bothTracked || g == 0 ? 300 : null,
+            startOffset: i * 10800 + g * 600,
+          ),
+      ];
+      final sessions = sessionize(
+        rankedOnly([
+          for (var i = 0; i < 6; i++) ...day(i, bothTracked: i >= 3),
+        ]),
+      );
+      expect(sessions.length, 6);
+      expect(sessions.last.games, 2);
+      expect(sessions.last.killsGames, 1);
+      expect(sessions.last.damageGames, 1);
+      expect(sessions.first.killsGames, 2);
+
+      final kills = sessionTrend(
+        sessions,
+        totalOf: (s) => s.totalKills,
+        gamesOf: (s) => s.killsGames,
+        window: 3,
+      );
+      expect(kills!.recent, 3.0);
+      expect(kills.previous, 3.0);
+
+      // No game reported anything: no trend, rather than a 0.0 average.
+      final none = sessionTrend(
+        sessions,
+        totalOf: (s) => s.totalKills,
+        gamesOf: (s) => 0,
+        window: 3,
+      );
+      expect(none, isNull);
     });
   });
 
@@ -767,6 +917,46 @@ void main() {
       // half the real average, since only half the games report at all.
       expect(trends.kills!.current, 5.0);
       expect(trends.damage!.current, 500.0);
+    });
+
+    test('no trend for a stat the older games never reported, rather than '
+        '"was 0"', () {
+      // Oldest five games have no kills/damage tracker; the newest five do.
+      final matches = [
+        for (var i = 0; i < kTrendRecentGames * 2; i++)
+          match(
+            legend: 'Axle',
+            mapKey: 'olympus_rotation',
+            rpChange: 10,
+            cumulativeRp: 1000 + i,
+            kills: i < kTrendRecentGames ? null : 3,
+            damage: i < kTrendRecentGames ? null : 300,
+            startOffset: i * 10800,
+          ),
+      ];
+
+      final trends = entityTrends(matches);
+      expect(trends.kills, isNull);
+      expect(trends.damage, isNull);
+      expect(trends.rp, isNotNull, reason: 'RP is always reported');
+    });
+
+    test('no trend at all when no game reported the stat', () {
+      final trends = entityTrends([
+        for (var i = 0; i < kTrendRecentGames * 2; i++)
+          match(
+            legend: 'Axle',
+            mapKey: 'olympus_rotation',
+            rpChange: 10,
+            cumulativeRp: 1000 + i,
+            kills: null,
+            damage: null,
+            startOffset: i * 10800,
+          ),
+      ]);
+
+      expect(trends.kills, isNull);
+      expect(trends.damage, isNull);
     });
   });
 }

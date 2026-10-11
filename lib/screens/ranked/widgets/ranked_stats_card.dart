@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../utils/formatting/format.dart'
-    show formatDuration, formatNumber, formatSigned, formatSignedInt;
+    show
+        formatAvgDamage,
+        formatAvgKills,
+        formatDuration,
+        formatNumber,
+        formatSigned,
+        formatSignedInt,
+        formatTotalOrNone;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/stat_display.dart';
@@ -27,12 +34,7 @@ class RankedStatsCard extends StatelessWidget {
         children: [
           const Text(
             'STATS',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.muted,
-              fontSize: 12,
-              letterSpacing: 0.5,
-            ),
+            style: AppTheme.cardTitle,
           ),
           const SizedBox(height: AppTheme.sm),
           StatGrid(
@@ -59,13 +61,13 @@ class RankedStatsCard extends StatelessWidget {
               ),
               StatTableRow(
                 label: 'Kills',
-                avg: s.avgKills.toStringAsFixed(1),
-                total: formatNumber(s.totalKills),
+                avg: formatAvgKills(s.avgKills),
+                total: formatTotalOrNone(s.totalKills, s.killsGames),
               ),
               StatTableRow(
                 label: 'Damage',
-                avg: formatNumber(s.avgDamage.round()),
-                total: formatNumber(s.totalDamage),
+                avg: formatAvgDamage(s.avgDamage),
+                total: formatTotalOrNone(s.totalDamage, s.damageGames),
               ),
               StatTableRow(
                 label: 'Time',

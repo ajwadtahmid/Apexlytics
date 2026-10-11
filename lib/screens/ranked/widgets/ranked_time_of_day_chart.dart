@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
+import '../../../utils/formatting/format.dart' show plural, formatSigned;
 
 /// When the player performs best: a bar per active local hour. Bar height shows
 /// how often that hour is played; colour shows whether RP is net gained (green)
@@ -28,12 +29,7 @@ class RankedTimeOfDayChart extends StatelessWidget {
         children: [
           const Text(
             'Performance by Hour',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.muted,
-              fontSize: 12,
-              letterSpacing: 0.5,
-            ),
+            style: AppTheme.cardTitle,
           ),
           const SizedBox(height: 2),
           const Text(
@@ -54,11 +50,10 @@ class RankedTimeOfDayChart extends StatelessWidget {
                     getTooltipColor: (_) => AppTheme.surface2,
                     getTooltipItem: (group, _, rod, _) {
                       final b = buckets[group.x];
-                      final sign = b.avgRpPerGame >= 0 ? '+' : '';
                       return BarTooltipItem(
                         '${_hourLabel(b.hourLocal)}\n'
-                        '${b.games} games\n'
-                        '$sign${b.avgRpPerGame.toStringAsFixed(1)} RP/game',
+                        '${plural(b.games, 'game')}\n'
+                        '${formatSigned(b.avgRpPerGame)} RP/game',
                         const TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 11,

@@ -47,6 +47,35 @@ void main() {
     return excluded ? m.withExcluded(true) : m;
   }
 
+  group('grouping by map and legend', () {
+    test('a hand-corrected map key joins the synced rotation key', () {
+      // A synced match is stored as `olympus_rotation`; the edit sheet writes
+      // the bare catalogue key.
+      final items = buildGroupedItems([
+        game(dayOffset: 0, slot: 1, map: 'olympus_rotation'),
+        game(dayOffset: 0, slot: 2, map: 'olympus'),
+        game(dayOffset: 0, slot: 3, map: 'olympus_rotation'),
+      ], MatchGrouping.byMap);
+
+      final headers = items.whereType<GroupHeaderItem>().toList();
+      expect(headers, hasLength(1));
+      expect(headers.single.name, 'Olympus');
+      expect(headers.single.games, 3);
+    });
+
+    test('legend spellings that differ only by case share one section', () {
+      final items = buildGroupedItems([
+        game(dayOffset: 0, slot: 1, legend: 'Bloodhound'),
+        game(dayOffset: 0, slot: 2, legend: 'bloodhound'),
+      ], MatchGrouping.byLegend);
+
+      final headers = items.whereType<GroupHeaderItem>().toList();
+      expect(headers, hasLength(1));
+      expect(headers.single.name, 'Bloodhound');
+      expect(headers.single.games, 2);
+    });
+  });
+
   group('day header summary', () {
     test('rolls up record, average RP, kills, damage and time', () {
       final day = [
@@ -272,6 +301,23 @@ void main() {
       );
       expect(find.text('Excluded'), findsOneWidget);
       expect(find.byType(ExcludedTag), findsOneWidget);
+    });
+
+    testWidgets('a match row groups thousands in its RP badge, like every other '
+        'RP figure', (tester) async {
+      final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(matches: reset, onRefresh: () async {}),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('-1,500 RP'), findsWidgets);
+      expect(find.text('-1500 RP'), findsNothing);
     });
 
     testWidgets('the detail sheet explains an auto-excluded match', (

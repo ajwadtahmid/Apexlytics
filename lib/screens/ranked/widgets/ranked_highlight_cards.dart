@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatSignedInt;
+    show formatAvgDamage, formatAvgKills, formatSignedInt;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -164,7 +164,9 @@ class _CompactLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final portraitWidth = _cardHeight * kLegendPortraitAspectRatio;
+    final cardHeight = AppTheme.scaledWithText(context, _cardHeight);
+    final pillHeight = AppTheme.scaledWithText(context, _pillHeight);
+    final portraitWidth = cardHeight * kLegendPortraitAspectRatio;
 
     return SurfaceCard(
       padding: EdgeInsets.zero,
@@ -172,7 +174,7 @@ class _CompactLegend extends StatelessWidget {
       onTap: () =>
           showLegendDetailSheet(context, breakdown, matchesFor, onRefresh),
       child: SizedBox(
-        height: _cardHeight,
+        height: cardHeight,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -196,7 +198,7 @@ class _CompactLegend extends StatelessWidget {
                   children: [
                     // As tall as the pill, so the two centre on one line.
                     SizedBox(
-                      height: _pillHeight,
+                      height: pillHeight,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -223,12 +225,12 @@ class _CompactLegend extends StatelessWidget {
                           ),
                           _HighlightStat(
                             label: 'Avg Kills',
-                            value: breakdown.avgKills.toStringAsFixed(1),
+                            value: formatAvgKills(breakdown.avgKills),
                             compact: true,
                           ),
                           _HighlightStat(
                             label: 'Avg Dmg',
-                            value: formatNumber(breakdown.avgDamage.round()),
+                            value: formatAvgDamage(breakdown.avgDamage),
                             compact: true,
                           ),
                           _HighlightStat(
@@ -296,7 +298,7 @@ class _MapHighlight extends StatelessWidget {
       clip: Clip.antiAlias,
       onTap: () => showMapDetailSheet(context, map, matchesFor, onRefresh),
       child: SizedBox(
-        height: 118,
+        height: AppTheme.scaledWithText(context, 118),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -364,12 +366,12 @@ class _MapHighlight extends StatelessWidget {
                         ),
                         _HighlightStat(
                           label: 'Avg Kills',
-                          value: map.avgKills.toStringAsFixed(1),
+                          value: formatAvgKills(map.avgKills),
                           onImage: true,
                         ),
                         _HighlightStat(
                           label: 'Avg Dmg',
-                          value: formatNumber(map.avgDamage.round()),
+                          value: formatAvgDamage(map.avgDamage),
                           onImage: true,
                         ),
                         _HighlightStat(

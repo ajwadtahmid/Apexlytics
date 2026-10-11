@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/utils/ranked/legend_baseline.dart';
 
+import '../../helpers.dart';
+
 void main() {
   var n = 0;
   RankedMatch game({
@@ -10,28 +12,14 @@ void main() {
     int? kills = 2,
     int? damage = 500,
     bool excluded = false,
-  }) {
-    final start = 1782090000 + (n++) * 1000;
-    final m = RankedMatch.fromJson({
-      'uid': '1',
-      'name': 'Tester',
-      'legendPlayed': legend,
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': 600,
-      'gameStartTimestamp': start,
-      'gameEndTimestamp': start + 600,
-      'gameData': [
-        if (kills != null) {'key': 'kills', 'value': kills, 'name': 'BR Kills'},
-        if (damage != null)
-          {'key': 'damage', 'value': damage, 'name': 'BR Damage'},
-      ],
-      'BRScoreChange': rp,
-      'BRScore': 1000,
-      'map': 'olympus_rotation',
-      'isPartyFull': false,
-    });
-    return excluded ? m.withExcluded(true) : m;
-  }
+  }) => buildMatch(
+    start: 1782090000 + (n++) * 1000,
+    legend: legend,
+    rp: rp,
+    kills: kills,
+    damage: damage,
+    excluded: excluded,
+  );
 
   group('legendBaselineFor', () {
     test('null below the minimum number of games', () {
@@ -46,6 +34,17 @@ void main() {
       final b = legendBaselineFor(pool.first, pool)!;
       expect(b.avgKills, 3);
       expect(b.avgDamage, 300);
+    });
+
+    test('pools spelling variants of one legend, as the aggregates do', () {
+      final pool = [
+        for (var i = 0; i < 3; i++) game(legend: 'Bloodhound', kills: 4),
+        for (var i = 0; i < 2; i++) game(legend: 'bloodhound', kills: 4),
+      ];
+
+      // Five games between them, so the baseline exists for either spelling.
+      expect(legendBaselineFor(pool.first, pool)!.avgKills, 4);
+      expect(legendBaselineFor(pool.last, pool)!.avgKills, 4);
     });
 
     test('ignores other legends, excluded and auto-excluded games', () {

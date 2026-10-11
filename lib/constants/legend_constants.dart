@@ -91,8 +91,14 @@ final Map<String, Legend> kLegendsByName = {
 /// (`LegendBreakdown.legend` is the card's display name) — so an
 /// unrecognised legend's fallback is title-cased, not left raw, since it
 /// still needs to look presentable, not just merge correctly.
-String canonicalLegendName(String name) =>
-    kLegendsByName[name.toLowerCase()]?.name ?? _titleCase(name);
+///
+/// Surrounding whitespace is ignored (`"Wraith "` is `"Wraith"`), and a blank
+/// name is `"Unknown"`, the same as a missing one.
+String canonicalLegendName(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return 'Unknown';
+  return kLegendsByName[trimmed.toLowerCase()]?.name ?? _titleCase(trimmed);
+}
 
 /// Title-cases [s] word by word (`"BLOODHOUND"`/`"bloodhound"` →
 /// `"Bloodhound"`). Only [canonicalLegendName]'s fallback uses this — a

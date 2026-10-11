@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../utils/formatting/format.dart' show formatDuration, formatNumber;
+import '../../utils/formatting/format.dart' show formatDuration, formatNumber, plural;
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
@@ -23,14 +23,11 @@ void openSessionHistory(
       builder: (_) => RankedEntityHistoryScreen(
         title: _sessionDayFmt.format(session.start.toLocal()),
         subtitle:
-            '${session.games} games · ${net >= 0 ? '+' : ''}${formatNumber(net)} RP',
+            '${plural(session.games, 'game')} · ${net >= 0 ? '+' : ''}${formatNumber(net)} RP',
         matches: session.matches,
         onRefresh: onRefresh,
         groupLabel: 'legend',
-        grouping: MatchGrouping(
-          keyOf: (m) => m.legend,
-          nameOf: (m) => m.legend,
-        ),
+        grouping: MatchGrouping.byLegend,
       ),
     ),
   );

@@ -2,7 +2,14 @@ import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatDuration, formatSigned, formatSignedInt;
+    show
+        formatAvgDamage,
+        formatAvgKills,
+        formatNumber,
+        formatDuration,
+        formatSigned,
+        formatSignedInt,
+        formatTotalOrNone, plural;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/map_asset_image.dart';
@@ -23,13 +30,7 @@ Future<void> showMapDetailSheet(
 ) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppTheme.surface,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (_) =>
         _MapDetailSheet(map: map, matchesFor: matchesFor, onRefresh: onRefresh),
   );
@@ -73,14 +74,11 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
         builder: (_) => RankedEntityHistoryScreen(
           title: map.displayName,
           subtitle:
-              '${map.games} ranked games · ${formatSigned(map.avgRpPerGame)} RP/game',
+              '${plural(map.games, 'ranked game')} · ${formatSigned(map.avgRpPerGame)} RP/game',
           matches: games,
           onRefresh: onRefresh,
           groupLabel: 'legend',
-          grouping: MatchGrouping(
-            keyOf: (m) => m.legend,
-            nameOf: (m) => m.legend,
-          ),
+          grouping: MatchGrouping.byLegend,
         ),
       ),
     );
@@ -150,13 +148,16 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
                     ),
                     StatTableRow(
                       label: 'Kills',
-                      avg: map.avgKills.toStringAsFixed(1),
-                      total: formatNumber(map.totalKills),
+                      avg: formatAvgKills(map.avgKills),
+                      total: formatTotalOrNone(map.totalKills, map.killsGames),
                     ),
                     StatTableRow(
                       label: 'Damage',
-                      avg: formatNumber(map.avgDamage.round()),
-                      total: formatNumber(map.totalDamage),
+                      avg: formatAvgDamage(map.avgDamage),
+                      total: formatTotalOrNone(
+                        map.totalDamage,
+                        map.damageGames,
+                      ),
                     ),
                     StatTableRow(
                       label: 'Time',

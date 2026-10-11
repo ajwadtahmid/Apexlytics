@@ -1,3 +1,5 @@
+import '../../../constants/legend_constants.dart';
+import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/ranked/ranked_aggregates.dart' show kSessionGap;
 
@@ -7,6 +9,21 @@ class MatchGrouping {
   final String Function(RankedMatch) keyOf;
   final String Function(RankedMatch) nameOf;
   const MatchGrouping({required this.keyOf, required this.nameOf});
+
+  /// One section per map. Keyed canonically, like every aggregate: a match
+  /// whose map was corrected by hand is stored as `olympus` where a synced one
+  /// is `olympus_rotation`, and a raw key would split them into two sections
+  /// with the same title.
+  static final byMap = MatchGrouping(
+    keyOf: (m) => canonicalMapKey(m.mapKey),
+    nameOf: (m) => battleRoyaleMapName(m.mapKey),
+  );
+
+  /// One section per legend, keyed canonically for the same reason as [byMap].
+  static final byLegend = MatchGrouping(
+    keyOf: (m) => canonicalLegendName(m.legend),
+    nameOf: (m) => canonicalLegendName(m.legend),
+  );
 }
 
 // ── Item model ──────────────────────────────────────────────────────────────

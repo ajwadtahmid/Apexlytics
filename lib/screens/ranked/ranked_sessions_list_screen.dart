@@ -101,12 +101,7 @@ class _RankedSessionsListScreenState extends State<RankedSessionsListScreen> {
             if (visible.isNotEmpty) ...[
               const Text(
                 'RECENT SESSIONS',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.muted,
-                  fontSize: 12,
-                  letterSpacing: 0.5,
-                ),
+                style: AppTheme.cardTitle,
               ),
               const SizedBox(height: AppTheme.sm),
               for (final s in visible) ...[

@@ -8,6 +8,9 @@ import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 
+/// Match and session times in the chart's tooltips and session picker.
+final _sessionFmt = DateFormat('MMM d, h:mm a');
+
 /// Above this many plotted points, individual dots stop being useful (they
 /// overlap into a solid band) and cost more to paint than they convey.
 const int _kMaxDotPoints = 150;
@@ -41,8 +44,6 @@ class _RankedRpChartState extends State<RankedRpChart> {
   // -1 = all sessions in the current split/week.
   int _sessionIndex = -1;
 
-  static final _sessionFmt = DateFormat('MMM d, h:mm a');
-
   @override
   Widget build(BuildContext context) {
     final sessions = widget.sessions;
@@ -66,12 +67,7 @@ class _RankedRpChartState extends State<RankedRpChart> {
             children: [
               const Text(
                 'Ranked Point History',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.muted,
-                  fontSize: 12,
-                  letterSpacing: 0.5,
-                ),
+                style: AppTheme.cardTitle,
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -168,7 +164,7 @@ class _RankedRpChartState extends State<RankedRpChart> {
               return LineTooltipItem(
                 '${formatNumber(m.cumulativeRp)} RP  ($sign${m.rpChange})\n'
                 '${m.legend} · ${battleRoyaleMapName(m.mapKey)}\n'
-                '${DateFormat('MMM d, h:mm a').format(m.endTime.toLocal())}',
+                '${_sessionFmt.format(m.endTime.toLocal())}',
                 const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
               );
             }).toList(),

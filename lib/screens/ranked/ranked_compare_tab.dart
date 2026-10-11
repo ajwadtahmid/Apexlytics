@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/season_meta.dart';
 import '../../providers/ranked_provider.dart';
 import '../../utils/formatting/format.dart'
-    show formatNumber, formatSigned, formatSignedInt;
+    show formatAvgDamage, formatAvgKills, formatSigned, formatSignedInt, formatPercent;
 import '../../utils/error_messages.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
@@ -341,12 +341,7 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppTheme.sm),
       child: Text(
         text,
-        style: const TextStyle(
-          color: AppTheme.muted,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
+        style: AppTheme.cardTitle,
       ),
     );
   }
@@ -452,27 +447,30 @@ class _SummarySection extends StatelessWidget {
           ),
           _Row(
             'Win rate',
-            '${(a.summary.winRate * 100).toStringAsFixed(0)}%',
-            '${(b.summary.winRate * 100).toStringAsFixed(0)}%',
+            formatPercent(a.summary.winRate),
+            formatPercent(b.summary.winRate),
             delta: (b.summary.winRate - a.summary.winRate) * 100,
           ),
           _Row(
             'Avg Kills',
-            a.summary.avgKills.toStringAsFixed(1),
-            b.summary.avgKills.toStringAsFixed(1),
-            delta: b.summary.avgKills - a.summary.avgKills,
+            formatAvgKills(a.summary.avgKills),
+            formatAvgKills(b.summary.avgKills),
+            delta: _diff(a.summary.avgKills, b.summary.avgKills),
           ),
           _Row(
             'Avg Dmg',
-            formatNumber(a.summary.avgDamage.round()),
-            formatNumber(b.summary.avgDamage.round()),
-            delta: b.summary.avgDamage - a.summary.avgDamage,
+            formatAvgDamage(a.summary.avgDamage),
+            formatAvgDamage(b.summary.avgDamage),
+            delta: _diff(a.summary.avgDamage, b.summary.avgDamage),
           ),
         ],
       ),
     );
   }
 }
+
+/// [b] minus [a], or null when either side has no reading to compare.
+double? _diff(double? a, double? b) => a == null || b == null ? null : b - a;
 
 class _Row extends StatelessWidget {
   final String label;
@@ -532,7 +530,7 @@ class _Row extends StatelessWidget {
           if (d != null)
             Expanded(
               child: Text(
-                '${d >= 0 ? '+' : ''}${d.toStringAsFixed(1)}',
+                formatSigned(d),
                 textAlign: TextAlign.end,
                 style: TextStyle(
                   color: isGood! ? AppTheme.green : AppTheme.red,
@@ -595,12 +593,12 @@ class _PickRateList extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${(l.games / totalGames * 100).toStringAsFixed(0)}%',
+                    formatPercent(l.games / totalGames),
                     style: const TextStyle(color: AppTheme.muted, fontSize: 12),
                   ),
                   const SizedBox(width: AppTheme.sm),
                   Text(
-                    '${l.avgRpPerGame >= 0 ? '+' : ''}${l.avgRpPerGame.toStringAsFixed(1)} RP',
+                    '${formatSigned(l.avgRpPerGame)} RP',
                     style: TextStyle(
                       color: AppTheme.signColor(l.avgRpPerGame >= 0),
                       fontSize: 12,

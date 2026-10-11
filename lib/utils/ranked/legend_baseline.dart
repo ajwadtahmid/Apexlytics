@@ -1,3 +1,4 @@
+import '../../constants/legend_constants.dart';
 import '../../models/ranked_match.dart';
 
 /// Fewest qualifying games a legend needs before its average is shown as a
@@ -25,8 +26,14 @@ LegendBaseline? legendBaselineFor(RankedMatch match, Iterable<RankedMatch> pool)
   var killN = 0;
   var dmgSum = 0;
   var dmgN = 0;
+  // Canonical, like every aggregate: a spelling variant of the same legend
+  // ("bloodhound" / "Bloodhound") is the same pool.
+  final legend = canonicalLegendName(match.legend);
   for (final m in pool) {
-    if (m.legend != match.legend || m.isRanked != match.isRanked) continue;
+    if (canonicalLegendName(m.legend) != legend ||
+        m.isRanked != match.isRanked) {
+      continue;
+    }
     if (!m.countsTowardStats) continue;
     final k = m.kills;
     if (k != null) {

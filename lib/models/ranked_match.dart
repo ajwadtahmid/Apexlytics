@@ -139,8 +139,9 @@ class RankedMatch {
   final int lengthSecs; // gameLengthSecs
   final DateTime startTime; // gameStartTimestamp (UTC)
   final DateTime endTime; // gameEndTimestamp (UTC)
-  /// Upstream's own flag. Stored and backed up but not shown anywhere, as the
-  /// source doesn't report it reliably.
+  /// Upstream's own flag. Just stored (and backed up), for the record: nothing
+  /// reads it, because the source doesn't report it reliably. Don't build on
+  /// it without checking the data first.
   final bool isPartyFull;
 
   /// The match's `gameData` trackers. Only the detail sheet reads them, so a
@@ -193,6 +194,10 @@ class RankedMatch {
   /// History list (greyed out) so it can be found and un-excluded.
   final bool excluded;
 
+  /// A fresh match as upstream served it: no season yet, no hand edits, not
+  /// excluded. Stored or edited state (`seasonId`, `editedFields`, `excluded`)
+  /// only exists on a row read back from the database or a copy of one, which
+  /// go through the private constructor below.
   const RankedMatch({
     required this.uid,
     required this.playerName,
@@ -209,15 +214,15 @@ class RankedMatch {
     required List<MatchTracker> trackers,
     this.kills,
     this.damage,
-    this.seasonId,
-    this.editedFields = const {},
-    this.excluded = false,
     // The fields are private but `trackers:` must stay a public named
     // parameter, which an initializing formal can't provide.
     // ignore: prefer_initializing_formals
   }) : _trackers = trackers,
        _trackersJson = null,
-       _storedId = null;
+       _storedId = null,
+       seasonId = null,
+       editedFields = const {},
+       excluded = false;
 
   /// Shared by [fromStoredMap] and the copy methods below, so copying a
   /// stored match (e.g. to apply an edit) doesn't force its blob to decode.

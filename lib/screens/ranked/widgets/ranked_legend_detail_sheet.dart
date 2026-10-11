@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../constants/legend_constants.dart';
-import '../../../constants/map_constants.dart';
 import '../../../models/player_stats.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatDuration, formatSigned, formatSignedInt;
+    show
+        formatAvgDamage,
+        formatAvgKills,
+        formatNumber,
+        formatDuration,
+        formatSigned,
+        formatSignedInt,
+        formatTotalOrNone, plural;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/storage/legend_stats_storage.dart';
 import '../../../utils/theme.dart';
@@ -30,13 +36,7 @@ Future<void> showLegendDetailSheet(
 ) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppTheme.surface,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(
-        top: Radius.circular(AppTheme.radiusLg),
-      ),
-    ),
     builder: (_) => _LegendDetailSheet(
       breakdown: breakdown,
       matchesFor: matchesFor,
@@ -90,15 +90,12 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
         builder: (_) => RankedEntityHistoryScreen(
           title: breakdown.legend,
           subtitle:
-              '${breakdown.games} ranked games · '
+              '${plural(breakdown.games, 'ranked game')} · '
               '${formatSigned(breakdown.avgRpPerGame)} RP/game',
           matches: games,
           onRefresh: onRefresh,
           groupLabel: 'map',
-          grouping: MatchGrouping(
-            keyOf: (m) => m.mapKey,
-            nameOf: (m) => battleRoyaleMapName(m.mapKey),
-          ),
+          grouping: MatchGrouping.byMap,
         ),
       ),
     );
@@ -199,13 +196,19 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
                     ),
                     StatTableRow(
                       label: 'Kills',
-                      avg: breakdown.avgKills.toStringAsFixed(1),
-                      total: formatNumber(breakdown.totalKills),
+                      avg: formatAvgKills(breakdown.avgKills),
+                      total: formatTotalOrNone(
+                        breakdown.totalKills,
+                        breakdown.killsGames,
+                      ),
                     ),
                     StatTableRow(
                       label: 'Damage',
-                      avg: formatNumber(breakdown.avgDamage.round()),
-                      total: formatNumber(breakdown.totalDamage),
+                      avg: formatAvgDamage(breakdown.avgDamage),
+                      total: formatTotalOrNone(
+                        breakdown.totalDamage,
+                        breakdown.damageGames,
+                      ),
                     ),
                     StatTableRow(
                       label: 'Time',

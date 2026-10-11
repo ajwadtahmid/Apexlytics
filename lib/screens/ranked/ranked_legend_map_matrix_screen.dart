@@ -3,6 +3,7 @@ import '../../models/ranked_match.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
+import '../../utils/formatting/format.dart' show formatSigned;
 
 /// Self-contained entry point for the Legend × Map matrix: a single tappable
 /// row that pushes the full-screen breakdown. The only thing a caller needs to
@@ -232,7 +233,7 @@ class _ValueCell extends StatelessWidget {
               ),
             ),
             Text(
-              '${positive ? '+' : ''}${c.avgRpPerGame.toStringAsFixed(1)}',
+              formatSigned(c.avgRpPerGame),
               textAlign: TextAlign.center,
               style: TextStyle(color: color, fontSize: 11),
             ),

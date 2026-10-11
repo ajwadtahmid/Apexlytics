@@ -4,6 +4,7 @@ import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/legend_asset_image.dart';
 import '../../widgets/surface_card.dart';
+import '../../utils/formatting/format.dart' show plural, formatSigned, formatPercent;
 
 /// Self-contained entry point for the Pick Rate chart: a single tappable row
 /// that pushes the full-screen scatter plot. The only thing a caller needs to
@@ -76,8 +77,22 @@ extension on _Quadrant {
   };
 }
 
-/// High pick rate (at/above an even split across the legends shown, i.e.
-/// 1/count) crossed with RP at/above [rpBaseline]. An even-share pick-rate
+/// The pick rate that counts as "high": what each legend in the pool would have
+/// if the pool's games were split evenly.
+///
+/// Pick rates are shares of *all* games ([totalGames]), so the line is the
+/// pool's share divided by [poolSize], not 1/[poolSize] (which would sit above
+/// every rate once a hidden legend took some games). One division, so a legend
+/// at exactly the even share compares equal.
+@visibleForTesting
+double equalSharePickRate({
+  required int poolGames,
+  required int totalGames,
+  required int poolSize,
+}) => poolGames / (totalGames * poolSize);
+
+/// High pick rate (at/above [equalSharePickRate]) crossed with RP at/above
+/// [rpBaseline]. An even-share pick-rate
 /// baseline means legends played roughly equally sit together near the line
 /// instead of being torn apart by rank order the way a sample median would —
 /// a median always cuts the pool in half regardless of how close together the
@@ -165,13 +180,7 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
   void _showCustomizeSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppTheme.surface,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppTheme.radiusLg),
-        ),
-      ),
       builder: (_) => _CustomizeSheet(
         showAll: _showAll,
         useOwnAverage: _useOwnAverageBaseline,
@@ -188,7 +197,11 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
 
   Widget _buildBody(List<LegendBreakdown> pool, int total) {
     final pickRateOf = {for (final l in pool) l.legend: l.games / total};
-    final equalShareRate = 1 / pool.length;
+    final equalShareRate = equalSharePickRate(
+      poolGames: pool.fold(0, (sum, l) => sum + l.games),
+      totalGames: total,
+      poolSize: pool.length,
+    );
     final rpBaseline = _useOwnAverageBaseline
         ? widget.summary.avgRpPerGame
         : 0.0;
@@ -362,8 +375,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
               title: 'What counts as "good"',
               subtitle: _useOwnAverage
                   ? 'Comparing against your average this scope '
-                        '(${widget.ownAverage >= 0 ? '+' : ''}'
-                        '${widget.ownAverage.toStringAsFixed(1)} RP/game)'
+                        '(${formatSigned(widget.ownAverage)} RP/game)'
                   : 'Comparing against 0 RP/game — turn on to compare '
                         "against your own average instead, so a rough split "
                         "doesn't paint every legend as a comfort trap",
@@ -517,16 +529,16 @@ class _SelectedDetail extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${(rate * 100).toStringAsFixed(1)}% pick rate · '
-                  '${(l.winRate * 100).toStringAsFixed(0)}% win rate · '
-                  '${l.games} games',
+                  '${formatPercent(rate, decimals: 1)} pick rate · '
+                  '${formatPercent(l.winRate)} win rate · '
+                  '${plural(l.games, 'game')}',
                   style: const TextStyle(color: AppTheme.muted, fontSize: 12),
                 ),
               ],
             ),
           ),
           Text(
-            '${positive ? '+' : ''}${l.avgRpPerGame.toStringAsFixed(1)} RP/game',
+            '${formatSigned(l.avgRpPerGame)} RP/game',
             style: TextStyle(
               color: AppTheme.signColor(positive),
               fontWeight: FontWeight.bold,
@@ -655,21 +667,21 @@ class _LegendStatsRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              '${(pickRate * 100).toStringAsFixed(0)}%',
+              formatPercent(pickRate),
               textAlign: TextAlign.end,
               style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
             ),
           ),
           Expanded(
             child: Text(
-              '${(legend.winRate * 100).toStringAsFixed(0)}%',
+              formatPercent(legend.winRate),
               textAlign: TextAlign.end,
               style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
             ),
           ),
           Expanded(
             child: Text(
-              '${positive ? '+' : ''}${legend.avgRpPerGame.toStringAsFixed(1)}',
+              formatSigned(legend.avgRpPerGame),
               textAlign: TextAlign.end,
               style: TextStyle(
                 color: AppTheme.signColor(positive),

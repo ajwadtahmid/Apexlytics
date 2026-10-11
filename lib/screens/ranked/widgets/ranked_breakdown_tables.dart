@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
-import '../../../utils/formatting/format.dart' show formatNumber;
+import '../../../utils/formatting/format.dart'
+    show formatAvgDamage, formatAvgKills, formatTotalOrNone, formatSigned;
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -35,7 +36,6 @@ _Sort _nextSort(_Sort s) => switch (s) {
   _Sort.avgRp => _Sort.totalRp,
 };
 
-String _signedAvg(double v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(1)}';
 
 // ── Legends tab ─────────────────────────────────────────────────────────────
 
@@ -178,11 +178,14 @@ class _LegendCard extends StatelessWidget {
                       child: _chipRow([
                         _chip(
                           'Avg RP',
-                          _signedAvg(row.avgRpPerGame),
+                          formatSigned(row.avgRpPerGame),
                           valueColor: AppTheme.signColor(row.avgRpPerGame >= 0),
                         ),
-                        _chip('Avg Dmg', formatNumber(row.avgDamage.round())),
-                        _chip('Total Dmg', formatNumber(row.totalDamage)),
+                        _chip('Avg Dmg', formatAvgDamage(row.avgDamage)),
+                        _chip(
+                          'Total Dmg',
+                          formatTotalOrNone(row.totalDamage, row.damageGames),
+                        ),
                       ]),
                     ),
                     const SizedBox(height: AppTheme.sm),
@@ -196,8 +199,11 @@ class _LegendCard extends StatelessWidget {
                           compact: true,
                           centered: true,
                         ),
-                        _chip('Avg Kills', row.avgKills.toStringAsFixed(1)),
-                        _chip('Total Kills', formatNumber(row.totalKills)),
+                        _chip('Avg Kills', formatAvgKills(row.avgKills)),
+                        _chip(
+                          'Total Kills',
+                          formatTotalOrNone(row.totalKills, row.killsGames),
+                        ),
                       ]),
                     ),
                   ],
@@ -246,8 +252,6 @@ class _LegendCard extends StatelessWidget {
   );
 }
 
-/// Up to 3 short lines (RP/Kills/Damage) under a legend/map card's chip row,
-/// leading with the size of the move rather than restating the current
 // ── Maps tab ────────────────────────────────────────────────────────────────
 
 class RankedMapBreakdown extends StatefulWidget {
@@ -333,7 +337,10 @@ class _MapCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       clip: Clip.antiAlias,
       onTap: onTap,
-      child: SizedBox(height: 152, child: _mapArt(context, asset, rpColor)),
+      child: SizedBox(
+        height: AppTheme.scaledWithText(context, 152),
+        child: _mapArt(context, asset, rpColor),
+      ),
     );
   }
 
@@ -396,20 +403,23 @@ class _MapCard extends StatelessWidget {
                         Expanded(
                           child: _MapStat(
                             label: 'Avg RP',
-                            value: _signedAvg(row.avgRpPerGame),
+                            value: formatSigned(row.avgRpPerGame),
                             color: rpColor,
                           ),
                         ),
                         Expanded(
                           child: _MapStat(
                             label: 'Avg Dmg',
-                            value: formatNumber(row.avgDamage.round()),
+                            value: formatAvgDamage(row.avgDamage),
                           ),
                         ),
                         Expanded(
                           child: _MapStat(
                             label: 'Total Dmg',
-                            value: formatNumber(row.totalDamage),
+                            value: formatTotalOrNone(
+                              row.totalDamage,
+                              row.damageGames,
+                            ),
                           ),
                         ),
                       ],
@@ -429,13 +439,16 @@ class _MapCard extends StatelessWidget {
                         Expanded(
                           child: _MapStat(
                             label: 'Avg Kills',
-                            value: row.avgKills.toStringAsFixed(1),
+                            value: formatAvgKills(row.avgKills),
                           ),
                         ),
                         Expanded(
                           child: _MapStat(
                             label: 'Total Kills',
-                            value: formatNumber(row.totalKills),
+                            value: formatTotalOrNone(
+                              row.totalKills,
+                              row.killsGames,
+                            ),
                           ),
                         ),
                       ],
@@ -534,7 +547,7 @@ class _SortBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: AppTheme.surface2,
-              borderRadius: BorderRadius.circular(100),
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

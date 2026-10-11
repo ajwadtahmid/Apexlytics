@@ -115,8 +115,12 @@ String? battleRoyaleMapAsset(String mapKey) =>
 /// This is what [mapBreakdowns] groups by, mirroring the canonicalization
 /// [legendMapBreakdowns] already applies — a raw-key grouping would split one
 /// map into several identically-labelled rows.
-String canonicalMapKey(String mapKey) =>
-    battleRoyaleMapInfo(mapKey)?.name ?? _baseKey(mapKey);
+///
+/// A blank key and `UNKNOWN` are the same (see [isUnknownMapKey]) and share one
+/// key, so they land in one "Unknown" row rather than two.
+String canonicalMapKey(String mapKey) => isUnknownMapKey(mapKey)
+    ? _baseKey('UNKNOWN')
+    : battleRoyaleMapInfo(mapKey)?.name ?? _baseKey(mapKey);
 
 /// Every raw `map_key` spelling that shares [mapKey]'s [canonicalMapKey],
 /// including a `_rotation`-suffixed form. SQL can't canonicalize on read the

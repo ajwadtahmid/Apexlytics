@@ -5,8 +5,9 @@ import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/history_collapse_provider.dart';
 import '../../../utils/formatting/format.dart'
-    show calendarDaysBetween, formatNumber, timeAgo, formatDuration;
+    show calendarDaysBetween, formatNumber, timeAgo, formatDuration, plural, formatSigned;
 import '../../../utils/theme.dart';
+import '../../../widgets/rp_pill.dart';
 import '../../../widgets/legend_asset_image.dart';
 import 'match_detail_sheet.dart';
 import 'match_history_items.dart';
@@ -347,8 +348,6 @@ class _DayTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final positive = item.netRp >= 0;
-    final color = AppTheme.signColor(positive);
     final played = item.playSecs > 0
         ? ' · ${formatDuration(item.playSecs)}'
         : '';
@@ -372,7 +371,7 @@ class _DayTitle extends StatelessWidget {
               children: [
                 AnimatedRotation(
                   turns: collapsed ? -0.25 : 0,
-                  duration: const Duration(milliseconds: 150),
+                  duration: AppTheme.chipAnimation,
                   child: const Icon(
                     Icons.expand_more,
                     size: 18,
@@ -391,7 +390,7 @@ class _DayTitle extends StatelessWidget {
                 const SizedBox(width: AppTheme.sm),
                 Expanded(
                   child: Text(
-                    '${item.games} games$played',
+                    '${plural(item.games, 'game')}$played',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -400,25 +399,7 @@ class _DayTitle extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (item.hasRanked)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withAlpha(30),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    ),
-                    child: Text(
-                      '${positive ? '+' : ''}${formatNumber(item.netRp)} RP',
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                if (item.hasRanked) RpPill(totalRp: item.netRp, compact: true),
               ],
             ),
           ),
@@ -487,7 +468,7 @@ class _DayStats extends StatelessWidget {
             _stat(
               'Avg RP',
               TextSpan(
-                text: '${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(1)}',
+                text: formatSigned(avg),
                 style: _value,
               ),
             ),
@@ -527,8 +508,6 @@ class _GroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final positive = item.netRp >= 0;
-    final color = AppTheme.signColor(positive);
     final avg = item.games == 0 ? 0.0 : item.netRp / item.games;
     return Column(
       children: [
@@ -558,7 +537,7 @@ class _GroupHeader extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      '${item.games} games · ${avg >= 0 ? '+' : ''}${avg.toStringAsFixed(1)} avg',
+                      '${plural(item.games, 'game')} · ${formatSigned(avg)} avg',
                       style: const TextStyle(
                         color: AppTheme.muted,
                         fontSize: 12,
@@ -568,21 +547,7 @@ class _GroupHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppTheme.sm),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(30),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                ),
-                child: Text(
-                  '${positive ? '+' : ''}${formatNumber(item.netRp)} RP',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              RpPill(totalRp: item.netRp),
             ],
           ),
         ),
@@ -636,8 +601,6 @@ class _MatchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ranked = match.isRanked;
-    final up = match.rpChange >= 0;
-    final rpColor = AppTheme.signColor(up);
     final notes = matchTagNotes(match);
 
     final tagRow = Row(
@@ -648,21 +611,7 @@ class _MatchRow extends StatelessWidget {
           const SizedBox(width: 4),
         ],
         if (ranked)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: rpColor.withAlpha(30),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            ),
-            child: Text(
-              '${up ? '+' : ''}${match.rpChange} RP',
-              style: TextStyle(
-                color: rpColor,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          )
+          RpPill(totalRp: match.rpChange, compact: true)
         else
           const CasualTag(),
       ],

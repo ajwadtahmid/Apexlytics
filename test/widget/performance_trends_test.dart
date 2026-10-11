@@ -3,18 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/screens/ranked/ranked_time_breakdown_screen.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 
+int _allTracked(int i) => 2;
+
 void main() {
   // Newest first, like sessionize(). Early sessions lose RP, recent ones gain.
   final base = DateTime(2026, 9, 1, 20);
-  List<RankedSession> sessions(List<int> netRpOldestFirst) => [
+  // Each session has 2 games. [tracked] is how many of them (by oldest-first
+  // index) reported kills/damage, at 1 kill and 200 damage per reported game.
+  List<RankedSession> sessions(
+    List<int> netRpOldestFirst, {
+    int Function(int i) tracked = _allTracked,
+  }) => [
     for (var i = netRpOldestFirst.length - 1; i >= 0; i--)
       RankedSession(
         start: base.add(Duration(days: i)),
         end: base.add(Duration(days: i, hours: 1)),
         games: 2,
         netRp: netRpOldestFirst[i],
-        totalKills: 2,
-        totalDamage: 400,
+        totalKills: tracked(i),
+        totalDamage: 200 * tracked(i),
+        killsGames: tracked(i),
+        damageGames: tracked(i),
         matches: const [],
       ),
   ];
@@ -105,6 +114,68 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('averages kills and damage over the games that reported them', (
+    tester,
+  ) async {
+    // Same 1 kill / 200 damage per reported game throughout, but only one of
+    // the two games reported in the older sessions. Dividing by every game
+    // would show that as a doubling.
+    await pump(
+      tester,
+      sessions(List.filled(10, 10), tracked: (i) => i < 5 ? 1 : 2),
+    );
+    expect(find.textContaining('Improving', findRichText: true), findsNothing);
+    expect(
+      find.textContaining('Steady: about the same', findRichText: true),
+      findsNWidgets(3),
+    );
+  });
+
+  testWidgets('does not invent a trend when a window has no kills or damage', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      sessions(List.filled(10, 10), tracked: (i) => i < 5 ? 0 : 2),
+    );
+    expect(
+      find.textContaining('Not enough games with kills reported'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Not enough games with damage reported'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Play at least 10 sessions'), findsNothing);
+    expect(find.textContaining('Improving', findRichText: true), findsNothing);
+  });
+
+  testWidgets('the headers fit a narrow screen with larger text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(320, 3000),
+            textScaler: TextScaler.linear(1.3),
+          ),
+          child: RankedTimeBreakdownScreen(
+            hourBuckets: const [],
+            weekdayBuckets: const [],
+            sessions: sessions([for (var i = 0; i < 10; i++) 10]),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('RECENT TREND'), findsOneWidget);
   });
 
   testWidgets('says when a declining RP trend is still a gain', (tester) async {
