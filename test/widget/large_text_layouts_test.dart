@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/models/server_status.dart';
+import 'package:apexlytics/providers/proxy_health_provider.dart';
 import 'package:apexlytics/screens/home/server_status_page.dart';
+import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_highlight_cards.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_rp_chart.dart';
@@ -55,6 +57,12 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          // Nothing leaves the test.
+          proxyCheckerProvider.overrideWithValue(
+            (_) async => (state: ProxyState.online, latency: Duration.zero),
+          ),
+        ],
         child: MaterialApp(
           builder: (context, app) => MediaQuery(
             data: MediaQuery.of(
