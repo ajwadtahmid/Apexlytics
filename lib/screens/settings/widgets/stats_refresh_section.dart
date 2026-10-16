@@ -126,6 +126,7 @@ class StatsRefreshSection extends ConsumerWidget {
                   ),
                 ],
               ),
+              const LowPowerWarning(),
             ],
           ),
         ),

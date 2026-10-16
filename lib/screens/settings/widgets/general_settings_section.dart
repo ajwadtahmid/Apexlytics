@@ -78,10 +78,7 @@ class _PlayerInfoContent extends ConsumerWidget {
                     ),
                     Text(
                       ApiConstants.labelFor(platform),
-                      style: const TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 12,
-                      ),
+                      style: AppTheme.caption,
                     ),
                   ],
                 ),
@@ -106,7 +103,7 @@ class _PlayerInfoContent extends ConsumerWidget {
             children: [
               const Text(
                 'UID',
-                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: AppTheme.caption,
               ),
               const SizedBox(width: AppTheme.sm),
               Expanded(

@@ -19,6 +19,8 @@ export 'profile_manager_sheet.dart';
 export 'ranked_info_card.dart';
 export 'server_summary_card.dart';
 export 'setting_row.dart';
+export 'low_power_warning.dart';
+export 'sheet_handle.dart';
 export 'shimmer.dart';
 export 'stale_banner.dart';
 export 'status_dot.dart';

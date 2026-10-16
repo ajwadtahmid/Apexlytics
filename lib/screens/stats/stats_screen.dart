@@ -327,29 +327,41 @@ class _StatsViewState extends ConsumerState<_StatsView> {
         // keeps them reading as one header surface either way.
         bottom: shell != null ? _AppBarBottom(shell: shell) : null,
       ),
-      body: statsAsync.when(
-        data: (result) {
-          final stats = result.data;
-          if (stats == null) {
-            return const Center(
-              child: Text('No data.', style: TextStyle(color: AppTheme.muted)),
-            );
-          }
-          return _StatsBody(
-            stats: stats,
-            staleAt: result.staleAt,
-            platform: platform,
-            onRefresh: _sync,
-          );
-        },
-        loading: () => const _StatsSkeleton(),
-        error: (e, _) => ErrorCard(
-          fullScreen: true,
-          iconColor: AppTheme.red,
-          iconSize: 48,
-          message: friendlyError(e),
-          onRetry: () => ref.invalidate(myPlayerStatsProvider),
-        ),
+      body: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppTheme.md),
+            child: LowPowerWarning(dismissible: true),
+          ),
+          Expanded(
+            child: statsAsync.when(
+              data: (result) {
+                final stats = result.data;
+                if (stats == null) {
+                  return const Center(
+                    child: Text(
+                      'No data.',
+                      style: TextStyle(color: AppTheme.muted),
+                    ),
+                  );
+                }
+                return _StatsBody(
+                  stats: stats,
+                  staleAt: result.staleAt,
+                  onRefresh: _sync,
+                );
+              },
+              loading: () => const _StatsSkeleton(),
+              error: (e, _) => ErrorCard(
+                fullScreen: true,
+                iconColor: AppTheme.red,
+                iconSize: 48,
+                message: friendlyError(e),
+                onRetry: () => ref.invalidate(myPlayerStatsProvider),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -383,12 +395,10 @@ class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
 class _StatsBody extends ConsumerStatefulWidget {
   final PlayerStats stats;
   final DateTime? staleAt;
-  final String platform;
   final Future<void> Function() onRefresh;
 
   const _StatsBody({
     required this.stats,
-    required this.platform,
     required this.onRefresh,
     this.staleAt,
   });
