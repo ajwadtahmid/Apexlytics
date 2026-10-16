@@ -304,6 +304,16 @@ class _StatsViewState extends ConsumerState<_StatsView> {
             tooltip: 'How ranked tracking works',
             onPressed: () => showRankedInfoSheet(context),
           ),
+          if (refreshAll.running && refreshAll.total > 1)
+            Center(
+              child: Text(
+                // `done` counts finished profiles; the one in flight is next.
+                'Refreshing '
+                '${(refreshAll.done + 1).clamp(1, refreshAll.total)}'
+                '/${refreshAll.total}',
+                style: AppTheme.caption,
+              ),
+            ),
           isSyncing
               ? const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 12),
@@ -325,7 +335,12 @@ class _StatsViewState extends ConsumerState<_StatsView> {
         // Split + week selection get their own row so they don't compete with
         // the actions above for space — riding in the AppBar's bottom slot
         // keeps them reading as one header surface either way.
-        bottom: shell != null ? _AppBarBottom(shell: shell) : null,
+        bottom: shell != null
+            ? _AppBarBottom(
+                shell: shell,
+                rowHeight: AppTheme.scaledWithText(context, 40),
+              )
+            : null,
       ),
       body: Column(
         children: [
@@ -371,11 +386,14 @@ class _StatsViewState extends ConsumerState<_StatsView> {
 /// slot. Only the split row is shown when the split has no week metadata.
 class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
   final RankedView shell;
-  const _AppBarBottom({required this.shell});
+
+  /// Height of each row; grows with the text size, which the AppBar can't see.
+  final double rowHeight;
+  const _AppBarBottom({required this.shell, required this.rowHeight});
 
   @override
   Size get preferredSize =>
-      Size.fromHeight(40 + (shell.weeks.isNotEmpty ? 40 : 0));
+      Size.fromHeight(rowHeight * (shell.weeks.isNotEmpty ? 2 : 1));
 
   @override
   Widget build(BuildContext context) {
@@ -383,10 +401,14 @@ class _AppBarBottom extends StatelessWidget implements PreferredSizeWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: 40,
+          height: rowHeight,
           child: Center(child: RankedSplitDropdown(view: shell)),
         ),
-        if (shell.weeks.isNotEmpty) RankedWeekStrip(view: shell),
+        if (shell.weeks.isNotEmpty)
+          SizedBox(
+            height: rowHeight,
+            child: RankedWeekStrip(view: shell),
+          ),
       ],
     );
   }

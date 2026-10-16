@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/utils/ranked/ranked_period.dart';
+import '../../helpers.dart';
 
 void main() {
   // Split A (older): [1.0M, 2.0M).  Split B (newer): [2.0M, 3.0M).
@@ -21,21 +22,8 @@ void main() {
   // A plain match — the split picker now comes from counts, and
   // resolveRankedView takes matches already scoped to one split, so only
   // isRanked (rp != 0) and endTime (for week slicing) matter here.
-  RankedMatch m(int startSecs, {int rp = 10}) => RankedMatch.fromJson({
-    'uid': '1',
-    'name': 'T',
-    'legendPlayed': 'Axle',
-    'gameMode': 'BATTLE_ROYALE',
-    'gameLengthSecs': 600,
-    'gameStartTimestamp': startSecs,
-    'gameEndTimestamp': startSecs + 600,
-    'gameData': [
-      {'key': 'kills', 'value': 1, 'name': 'BR Kills'},
-    ],
-    'BRScoreChange': rp,
-    'BRScore': 1000,
-    'map': 'olympus_rotation',
-  });
+  RankedMatch m(int startSecs, {int rp = 10}) =>
+      buildMatch(start: startSecs, rp: rp, kills: 1);
 
   group('buildSplitBuckets', () {
     test('Lifetime first, newest split next, Unknown last', () {

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/season_meta.dart';
 import '../../providers/ranked_provider.dart';
 import '../../utils/formatting/format.dart'
-    show formatAvgDamage, formatAvgKills, formatSigned, formatSignedInt, formatPercent;
+    show formatAvgDamage, formatAvgKills, formatPercent, formatSigned, formatSignedInt, kNoReading;
 import '../../utils/error_messages.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
@@ -26,8 +26,8 @@ import 'widgets/ranked_time_of_day_chart.dart';
 ///
 /// Net RP is the only cross-split RP figure ever shown. A split's *current*
 /// RP is never compared against another split's, because the ladder resets
-/// between splits — diffing two absolute RP values across that boundary is
-/// exactly the bug class documented in `extra/WEEKLY_RP_FIX_REPORT.md`.
+/// between splits, so a diff of two absolute RP values across that boundary
+/// means nothing.
 class RankedCompareTab extends ConsumerStatefulWidget {
   final String uid;
   final List<RankedSplitBucket> splits;
@@ -67,7 +67,7 @@ class _RankedCompareTabState extends ConsumerState<RankedCompareTab> {
           child: Text(
             'Need at least two splits with recorded history to compare.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.muted, fontSize: 13),
+            style: AppTheme.captionLarge,
           ),
         ),
       );
@@ -129,7 +129,7 @@ class _SplitPicker extends StatelessWidget {
             padding: EdgeInsets.only(bottom: 10),
             child: Text(
               'vs',
-              style: TextStyle(color: AppTheme.muted, fontSize: 13),
+              style: AppTheme.captionLarge,
             ),
           ),
         ),
@@ -165,7 +165,7 @@ class _LabeledDropdown extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 4, left: 2),
+          padding: const EdgeInsets.only(bottom: AppTheme.xs, left: 2),
           child: Text(
             label.toUpperCase(),
             style: const TextStyle(
@@ -354,7 +354,7 @@ class _SplitLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: AppTheme.xs),
       child: Text(
         text,
         style: const TextStyle(
@@ -412,14 +412,15 @@ class _SummarySection extends StatelessWidget {
             '${a.summary.games}',
             '${b.summary.games}',
             delta: (b.summary.games - a.summary.games).toDouble(),
+            integerDelta: true,
             // Needing more games for a comparable result reads as worse, not
             // better, so this is the one row where "more" colors red.
             invert: true,
           ),
           _Row(
             'Games/day',
-            gamesPerDayA == null ? '—' : gamesPerDayA.toStringAsFixed(1),
-            gamesPerDayB == null ? '—' : gamesPerDayB.toStringAsFixed(1),
+            gamesPerDayA == null ? kNoReading : gamesPerDayA.toStringAsFixed(1),
+            gamesPerDayB == null ? kNoReading : gamesPerDayB.toStringAsFixed(1),
             delta: (gamesPerDayA != null && gamesPerDayB != null)
                 ? gamesPerDayB - gamesPerDayA
                 : null,
@@ -430,11 +431,12 @@ class _SummarySection extends StatelessWidget {
             formatSignedInt(a.summary.netRp),
             formatSignedInt(b.summary.netRp),
             delta: (b.summary.netRp - a.summary.netRp).toDouble(),
+            integerDelta: true,
           ),
           _Row(
             'RP/day',
-            rpPerDayA == null ? '—' : formatSigned(rpPerDayA),
-            rpPerDayB == null ? '—' : formatSigned(rpPerDayB),
+            rpPerDayA == null ? kNoReading : formatSigned(rpPerDayA),
+            rpPerDayB == null ? kNoReading : formatSigned(rpPerDayB),
             delta: (rpPerDayA != null && rpPerDayB != null)
                 ? rpPerDayB - rpPerDayA
                 : null,
@@ -478,6 +480,9 @@ class _Row extends StatelessWidget {
   final String valueB;
   final double? delta;
 
+  /// True when the delta is a whole count, shown without a decimal.
+  final bool integerDelta;
+
   /// True for metrics where a higher value is worse (e.g. needing more games
   /// for the same result), so the delta's color reads opposite of the sign.
   final bool invert;
@@ -487,6 +492,7 @@ class _Row extends StatelessWidget {
     this.valueA,
     this.valueB, {
     this.delta,
+    this.integerDelta = false,
     this.invert = false,
   });
 
@@ -502,7 +508,7 @@ class _Row extends StatelessWidget {
             flex: 2,
             child: Text(
               label,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              style: AppTheme.caption,
             ),
           ),
           Expanded(
@@ -530,7 +536,7 @@ class _Row extends StatelessWidget {
           if (d != null)
             Expanded(
               child: Text(
-                formatSigned(d),
+                integerDelta ? formatSignedInt(d.round()) : formatSigned(d),
                 textAlign: TextAlign.end,
                 style: TextStyle(
                   color: isGood! ? AppTheme.green : AppTheme.red,
@@ -561,7 +567,7 @@ class _PickRateList extends StatelessWidget {
         padding: EdgeInsets.symmetric(vertical: AppTheme.sm),
         child: Text(
           'No games',
-          style: TextStyle(color: AppTheme.muted, fontSize: 12),
+          style: AppTheme.caption,
         ),
       );
     }
@@ -577,7 +583,7 @@ class _PickRateList extends StatelessWidget {
         children: [
           for (final l in shown)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.symmetric(vertical: AppTheme.xs),
               child: Row(
                 children: [
                   LegendIcon(legendName: l.legend, size: 14),
@@ -594,7 +600,7 @@ class _PickRateList extends StatelessWidget {
                   ),
                   Text(
                     formatPercent(l.games / totalGames),
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    style: AppTheme.caption,
                   ),
                   const SizedBox(width: AppTheme.sm),
                   Text(

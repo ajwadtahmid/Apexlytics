@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
-import '../../widgets/surface_card.dart';
 import 'ranked_sessions_screen.dart';
+import '../../widgets/nav_entry_card.dart';
 
 /// How many sessions are visible initially, and how many each "Load more"
 /// tap adds.
@@ -28,11 +28,10 @@ class RankedSessionsEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     if (sessions.isEmpty) return const SizedBox.shrink();
 
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: () => Navigator.of(context).push(
+    return NavEntryCard(
+      icon: Icons.timeline,
+      title: 'Sessions',
+      onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => RankedSessionsListScreen(
               sessions: sessions,
@@ -40,27 +39,6 @@ class RankedSessionsEntry extends StatelessWidget {
             ),
           ),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(AppTheme.md),
-          child: Row(
-            children: [
-              Icon(Icons.timeline, size: 18, color: AppTheme.accent),
-              SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Text(
-                  'Sessions',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.muted),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

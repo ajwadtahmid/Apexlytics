@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../models/player_stats.dart';
 import '../../utils/theme.dart';
 import '../../widgets/player_stats_tabs.dart';
-import '../../widgets/surface_card.dart';
 import '../../widgets/tracker_info_sheet.dart';
+import '../../widgets/nav_entry_card.dart';
 
 /// Entry point for the full Legends/Guns tracker breakdown — out of the main
 /// Overview list, same pattern as the other Ranked drill-downs, so it doesn't
@@ -20,11 +20,10 @@ class RankedAllTrackersEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: () => Navigator.of(context).push(
+    return NavEntryCard(
+      icon: Icons.bar_chart_outlined,
+      title: 'All Trackers',
+      onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => RankedAllTrackersScreen(
               legendStats: legendStats,
@@ -32,27 +31,6 @@ class RankedAllTrackersEntry extends StatelessWidget {
             ),
           ),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(AppTheme.md),
-          child: Row(
-            children: [
-              Icon(Icons.bar_chart_outlined, size: 18, color: AppTheme.accent),
-              SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Text(
-                  'All Trackers',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.muted),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

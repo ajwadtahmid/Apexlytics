@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../utils/formatting/format.dart' show formatNumber, formatSigned;
+import '../utils/formatting/format.dart' show formatSigned, formatSignedInt;
 import '../utils/theme.dart';
 
 /// RP gained/lost pill — a tinted (not solid) background so it reads as a
@@ -27,12 +27,12 @@ class RpPill extends StatelessWidget {
     final positive = avg != null ? avg >= 0 : totalRp! >= 0;
     final text = avg != null
         ? '${formatSigned(avg)} /game'
-        : '${positive ? '+' : ''}${formatNumber(totalRp!)} RP';
+        : '${formatSignedInt(totalRp!)} RP';
     final color = AppTheme.signColor(positive);
     return Container(
       padding: compact
-          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 2)
-          : const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          ? const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: 2)
+          : const EdgeInsets.symmetric(horizontal: 9, vertical: AppTheme.xs),
       decoration: BoxDecoration(
         color: color.withAlpha(30),
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),

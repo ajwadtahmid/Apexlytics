@@ -5,6 +5,7 @@ import '../../utils/theme.dart';
 import '../../widgets/legend_asset_image.dart';
 import '../../widgets/surface_card.dart';
 import '../../utils/formatting/format.dart' show plural, formatSigned, formatPercent;
+import '../../widgets/nav_entry_card.dart';
 
 /// Self-contained entry point for the Pick Rate chart: a single tappable row
 /// that pushes the full-screen scatter plot. The only thing a caller needs to
@@ -20,41 +21,15 @@ class RankedPickRateEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: () => Navigator.of(context).push(
+    return NavEntryCard(
+      icon: Icons.bubble_chart_outlined,
+      title: 'Pick Rate',
+      onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) =>
                 RankedPickRateScreen(summary: summary, legends: legends),
           ),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(AppTheme.md),
-          child: Row(
-            children: [
-              Icon(
-                Icons.bubble_chart_outlined,
-                size: 18,
-                color: AppTheme.accent,
-              ),
-              SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Text(
-                  'Pick Rate',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.muted),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -425,7 +400,7 @@ class _OptionRow extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 subtitle,
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: AppTheme.caption,
               ),
             ],
           ),
@@ -470,7 +445,7 @@ class _KeyChip extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           quadrant.label,
-          style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+          style: AppTheme.captionSmall,
         ),
       ],
     );
@@ -491,7 +466,7 @@ class _SelectedDetail extends StatelessWidget {
         child: Center(
           child: Text(
             'Tap a legend to see details',
-            style: TextStyle(color: AppTheme.muted, fontSize: 13),
+            style: AppTheme.captionLarge,
           ),
         ),
       );
@@ -532,7 +507,7 @@ class _SelectedDetail extends StatelessWidget {
                   '${formatPercent(rate, decimals: 1)} pick rate · '
                   '${formatPercent(l.winRate)} win rate · '
                   '${plural(l.games, 'game')}',
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                  style: AppTheme.caption,
                 ),
               ],
             ),
@@ -643,7 +618,7 @@ class _LegendStatsRow extends StatelessWidget {
     final pickRate = totalGames == 0 ? 0.0 : legend.games / totalGames;
     final positive = legend.avgRpPerGame >= 0;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
       child: Row(
         children: [
           Expanded(
@@ -712,7 +687,7 @@ class _EmptyState extends StatelessWidget {
             const Text(
               'Not enough ranked games yet to show a pick rate chart.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.muted, fontSize: 13),
+              style: AppTheme.captionLarge,
             ),
             if (!showingAll) ...[
               const SizedBox(height: AppTheme.sm),

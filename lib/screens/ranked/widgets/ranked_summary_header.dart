@@ -4,7 +4,7 @@ import '../../../constants/rank_constants.dart';
 import '../../../providers/predator_provider.dart';
 import '../../../providers/rank_goal_provider.dart';
 import '../../../providers/settings_provider.dart';
-import '../../../utils/formatting/format.dart' show formatNumber, formatSigned, plural;
+import '../../../utils/formatting/format.dart' show formatNumber, formatSigned, formatSignedInt, kNoReading, plural;
 import '../../../utils/formatting/rank_utils.dart'
     show rankAssetPathByTier, rankAssetPathFromImageUrl, usablePredatorCutoff;
 import '../../../utils/ranked/ranked_aggregates.dart';
@@ -12,6 +12,7 @@ import '../../../utils/ranked/ranked_period.dart' show RankedRpScope;
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 import '../../../widgets/rank_badge.dart';
+import '../../../widgets/control_pill.dart';
 
 class RankedSummaryHeader extends ConsumerWidget {
   final RankedSummary summary;
@@ -104,17 +105,14 @@ class RankedSummaryHeader extends ConsumerWidget {
                       rpScope.label ?? 'Current RP',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 11,
-                      ),
+                      style: AppTheme.captionSmall,
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Flexible(
                           child: Text(
-                            noRp ? '—' : formatNumber(displayRp),
+                            noRp ? kNoReading : formatNumber(displayRp),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -155,7 +153,7 @@ class RankedSummaryHeader extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                 ),
                 child: Text(
-                  '${netPositive ? '+' : ''}${formatNumber(summary.netRp)} RP',
+                  '${formatSignedInt(summary.netRp)} RP',
                   style: TextStyle(
                     color: netColor,
                     fontSize: 14,
@@ -276,7 +274,7 @@ class _GoalFooter extends StatelessWidget {
           const Expanded(
             child: Text(
               'No goal set',
-              style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              style: AppTheme.caption,
             ),
           ),
           _GoalButton(hasGoal: false, onTap: () => _openGoalSheet(context)),
@@ -327,7 +325,7 @@ class _GoalFooter extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 _pacePhrase(games, progress.avgRpPerGame),
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: AppTheme.caption,
               ),
             ],
           ),
@@ -409,10 +407,7 @@ class _GoalFooter extends StatelessWidget {
                             ),
                             trailing: Text(
                               '${formatNumber(kRankLadder[i].rp)} RP',
-                              style: const TextStyle(
-                                color: AppTheme.muted,
-                                fontSize: 12,
-                              ),
+                              style: AppTheme.caption,
                             ),
                             selected: i == progress.goalIndex,
                             onTap: () => choose(i),
@@ -429,10 +424,7 @@ class _GoalFooter extends StatelessWidget {
                             ),
                             trailing: Text(
                               '${formatNumber(predatorRp)} RP',
-                              style: const TextStyle(
-                                color: AppTheme.muted,
-                                fontSize: 12,
-                              ),
+                              style: AppTheme.caption,
                             ),
                             selected: progress.isPredatorGoal,
                             onTap: () => choose(kPredatorGoalIndex),
@@ -466,34 +458,10 @@ class _GoalButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ControlPill(
+      icon: hasGoal ? Icons.flag : Icons.flag_outlined,
+      label: hasGoal ? 'Edit goal' : 'Set goal',
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppTheme.surface2,
-          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              hasGoal ? Icons.flag : Icons.flag_outlined,
-              size: 13,
-              color: AppTheme.accent,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              hasGoal ? 'Edit goal' : 'Set goal',
-              style: const TextStyle(
-                color: AppTheme.accent,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -506,7 +474,7 @@ Widget _estimateWidget(int rp, int? games, RankDivision target) {
     fontSize: 12,
     fontWeight: FontWeight.w600,
   );
-  const muted = TextStyle(color: AppTheme.muted, fontSize: 12);
+  const muted = AppTheme.caption;
   final List<InlineSpan> spans;
   if (games == null) {
     spans = const [TextSpan(text: 'Losing RP — no estimate', style: muted)];

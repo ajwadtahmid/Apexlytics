@@ -150,7 +150,7 @@ class _WeekChip extends StatelessWidget {
         opacity: enabled ? 1.0 : 0.35,
         child: Container(
           margin: const EdgeInsets.only(right: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: AppTheme.xs),
           decoration: BoxDecoration(
             color: selected ? AppTheme.accent : AppTheme.surface2,
             borderRadius: BorderRadius.circular(AppTheme.radiusFull),

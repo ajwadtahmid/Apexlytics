@@ -20,7 +20,7 @@ class SeasonPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     if (seasons.isEmpty) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: AppTheme.xs),
         decoration: BoxDecoration(
           color: AppTheme.surface2,
           borderRadius: BorderRadius.circular(AppTheme.radiusSm),
@@ -36,7 +36,7 @@ class SeasonPicker extends StatelessWidget {
     final hasChoice = seasons.length > 1;
 
     final label = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: AppTheme.xs),
       decoration: BoxDecoration(
         color: AppTheme.surface2,
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
@@ -44,12 +44,15 @@ class SeasonPicker extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            selected.displayName,
-            style: const TextStyle(
-              color: AppTheme.accent,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              selected.displayName,
+              style: const TextStyle(
+                color: AppTheme.accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 2),

@@ -2,7 +2,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../models/ranked_match.dart';
-import '../../../utils/formatting/format.dart' show formatNumber;
+import '../../../utils/formatting/format.dart'
+    show formatNumber, formatShortDateTime, formatSignedInt;
 import '../../../constants/map_constants.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
@@ -65,33 +66,40 @@ class _RankedRpChartState extends State<RankedRpChart> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Ranked Point History',
-                style: AppTheme.cardTitle,
+              const Flexible(
+                child: Text(
+                  'Ranked Point History',
+                  style: AppTheme.cardTitle,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.onShowBackup != null)
-                    IconButton(
-                      icon: const Icon(Icons.backup_outlined, size: 16),
-                      tooltip: 'Snapshot Graph',
-                      color: AppTheme.muted,
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: widget.onShowBackup,
-                    ),
-                  if (widget.onShowBackup != null && sessions.isNotEmpty)
-                    const SizedBox(width: AppTheme.sm),
-                  if (sessions.isNotEmpty)
-                    _SessionPicker(
-                      sessions: sessions,
-                      selectedIndex: selected,
-                      fmt: _sessionFmt,
-                      onSelected: (i) => setState(() => _sessionIndex = i),
-                    ),
-                ],
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.onShowBackup != null)
+                      IconButton(
+                        icon: const Icon(Icons.backup_outlined, size: 16),
+                        tooltip: 'Snapshot Graph',
+                        color: AppTheme.muted,
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: widget.onShowBackup,
+                      ),
+                    if (widget.onShowBackup != null && sessions.isNotEmpty)
+                      const SizedBox(width: AppTheme.sm),
+                    if (sessions.isNotEmpty)
+                      Flexible(
+                        child: _SessionPicker(
+                          sessions: sessions,
+                          selectedIndex: selected,
+                          fmt: _sessionFmt,
+                          onSelected: (i) => setState(() => _sessionIndex = i),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -102,7 +110,7 @@ class _RankedRpChartState extends State<RankedRpChart> {
                 ? const Center(
                     child: Text(
                       'Not enough matches in this range',
-                      style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                      style: AppTheme.caption,
                     ),
                   )
                 : _buildChart(displayMatches),
@@ -160,11 +168,10 @@ class _RankedRpChartState extends State<RankedRpChart> {
                   ? 0
                   : s.x.toInt().clamp(0, matches.length - 1);
               final m = matches[idx];
-              final sign = m.rpChange >= 0 ? '+' : '';
               return LineTooltipItem(
-                '${formatNumber(m.cumulativeRp)} RP  ($sign${m.rpChange})\n'
+                '${formatNumber(m.cumulativeRp)} RP  (${formatSignedInt(m.rpChange)})\n'
                 '${m.legend} · ${battleRoyaleMapName(m.mapKey)}\n'
-                '${_sessionFmt.format(m.endTime.toLocal())}',
+                '${formatShortDateTime(m.endTime)}',
                 const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
               );
             }).toList(),
@@ -238,7 +245,10 @@ class _SessionPicker extends StatelessWidget {
           ),
       ],
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppTheme.sm,
+          vertical: AppTheme.xs,
+        ),
         decoration: BoxDecoration(
           color: AppTheme.surface2,
           borderRadius: BorderRadius.circular(AppTheme.radiusSm),
@@ -246,12 +256,15 @@ class _SessionPicker extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppTheme.accent,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const Icon(Icons.arrow_drop_down, size: 14, color: AppTheme.accent),

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
@@ -37,6 +40,23 @@ const _twoProfiles =
     '[{"name":"Alpha","uid":"1000000001","platform":"PC"},'
     '{"name":"Bravo","uid":"1000000002","platform":"PC"}]';
 const _oneProfile = '[{"name":"Alpha","uid":"1000000001","platform":"PC"}]';
+
+/// Holds back the second profile's stats until [gate] completes, so a test can
+/// look at the screen part-way through a run.
+class _HoldsSecondProfile extends FakeHttpAdapter {
+  final Future<void> gate;
+  _HoldsSecondProfile(super.routes, this.gate);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    if (options.queryParameters['uid'] == '1000000002') await gate;
+    return super.fetch(options, requestStream, cancelFuture);
+  }
+}
 
 void main() {
   setUpAll(useFfiDatabase);
@@ -147,6 +167,36 @@ void main() {
   });
 
   group('running it', () {
+    testWidgets('the app bar says which profile it is on', (t) async {
+      final release = Completer<void>();
+      final adapter = _HoldsSecondProfile({
+        '/player/uid': (RequestOptions o) => playerJson(
+          'P${o.queryParameters['uid']}',
+          '${o.queryParameters['uid']}',
+        ),
+        '/games': const <Object?>[],
+      }, release.future);
+      await boot(t, owner: true, profiles: _twoProfiles, adapter: adapter);
+      expect(find.textContaining('Refreshing'), findsNothing);
+
+      await t.tap(find.byTooltip('Refresh all profiles'));
+      await t.pump();
+      // The first profile finishes; the second is held.
+      await pumpUntil(
+        t,
+        () => find.text('Refreshing 2/2').evaluate().isNotEmpty,
+      );
+      expect(find.text('Refreshing 2/2'), findsOneWidget);
+
+      release.complete();
+      await pumpUntil(
+        t,
+        () => find.text('Refreshed 2 profiles').evaluate().isNotEmpty,
+      );
+      expect(find.textContaining('Refreshing'), findsNothing);
+      await teardown(t);
+    });
+
     testWidgets('a clean run says so in a snackbar', (t) async {
       final adapter = _adapter();
       await boot(t, owner: true, profiles: _twoProfiles, adapter: adapter);

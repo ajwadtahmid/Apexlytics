@@ -1,14 +1,14 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../../widgets/trend_arrow.dart';
-import '../../utils/formatting/format.dart' show formatSigned, formatNumber;
+import '../../utils/formatting/format.dart' show formatNumber, formatShortDate, formatSigned, formatSignedInt;
 import '../../utils/ranked/performance_insights.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
 import 'widgets/ranked_day_of_week_chart.dart';
 import 'widgets/ranked_time_of_day_chart.dart';
+import '../../widgets/nav_entry_card.dart';
 
 /// How many of the most recent sessions the sparklines plot.
 const _kSparklineSessions = 10;
@@ -17,7 +17,6 @@ const _kSparklineSessions = 10;
 /// averages shown next to each sparkline.
 const _kTrendWindow = 5;
 
-final _rangeFmt = DateFormat('MMM d');
 
 /// Entry point for "Performance Trends": recent session-over-session
 /// sparklines up top, then the existing hour-of-day/day-of-week breakdown —
@@ -38,11 +37,10 @@ class RankedTimeBreakdownEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: () => Navigator.of(context).push(
+    return NavEntryCard(
+      icon: Icons.schedule,
+      title: 'Performance Trends',
+      onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => RankedTimeBreakdownScreen(
               hourBuckets: hourBuckets,
@@ -51,27 +49,6 @@ class RankedTimeBreakdownEntry extends StatelessWidget {
             ),
           ),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(AppTheme.md),
-          child: Row(
-            children: [
-              Icon(Icons.schedule, size: 18, color: AppTheme.accent),
-              SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Text(
-                  'Performance Trends',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.muted),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -151,11 +128,11 @@ class _SessionSparklines extends StatelessWidget {
               // instead of overflowing the row.
               Flexible(
                 child: Text(
-                  '${_rangeFmt.format(oldest)} – ${_rangeFmt.format(newest)}'
+                  '${formatShortDate(oldest)} – ${formatShortDate(newest)}'
                   ' · last ${shown.length} sessions',
                   textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  style: AppTheme.captionSmall,
                 ),
               ),
             ],
@@ -190,8 +167,8 @@ class _SessionSparklines extends StatelessWidget {
             steadyBand: kDamageSteadyBand,
             valuesOf: (s) => s.totalDamage,
             gamesOf: (s) => s.damageGames,
-            formatValue: (v) => v.toStringAsFixed(0),
-            formatDelta: (v) => '${v >= 0 ? '+' : ''}${v.toStringAsFixed(0)}',
+            formatValue: (v) => formatNumber(v.round()),
+            formatDelta: (v) => formatSignedInt(v.round()),
             sessions: sessions,
           ),
         ],
@@ -293,7 +270,7 @@ class _SparklineRow extends StatelessWidget {
         const SizedBox(height: 2),
         Text.rich(
           TextSpan(
-            style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+            style: AppTheme.captionSmall,
             children: [
               if (trend == null || verdict == null)
                 TextSpan(
@@ -345,7 +322,7 @@ class _SparklineRow extends StatelessWidget {
                       if (value == null) return null;
                       return LineTooltipItem(
                         '${formatValue(value)} · '
-                        '${_rangeFmt.format(shown[idx].start.toLocal())}',
+                        '${formatShortDate(shown[idx].start)}',
                         const TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 11,
@@ -463,7 +440,7 @@ class _PlayTimeInsights extends StatelessWidget {
             const Text(
               'Based on average RP per game, for days and times with at '
               'least 10 games.',
-              style: TextStyle(color: AppTheme.muted, fontSize: 11),
+              style: AppTheme.captionSmall,
             ),
             const SizedBox(height: AppTheme.sm),
             for (final i in insights) _InsightRow(i),
@@ -492,7 +469,7 @@ class _InsightRow extends StatelessWidget {
               children: [
                 Text(
                   insight.heading,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  style: AppTheme.captionSmall,
                 ),
                 Text(
                   insight.detail == null
@@ -520,7 +497,7 @@ class _InsightRow extends StatelessWidget {
               ),
               Text(
                 '${formatNumber(insight.games)} games',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                style: AppTheme.captionSmall,
               ),
             ],
           ),

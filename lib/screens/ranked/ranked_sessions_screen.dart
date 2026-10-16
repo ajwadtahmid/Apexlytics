@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../utils/formatting/format.dart' show formatDuration, formatNumber, plural;
+import '../../utils/formatting/format.dart' show formatDuration, formatShortDate, formatSignedInt, formatTotalOrNone, plural;
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
+import '../../widgets/rp_pill.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_entity_history_screen.dart';
 import 'widgets/match_history_items.dart' show MatchGrouping;
 
 final _sessionDateFmt = DateFormat('MMM d · h:mm a');
-final _sessionDayFmt = DateFormat('MMM d');
 
 /// Opens a single session's games as a filtered history (newest first), grouped
 /// by legend when the user toggles sort — same drill-down used for legends/maps.
@@ -21,9 +21,9 @@ void openSessionHistory(
   Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => RankedEntityHistoryScreen(
-        title: _sessionDayFmt.format(session.start.toLocal()),
+        title: formatShortDate(session.start),
         subtitle:
-            '${plural(session.games, 'game')} · ${net >= 0 ? '+' : ''}${formatNumber(net)} RP',
+            '${plural(session.games, 'game')} · ${formatSignedInt(net)} RP',
         matches: session.matches,
         onRefresh: onRefresh,
         groupLabel: 'legend',
@@ -63,8 +63,6 @@ class SessionRecapBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final positive = session.netRp >= 0;
-    final rpColor = AppTheme.signColor(positive);
     final best = session.bestLegend;
 
     return Column(
@@ -82,24 +80,13 @@ class SessionRecapBody extends StatelessWidget {
         Row(
           children: [
             _stat('${session.games}', 'games'),
-            _stat('${session.totalKills}', 'kills'),
+            _stat(
+              formatTotalOrNone(session.totalKills, session.killsGames),
+              'kills',
+            ),
             _stat(formatDuration(session.duration.inSeconds), 'played'),
             if (best != null) _stat(best, 'top legend', flex: 2),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(
-                color: rpColor.withAlpha(30),
-                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-              ),
-              child: Text(
-                '${positive ? '+' : ''}${formatNumber(session.netRp)} RP',
-                style: TextStyle(
-                  color: rpColor,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+            RpPill(totalRp: session.netRp),
           ],
         ),
       ],
@@ -123,7 +110,7 @@ class SessionRecapBody extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+          style: AppTheme.captionSmall,
         ),
       ],
     ),

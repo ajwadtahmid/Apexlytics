@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../models/ranked_match.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
-import '../../widgets/surface_card.dart';
 import '../../utils/formatting/format.dart' show formatSigned;
+import '../../widgets/nav_entry_card.dart';
 
 /// Self-contained entry point for the Legend × Map matrix: a single tappable
 /// row that pushes the full-screen breakdown. The only thing a caller needs to
@@ -14,36 +14,14 @@ class RankedLegendMapMatrixEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: () => Navigator.of(context).push(
+    return NavEntryCard(
+      icon: Icons.grid_view_rounded,
+      title: 'Legend × Map',
+      onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => RankedLegendMapMatrixScreen(matches: matches),
           ),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(AppTheme.md),
-          child: Row(
-            children: [
-              Icon(Icons.grid_view_rounded, size: 18, color: AppTheme.accent),
-              SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Text(
-                  'Legend × Map',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.muted),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -119,7 +97,7 @@ class _Matrix extends StatelessWidget {
               'Ranked games broken down by legend and map.\n'
               'Each cell: games played on top, avg RP gain/loss per game on '
               'bottom.',
-              style: TextStyle(color: AppTheme.muted, fontSize: 12),
+              style: AppTheme.caption,
             ),
           ),
           Table(
@@ -159,7 +137,7 @@ class _HeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.xs, vertical: AppTheme.sm),
       child: Text(
         label,
         textAlign: TextAlign.center,
@@ -180,7 +158,7 @@ class _LegendCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.sm, horizontal: AppTheme.xs),
       child: Text(
         legend,
         style: const TextStyle(
@@ -202,11 +180,11 @@ class _ValueCell extends StatelessWidget {
     final c = cell;
     if (c == null) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: EdgeInsets.symmetric(vertical: AppTheme.sm, horizontal: AppTheme.xs),
         child: Center(
           child: Text(
             '–',
-            style: TextStyle(color: AppTheme.muted, fontSize: 12),
+            style: AppTheme.caption,
           ),
         ),
       );
@@ -214,7 +192,7 @@ class _ValueCell extends StatelessWidget {
     final positive = c.avgRpPerGame >= 0;
     final color = AppTheme.signColor(positive);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.xs, horizontal: AppTheme.xs),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
@@ -255,7 +233,7 @@ class _EmptyState extends StatelessWidget {
         child: Text(
           'No games with a known legend and map in this scope yet.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppTheme.muted, fontSize: 13),
+          style: AppTheme.captionLarge,
         ),
       ),
     );

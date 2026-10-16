@@ -1,6 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../models/season_meta.dart';
 import '../utils/formatting/snapshot_types.dart';
 import '../utils/formatting/season_utils.dart';
@@ -8,7 +7,8 @@ import '../utils/theme.dart';
 import 'graph_season_picker.dart';
 import 'graph_week_tab_strip.dart';
 import 'surface_card.dart';
-import '../utils/formatting/format.dart' show formatNumber;
+import '../utils/formatting/format.dart' show formatNumber, formatShortDate, formatShortDateTime, formatSignedInt;
+import 'sheet_handle.dart';
 
 /// Opens [GraphCard] — the snapshot-based RP history — as a bottom sheet.
 /// A backup view of the match-based [RankedRpChart]: built from periodic
@@ -31,16 +31,7 @@ Future<void> showSnapshotBackupSheet(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.muted,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            const SheetHandle(),
             const SizedBox(height: AppTheme.md),
             const Text(
               'Snapshot Backup Graph',
@@ -211,10 +202,17 @@ class _GraphCardState extends State<GraphCard> {
     final isLiveWeek =
         isCurrentSeason && !now.isBefore(week.start) && now.isBefore(week.end);
 
+    // `/bridge` sometimes reports 0 around a rollover; once the player has
+    // scored, that reading is dropped like a stored one (see trustedSnapshots).
+    final reported = widget.currentRp;
+    final currentRp = reported == 0 && widget.snapshots.any((s) => s.rp > 0)
+        ? null
+        : reported;
+
     // Append the live RP point to the line without a disk write.
     final List<StatSnapshot> displaySnaps;
-    if (isLiveWeek && widget.currentRp != null) {
-      final liveRp = widget.currentRp!;
+    if (isLiveWeek && currentRp != null) {
+      final liveRp = currentRp;
       final livePoint = StatSnapshot(timestamp: now, rp: liveRp);
       displaySnaps = (weekSnaps.isNotEmpty && weekSnaps.last.rp == liveRp)
           ? weekSnaps
@@ -226,7 +224,7 @@ class _GraphCardState extends State<GraphCard> {
     final delta = weekDelta(
       widget.snapshots,
       week,
-      currentRp: isCurrentSeason ? widget.currentRp : null,
+      currentRp: isCurrentSeason ? currentRp : null,
       scopeStart: season.start,
     );
     final allSeasonsSorted = _effectiveAllSeasons.values.toList()
@@ -242,14 +240,19 @@ class _GraphCardState extends State<GraphCard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Text(
-                'Ranked Point History',
-                style: AppTheme.cardTitle,
+              const Flexible(
+                child: Text(
+                  'Ranked Point History',
+                  style: AppTheme.cardTitle,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              SeasonPicker(
-                selectedId: season.id,
-                seasons: allSeasonsSorted,
-                onSelected: _onSeasonSelected,
+              Flexible(
+                child: SeasonPicker(
+                  selectedId: season.id,
+                  seasons: allSeasonsSorted,
+                  onSelected: _onSeasonSelected,
+                ),
               ),
             ],
           ),
@@ -260,9 +263,12 @@ class _GraphCardState extends State<GraphCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '${_fmtDate(week.start)} – ${_fmtDate(week.end)}',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              Flexible(
+                child: Text(
+                  '${formatShortDate(week.start)} – ${formatShortDate(week.end)}',
+                  style: AppTheme.captionSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (delta != null)
                 _DeltaBadge(delta: delta, isLiveWeek: isLiveWeek),
@@ -278,7 +284,7 @@ class _GraphCardState extends State<GraphCard> {
                 ? const Center(
                     child: Text(
                       'No sessions recorded this week',
-                      style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                      style: AppTheme.caption,
                     ),
                   )
                 : _buildChart(displaySnaps),
@@ -319,7 +325,7 @@ class _GraphCardState extends State<GraphCard> {
                   : s.x.toInt().clamp(0, snaps.length - 1);
               final snap = snaps[idx];
               return LineTooltipItem(
-                '${formatNumber(snap.rp)} RP\n${DateFormat('MMM d, h:mm a').format(snap.timestamp)}',
+                '${formatNumber(snap.rp)} RP\n${formatShortDateTime(snap.timestamp)}',
                 const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
               );
             }).toList(),
@@ -353,14 +359,10 @@ class _GraphCardState extends State<GraphCard> {
   Widget _buildNoSeason() {
     return const SurfaceCard(
       padding: EdgeInsets.all(AppTheme.md),
-      child: Text(
-        'Ranked Point History',
-        style: AppTheme.cardTitle,
-      ),
+      child: Text('Ranked Point History', style: AppTheme.cardTitle),
     );
   }
 
-  static String _fmtDate(DateTime dt) => DateFormat('MMM d').format(dt);
 }
 
 // ── Delta badge ───────────────────────────────────────────────────────────────
@@ -377,7 +379,6 @@ class _DeltaBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final isPos = delta >= 0;
     final color = AppTheme.signColor(isPos);
-    final sign = isPos ? '+' : '-';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
@@ -385,7 +386,7 @@ class _DeltaBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       ),
       child: Text(
-        '$sign${formatNumber(delta.abs())} RP '
+        '${formatSignedInt(delta)} RP '
         '${isLiveWeek ? 'this week' : 'that week'}',
         style: TextStyle(
           color: color,

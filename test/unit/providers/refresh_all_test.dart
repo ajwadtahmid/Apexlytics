@@ -45,19 +45,8 @@ Map<String, Object?> playerJson(String name, String uid, int rp) => {
   },
 };
 
-RankedMatch match(String uid, int start) => RankedMatch.fromJson({
-  'uid': uid,
-  'name': 'Tester',
-  'legendPlayed': 'Axle',
-  'gameMode': 'BATTLE_ROYALE',
-  'gameLengthSecs': 600,
-  'gameStartTimestamp': start,
-  'gameEndTimestamp': start + 600,
-  'gameData': const [],
-  'BRScoreChange': 10,
-  'BRScore': 1000,
-  'map': 'olympus_rotation',
-});
+RankedMatch match(String uid, int start) =>
+    buildMatch(uid: uid, start: start);
 
 const a = PlayerProfile(name: 'Alpha', uid: '1000000001', platform: 'PC');
 const b = PlayerProfile(name: 'Bravo', uid: '1000000002', platform: 'PC');

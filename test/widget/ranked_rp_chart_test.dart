@@ -5,25 +5,14 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_rp_chart.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
+import '../helpers.dart';
 
 /// Smoke coverage for a widget that was previously 0% covered — renders
 /// without crashing across the point counts that matter (0, 1, a normal
 /// split, and past the downsample cap).
 void main() {
-  RankedMatch match(int index) => RankedMatch.fromJson({
-    'uid': '1',
-    'name': 'Tester',
-    'legendPlayed': 'Axle',
-    'gameMode': 'BATTLE_ROYALE',
-    'gameLengthSecs': 600,
-    'gameStartTimestamp': index * 700,
-    'gameEndTimestamp': index * 700 + 600,
-    'gameData': <Map<String, Object?>>[],
-    'BRScoreChange': 10,
-    'BRScore': 1000 + index * 10,
-    'map': 'olympus_rotation',
-    'isPartyFull': false,
-  });
+  RankedMatch match(int index) =>
+      buildMatch(start: index * 700, cumulativeRp: 1000 + index * 10);
 
   Widget app(List<RankedMatch> matches) => MaterialApp(
     theme: ThemeData.dark(),
@@ -65,20 +54,10 @@ void main() {
     (tester) async {
       // match(0) and match(1) are 700s apart (well under kSessionGap); insert
       // a match far enough later to start a second session.
-      final farLater = RankedMatch.fromJson({
-        'uid': '1',
-        'name': 'Tester',
-        'legendPlayed': 'Axle',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': kSessionGap.inSeconds * 2,
-        'gameEndTimestamp': kSessionGap.inSeconds * 2 + 600,
-        'gameData': <Map<String, Object?>>[],
-        'BRScoreChange': 10,
-        'BRScore': 1030,
-        'map': 'olympus_rotation',
-        'isPartyFull': false,
-      });
+      final farLater = buildMatch(
+        start: kSessionGap.inSeconds * 2,
+        cumulativeRp: 1030,
+      );
       await tester.pumpWidget(app([match(0), match(1), farLater]));
       await tester.pump();
 

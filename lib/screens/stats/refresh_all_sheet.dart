@@ -38,7 +38,7 @@ class _RefreshAllSheet extends StatelessWidget {
                   ? '+${report.newMatches} new matches across '
                         '${report.results.length} profiles'
                   : '${report.results.length} profiles checked',
-              style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+              style: AppTheme.captionLarge,
             ),
             const SizedBox(height: AppTheme.md),
             Flexible(
@@ -97,11 +97,11 @@ class _ResultTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     result.historySummary,
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    style: AppTheme.caption,
                   ),
                   Text(
                     result.statsSummary,
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    style: AppTheme.caption,
                   ),
                 ],
               ),
