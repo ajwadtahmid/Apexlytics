@@ -1,5 +1,6 @@
 library;
 
+export 'control_pill.dart';
 export 'error_card.dart';
 export 'graph_season_picker.dart';
 export 'graph_week_tab_strip.dart';
@@ -9,6 +10,7 @@ export 'graph_card.dart';
 export 'legend_asset_image.dart';
 export 'legend_detail_page.dart';
 export 'legend_stats_section.dart';
+export 'nav_entry_card.dart';
 export 'platform_picker.dart';
 export 'player_info_card.dart';
 export 'player_lookup_form.dart';

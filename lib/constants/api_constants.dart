@@ -1,4 +1,9 @@
 class ApiConstants {
+  /// Player UIDs are 10-20 digits.
+  static const int minUidDigits = 10;
+  static const int maxUidDigits = 20;
+  static final RegExp uidPattern = RegExp('\\d{$minUidDigits,$maxUidDigits}');
+
   static const String defaultPlatform = 'PC';
 
   static const String apexStatusUrl = 'https://apexlegendsstatus.com';

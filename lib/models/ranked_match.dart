@@ -68,6 +68,10 @@ const String kSqlPlausibleRpChange =
     'rp_change >= $kMinPlausibleRpChange AND '
     'rp_change < $kImplausibleRpThreshold';
 
+/// SQL counterpart of [RankedMatch.isRanked]: a Battle Royale match that moved
+/// RP.
+const String kSqlIsRanked = "game_mode = 'BATTLE_ROYALE' AND rp_change != 0";
+
 /// Stored columns a user may correct by hand, after which sync leaves them
 /// alone. Timestamps are excluded: they derive the row's primary key, its split
 /// classification and its session grouping. `length_secs` is excluded too —

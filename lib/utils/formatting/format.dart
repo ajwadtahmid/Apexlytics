@@ -2,9 +2,18 @@ import 'package:intl/intl.dart';
 import 'season_utils.dart' show SplitContext;
 
 final _rpFormat = NumberFormat('#,###');
+final _shortDate = DateFormat('MMM d');
+final _shortDateTime = DateFormat('MMM d, h:mm a');
 
 /// Formats an integer with comma-separated thousands (e.g., 1000 → '1,000').
 String formatNumber(int number) => _rpFormat.format(number);
+
+/// [t] in the device's time zone as `Mar 4`. Match and split times are UTC
+/// instants, so the conversion lives here rather than at each call site.
+String formatShortDate(DateTime t) => _shortDate.format(t.toLocal());
+
+/// [formatShortDate] with the time: `Mar 4, 9:30 PM`.
+String formatShortDateTime(DateTime t) => _shortDateTime.format(t.toLocal());
 
 /// Formats a delta-style number with an explicit '+' for non-negative values
 /// (e.g. RP/game, a comparison delta) — negatives already carry their own '-'.
@@ -36,6 +45,9 @@ String plural(int n, String word, [String? many]) =>
 /// Shown where a stat has no reading at all (e.g. no game reported the kills
 /// tracker), instead of a 0 that would read as a measured value.
 const kNoReading = '—';
+
+/// [n] with thousands grouping, or [kNoReading] when null.
+String formatNumberOrNone(int? n) => n == null ? kNoReading : formatNumber(n);
 
 /// An average kills figure to one decimal, or [kNoReading] when null.
 String formatAvgKills(double? avg) =>

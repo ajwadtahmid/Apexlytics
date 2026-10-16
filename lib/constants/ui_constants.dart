@@ -7,7 +7,7 @@ import '../utils/theme.dart';
 const separatorDot = WidgetSpan(
   alignment: PlaceholderAlignment.middle,
   child: Padding(
-    padding: EdgeInsets.symmetric(horizontal: 8),
+    padding: EdgeInsets.symmetric(horizontal: AppTheme.sm),
     child: Icon(Icons.circle, size: 4, color: AppTheme.muted),
   ),
 );

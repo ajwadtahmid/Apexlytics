@@ -58,15 +58,28 @@ class PrefsKeys {
   // Modern code uses 'stat_snapshots_<uid>' instead.
   static const statSnapshots = 'stat_snapshots';
 
+  /// Prefix of the UID-scoped snapshot keys, `stat_snapshots_<uid>`.
+  static const snapshotKeyPrefix = '${statSnapshots}_';
+
   /// Builds UID-scoped key for snapshots: `stat_snapshots_<uid>` or `stat_snapshots` (legacy).
   /// The global key intentionally lacks the `_` suffix for backwards compatibility
   /// with data accumulated before UID support was added.
   static String snapshotKeyFor(String? uid) =>
-      uid?.isNotEmpty == true ? 'stat_snapshots_$uid' : statSnapshots;
+      uid?.isNotEmpty == true ? '$snapshotKeyPrefix$uid' : statSnapshots;
+
+  /// Prefix of the UID-scoped legend stats keys, `legend_stats_<uid>`.
+  static const legendStatsKeyPrefix = '${legendStats}_';
 
   /// Builds UID-scoped key for legend stats: `legend_stats_<uid>` or `legend_stats` (legacy).
   static String legendStatsKeyFor(String? uid) =>
-      uid?.isNotEmpty == true ? 'legend_stats_$uid' : 'legend_stats';
+      uid?.isNotEmpty == true ? '$legendStatsKeyPrefix$uid' : legendStats;
+
+  /// The cyclic map rotation order, shared by the foreground provider and the
+  /// background fetch isolate.
+  static const seasonalMapsCache = 'seasonal_maps_cache';
+
+  /// Outcome of the most recent background fetch; device-local, not backed up.
+  static const bgFetchLastResult = 'bg_fetch_last_result';
 
   /// Prefix for the UID-scoped ranked goal. Named so backup and clear can
   /// match it by prefix - a bare literal here is how the goal escaped both.

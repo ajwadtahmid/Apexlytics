@@ -31,6 +31,11 @@ class AppTheme {
   /// counts as positive (some treat 0 as a gain, others don't).
   static Color signColor(bool positive) => positive ? green : red;
 
+  /// Muted caption text at the three sizes the app uses.
+  static const captionSmall = TextStyle(color: muted, fontSize: 11);
+  static const caption = TextStyle(color: muted, fontSize: 12);
+  static const captionLarge = TextStyle(color: muted, fontSize: 13);
+
   /// The small muted heading at the top of a stats card ("STATS", "Ranked Point
   /// History"). Casing is the caller's: some titles are Title Case, some upper.
   static const cardTitle = TextStyle(

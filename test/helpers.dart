@@ -4,7 +4,12 @@ import 'dart:typed_data';
 import 'package:apexlytics/models/player_stats.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
+import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Points sqflite at its FFI backend, the only one available under
@@ -12,6 +17,22 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void useFfiDatabase() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
+}
+
+/// A [ProviderContainer] backed by mock [SharedPreferences] holding [values],
+/// disposed when the test ends. Returns the prefs too, to assert on what the
+/// code under test wrote.
+Future<(ProviderContainer, SharedPreferences)> prefsContainer({
+  Map<String, Object> values = const {},
+  List<Override> overrides = const [],
+}) async {
+  SharedPreferences.setMockInitialValues(values);
+  final prefs = await SharedPreferences.getInstance();
+  final container = ProviderContainer(
+    overrides: [sharedPreferencesProvider.overrideWithValue(prefs), ...overrides],
+  );
+  addTearDown(container.dispose);
+  return (container, prefs);
 }
 
 /// Builds a [RankedMatch] in the shape upstream's `/games` serves, for tests.
@@ -30,6 +51,7 @@ RankedMatch buildMatch({
   String gameMode = 'BATTLE_ROYALE',
   int length = 600,
   bool excluded = false,
+  bool isPartyFull = false,
 }) {
   final match = RankedMatch.fromJson({
     'uid': uid,
@@ -47,7 +69,7 @@ RankedMatch buildMatch({
     'BRScoreChange': rp,
     'BRScore': cumulativeRp,
     'BRRankImg': 'https://x/diamond4.png',
-    'isPartyFull': false,
+    'isPartyFull': isPartyFull,
     'map': map,
   });
   return excluded ? match.withExcluded(true) : match;

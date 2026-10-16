@@ -258,4 +258,26 @@ void main() {
       expect(formatTotalOrNone(1500, 3), '1,500');
     });
   });
+
+  group('formatShortDate / formatShortDateTime', () {
+    test('format the instant in the device time zone', () {
+      final utc = DateTime.utc(2026, 3, 4, 21, 30);
+      final local = utc.toLocal();
+      final h = local.hour % 12 == 0 ? 12 : local.hour % 12;
+      final mm = local.minute.toString().padLeft(2, '0');
+      final ampm = local.hour >= 12 ? 'PM' : 'AM';
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
+      final day = '${months[local.month - 1]} ${local.day}';
+      expect(formatShortDate(utc), day);
+      expect(formatShortDateTime(utc), '$day, $h:$mm $ampm');
+    });
+  });
+
+  group('formatNumberOrNone', () {
+    test('groups thousands and dashes a missing value', () {
+      expect(formatNumberOrNone(1234), '1,234');
+      expect(formatNumberOrNone(0), '0');
+      expect(formatNumberOrNone(null), kNoReading);
+    });
+  });
 }

@@ -97,8 +97,11 @@ final Map<String, Legend> kLegendsByName = {
 String canonicalLegendName(String name) {
   final trimmed = name.trim();
   if (trimmed.isEmpty) return 'Unknown';
-  return kLegendsByName[trimmed.toLowerCase()]?.name ?? _titleCase(trimmed);
+  return legendInfo(trimmed)?.name ?? _titleCase(trimmed);
 }
+
+/// The catalog entry for [name], ignoring case and surrounding whitespace.
+Legend? legendInfo(String name) => kLegendsByName[name.trim().toLowerCase()];
 
 /// Title-cases [s] word by word (`"BLOODHOUND"`/`"bloodhound"` →
 /// `"Bloodhound"`). Only [canonicalLegendName]'s fallback uses this — a
