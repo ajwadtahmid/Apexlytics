@@ -185,6 +185,63 @@ void main() {
       expect((result as GamesPending).retryAfter, const Duration(minutes: 5));
     });
 
+    // A row in the shape upstream serves, for the player [uid].
+    Map<String, dynamic> row(String uid, {Object? start = 1782090000}) => {
+      'uid': uid,
+      'name': 'Tester',
+      'legendPlayed': 'Axle',
+      'gameMode': 'BATTLE_ROYALE',
+      'gameLengthSecs': 600,
+      'gameStartTimestamp': start,
+      'gameEndTimestamp': 1782090600,
+      'gameData': <dynamic>[],
+      'BRScoreChange': 10,
+      'BRScore': 1000,
+      'BRRankImg': 'https://x/diamond4.png',
+      'isPartyFull': false,
+      'map': 'olympus_rotation',
+    };
+
+    test('rows that all fail to parse raise instead of reading as an empty '
+        'history', () async {
+      // Unreadable rows must not be recorded as a successful sync.
+      stubResponse(
+        status: 200,
+        data: [
+          row('uid123', start: 'not-a-number'),
+          row('uid123', start: []),
+        ],
+      );
+
+      expect(
+        () => service.getMatches('uid123'),
+        throwsA(isA<MalformedResponseException>()),
+      );
+    });
+
+    test('rows that all belong to another uid raise too', () async {
+      stubResponse(status: 200, data: [row('someone-else')]);
+
+      expect(
+        () => service.getMatches('uid123'),
+        throwsA(isA<MalformedResponseException>()),
+      );
+    });
+
+    test('one readable row among unreadable ones is still a result', () async {
+      stubResponse(
+        status: 200,
+        data: [
+          row('uid123', start: 'bad'),
+          row('uid123'),
+        ],
+      );
+
+      final result = await service.getMatches('uid123');
+
+      expect((result as GamesMatches).matches, hasLength(1));
+    });
+
     test('a 200 carrying a map raises instead of reading as pending', () async {
       // Without this the map would fall through to the 202 branch and report
       // "queued" forever, since no retry hint would ever clear it.

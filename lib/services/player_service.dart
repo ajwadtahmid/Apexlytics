@@ -1,6 +1,7 @@
 import '../constants/api_constants.dart';
 import '../models/player_stats.dart';
 import '../utils/app_logger.dart';
+import '../utils/error_messages.dart';
 import 'api_service.dart';
 
 /// Domain service for all player-related API calls. Prefer [getPlayerStatsByUid]
@@ -21,6 +22,28 @@ class PlayerService {
   static String _cacheName(String playerName) =>
       playerName.trim().toLowerCase();
 
+  /// Parses a fresh player body. An unknown player arrives as a 200 with
+  /// `{"Error": ...}`, and a body with no uid is not a player; both throw.
+  static PlayerStats _parseFresh(
+    Map<String, dynamic> data, {
+    required bool byUid,
+  }) {
+    final notFound = AppException(
+      'Player not found. Check the ${byUid ? 'UID' : 'name'} and platform.',
+      status: 404,
+    );
+    final error = data['Error'];
+    if (error != null) {
+      if ('$error'.toLowerCase().contains('not found')) throw notFound;
+      throw const AppException(
+        "Couldn't look this player up right now. Try again shortly.",
+      );
+    }
+    final stats = PlayerStats.fromJson(data);
+    if (stats.uid.isEmpty) throw notFound;
+    return stats;
+  }
+
   /// Fetches stats by display name. Avoid when a UID is known; name lookups break
   /// if the player renames.
   Future<ApiResult<PlayerStats>> getPlayerStats(
@@ -34,7 +57,7 @@ class PlayerService {
     );
     log.d('Player stats fetched by name, stale=${result.staleAt != null}');
     return ApiResult(
-      PlayerStats.fromJson(result.data),
+      _parseFresh(result.data, byUid: false),
       staleAt: result.staleAt,
     );
   }
@@ -69,7 +92,15 @@ class PlayerService {
     if (memo != null && savedAt != null && memo.$1 == savedAt) {
       return ApiResult(memo.$2, staleAt: savedAt);
     }
-    final stats = PlayerStats.fromJson(result.data);
+    final PlayerStats stats;
+    try {
+      stats = PlayerStats.fromJson(result.data);
+    } catch (e) {
+      // An unreadable cached body reads as a miss, so the caller goes to the network.
+      // Type only: a parse error can quote the payload.
+      log.w('Cached player stats unreadable (${e.runtimeType}); ignoring');
+      return null;
+    }
     if (savedAt != null) {
       if (_parsed.length >= _maxParsed) _parsed.clear();
       _parsed[memoKey] = (savedAt, stats);
@@ -89,7 +120,7 @@ class PlayerService {
     );
     log.d('Player stats fetched by UID, stale=${result.staleAt != null}');
     return ApiResult(
-      PlayerStats.fromJson(result.data),
+      _parseFresh(result.data, byUid: true),
       staleAt: result.staleAt,
     );
   }

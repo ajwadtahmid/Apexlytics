@@ -108,15 +108,38 @@ void main() {
       expect(list.length, 1);
     });
 
-    test('listFromJson skips a map row with a wrongly-typed field, keeping '
-        'the rest of the batch', () {
+    test('a wrongly-typed field costs the field, not the match', () {
       final list = RankedMatch.listFromJson([
         brMatch(),
-        {...brMatch(), 'isPartyFull': 0},
-        {...brMatch(), 'name': 12345},
-        brMatch(),
+        {...brMatch(), 'isPartyFull': 1},
+        {...brMatch(), 'name': 12345, 'BRScoreChange': '25'},
+        {...brMatch(), 'BRScore': 'Infinity', 'gameLengthSecs': 'x'},
       ]);
-      expect(list.length, 2);
+      expect(list.length, 4);
+      expect(list[1].isPartyFull, isTrue);
+      expect(list[2].playerName, '12345');
+      expect(list[2].rpChange, 25);
+      expect(list[3].cumulativeRp, 0);
+      expect(list[3].lengthSecs, 0);
+    });
+
+    test('a tracker with a wrongly-typed field keeps the match', () {
+      final m = RankedMatch.fromJson({
+        ...brMatch(),
+        'gameData': [
+          {'key': 7, 'name': 'BR Kills', 'value': '4'},
+        ],
+      });
+      expect(m.kills, 4);
+    });
+
+    test('listFromJson skips a row whose start time is unusable', () {
+      final list = RankedMatch.listFromJson([
+        brMatch(),
+        {...brMatch(), 'gameStartTimestamp': 'soon'},
+        {...brMatch(), 'gameStartTimestamp': []},
+      ]);
+      expect(list.length, 1);
     });
 
     test('listFromJson skips a match with no start timestamp, which would '

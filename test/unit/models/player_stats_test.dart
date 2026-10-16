@@ -18,6 +18,39 @@ void main() {
       },
     };
 
+    test('a block that is not an object reads as absent, not an error', () {
+      // A PHP-backed API sends an empty object as `[]`.
+      for (final drifted in <Map<String, dynamic>>[
+        {...validJson, 'realtime': []},
+        {...validJson, 'legends': []},
+        {
+          ...validJson,
+          'legends': {'selected': {'LegendName': 7, 'data': {}}, 'all': []},
+        },
+        {
+          ...validJson,
+          'global': {
+            ...(validJson['global'] as Map<String, dynamic>),
+            'rank': [],
+            'name': 5,
+          },
+        },
+      ]) {
+        final stats = PlayerStats.fromJson(drifted);
+        expect(stats.uid, '123456', reason: '$drifted');
+      }
+      final noRealtime = PlayerStats.fromJson({...validJson, 'realtime': []});
+      expect(noRealtime.isOnline, isFalse);
+      final noRank = PlayerStats.fromJson({
+        ...validJson,
+        'global': {
+          ...(validJson['global'] as Map<String, dynamic>),
+          'rank': [],
+        },
+      });
+      expect(noRank.rank, 'Unranked');
+    });
+
     test('parses name from global block', () {
       final stats = PlayerStats.fromJson(validJson);
       expect(stats.name, 'TestPlayer');

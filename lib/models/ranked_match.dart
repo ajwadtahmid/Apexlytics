@@ -108,6 +108,15 @@ Set<String> decodeEditedFields(Object? raw) {
 /// The `key` is unstable — the same stat shows up under different keys across
 /// players (`kills` vs `specialEvent_kills`, both labelled `"BR Kills"`). Always
 /// match on [name] (the human label), never [key].
+/// A field read leniently: upstream drifting a type (a number sent as text,
+/// say) must cost the field, not the whole match.
+String _text(Object? v, String fallback) => v == null ? fallback : '$v';
+
+num _num(Object? v) {
+  final n = v is num ? v : (v is String ? num.tryParse(v) : null);
+  return n != null && n.isFinite ? n : 0;
+}
+
 class MatchTracker {
   /// Raw API key — unstable across players. Do not match on this.
   final String key;
@@ -125,9 +134,9 @@ class MatchTracker {
   });
 
   factory MatchTracker.fromJson(Map<String, dynamic> json) => MatchTracker(
-    key: json['key'] as String? ?? '',
-    name: (json['name'] as String? ?? '').trim(),
-    value: (json['value'] as num?) ?? 0,
+    key: _text(json['key'], ''),
+    name: _text(json['name'], '').trim(),
+    value: _num(json['value']),
   );
 }
 
@@ -429,28 +438,26 @@ class RankedMatch {
     final trackers = trackersFromJson(json['gameData']);
 
     return RankedMatch(
-      uid: json['uid']?.toString() ?? '',
-      playerName: json['name'] as String? ?? '',
-      legend: json['legendPlayed'] as String? ?? 'Unknown',
-      gameMode: json['gameMode'] as String? ?? 'UNKNOWN',
-      mapKey: json['map'] as String? ?? 'UNKNOWN',
-      rpChange: (json['BRScoreChange'] as num?)?.toInt() ?? 0,
-      cumulativeRp: (json['BRScore'] as num?)?.toInt() ?? 0,
-      rankImg: json['BRRankImg'] as String? ?? '',
-      lengthSecs: (json['gameLengthSecs'] as num?)?.toInt() ?? 0,
+      uid: _text(json['uid'], ''),
+      playerName: _text(json['name'], ''),
+      legend: _text(json['legendPlayed'], 'Unknown'),
+      gameMode: _text(json['gameMode'], 'UNKNOWN'),
+      mapKey: _text(json['map'], 'UNKNOWN'),
+      rpChange: _num(json['BRScoreChange']).toInt(),
+      cumulativeRp: _num(json['BRScore']).toInt(),
+      rankImg: _text(json['BRRankImg'], ''),
+      lengthSecs: _num(json['gameLengthSecs']).toInt(),
       startTime: _epochToUtc(json['gameStartTimestamp']),
       endTime: _epochToUtc(json['gameEndTimestamp']),
-      isPartyFull: json['isPartyFull'] as bool? ?? false,
+      isPartyFull: json['isPartyFull'] == true || json['isPartyFull'] == 1,
       trackers: trackers,
       kills: killsFrom(trackers),
       damage: damageFrom(trackers),
     );
   }
 
-  /// Parses the whole `/games` list response into matches, skipping malformed
-  /// entries instead of throwing on a single bad row — including a row that
-  /// is a map but carries a wrongly-typed field (`fromJson` casts, so one such
-  /// row would otherwise discard the entire batch).
+  /// Parses the whole `/games` list response into matches, skipping rows that
+  /// aren't usable (not a map, or no start time) instead of failing the batch.
   static List<RankedMatch> listFromJson(List<dynamic> json) {
     final out = <RankedMatch>[];
     var skipped = 0;
@@ -480,7 +487,7 @@ class RankedMatch {
   /// Epoch seconds → UTC [DateTime]. Convert to local before any time-of-day
   /// bucketing.
   static DateTime _epochToUtc(dynamic raw) {
-    final secs = (raw as num?)?.toInt() ?? 0;
+    final secs = _num(raw).toInt();
     return DateTime.fromMillisecondsSinceEpoch(secs * 1000, isUtc: true);
   }
 

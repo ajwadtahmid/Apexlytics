@@ -53,7 +53,7 @@ class GamesPending extends GamesResult {
 }
 
 /// Whether upstream is currently recording match history for a UID.
-typedef GamesEligibility = ({bool eligible, int? lastPolledAt, int pollCount});
+typedef GamesEligibility = ({bool eligible, int pollCount});
 
 /// Live `/games` hourly budget snapshot (see `/games/capacity` server-side).
 /// [windowResetsAt] is when the oldest claimed slot frees up, not a fixed
@@ -109,7 +109,16 @@ class GamesService {
           'Unexpected response from the history server.',
         );
       }
-      return GamesMatches(RankedMatch.listFromJson(response.data as List));
+      final rows = response.data as List;
+      final matches = RankedMatch.listFromJson(rows);
+      // Rows came back but none are this player's: an unreadable shape, not an
+      // empty history. Recording it as a sync would silently lose matches.
+      if (rows.isNotEmpty && !matches.any((m) => m.uid == uid)) {
+        throw const MalformedResponseException(
+          'The history server returned matches this app could not read.',
+        );
+      }
+      return GamesMatches(matches);
     }
 
     if (response.status == 202) {
@@ -147,7 +156,6 @@ class GamesService {
     final body = response.data is Map ? response.data as Map : const {};
     return (
       eligible: body['eligible'] == true,
-      lastPolledAt: (body['lastPolledAt'] as num?)?.toInt(),
       pollCount: (body['pollCount'] as num?)?.toInt() ?? 0,
     );
   }

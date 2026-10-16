@@ -21,18 +21,12 @@ class ApiService {
   late final Dio _dio;
   late final ApiCache _cache;
 
-  /// Overridable only for tests — production callers get
-  /// [TimeoutConstants.overallRequestDeadline].
-  final Duration _overallDeadline;
-
   /// [httpClientAdapter] is a test seam: it replaces the transport only, so
   /// requests still run through the real interceptors and error handling.
   ApiService(
     ApiCacheStore cacheStore, {
-    Duration? overallDeadline,
     @visibleForTesting HttpClientAdapter? httpClientAdapter,
-  }) : _overallDeadline =
-           overallDeadline ?? TimeoutConstants.overallRequestDeadline {
+  }) {
     _dio = Dio(buildApiBaseOptions());
     if (httpClientAdapter != null) _dio.httpClientAdapter = httpClientAdapter;
     if (kDebugMode) {
@@ -67,7 +61,7 @@ class ApiService {
   Future<void> warmup() async {
     try {
       await withOverallDeadline(
-        _overallDeadline,
+        TimeoutConstants.overallRequestDeadline,
         (token) => _dio.get('/healthz', cancelToken: token),
       );
     } catch (e) {
@@ -161,7 +155,7 @@ class ApiService {
   }) async {
     try {
       final response = await withOverallDeadline(
-        _overallDeadline,
+        TimeoutConstants.overallRequestDeadline,
         (token) => _dio.get(
           endpoint,
           queryParameters: params,
@@ -225,7 +219,7 @@ class ApiService {
     final cacheGeneration = _cache.generation;
     try {
       final response = await withOverallDeadline(
-        _overallDeadline,
+        TimeoutConstants.overallRequestDeadline,
         (token) =>
             _dio.get(endpoint, queryParameters: params, cancelToken: token),
       );

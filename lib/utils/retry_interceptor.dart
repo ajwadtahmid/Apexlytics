@@ -158,15 +158,12 @@ class RetryInterceptor extends Interceptor {
     // Retries against the current host are exhausted (or skipped for a
     // timeout — see the class doc).
 
-    // The proxy answered in its own JSON `{error}` shape, so it is reachable.
-    // Failing over would only spend more budget and park later requests on the
-    // backup for [primaryDownFor].
-    if (_isProxyError(err)) return handler.next(err);
-
     // Started on the backup by preference, not a real failover, and the
     // backup failed too — fall back to the primary rather than staying stuck
     // for the rest of the window. Marking the backup spent stops a
-    // still-down primary from bouncing straight back to it.
+    // still-down primary from bouncing straight back to it. Runs before the
+    // proxy-error check: a busy JSON 503 from the backup says nothing about
+    // the primary.
     if (preferredBackup && !usedBackup) {
       log.w(
         'Backup proxy failed while preferred; falling back to primary '
@@ -180,6 +177,11 @@ class RetryInterceptor extends Interceptor {
         ..extra[_kRetryKey] = 0;
       return _refetch(err, handler);
     }
+
+    // The proxy answered in its own JSON `{error}` shape, so it is reachable.
+    // Failing over would only spend more budget and park later requests on the
+    // backup for [primaryDownFor].
+    if (_isProxyError(err)) return handler.next(err);
 
     // Fail over to the backup host exactly once — its own retries are
     // tracked separately so it gets the same retry budget the primary just
@@ -230,9 +232,20 @@ class RetryInterceptor extends Interceptor {
         data['error'] is String;
   }
 
+  /// A 429 that is not in the proxy's `{error}` shape came from the platform
+  /// in front of it (Cloudflare's rate-limit or daily-limit error page), not
+  /// from the proxy's own budgets. Like a 5xx page, it means this host cannot
+  /// answer right now.
+  static bool _isPlatformRateLimit(DioException err) {
+    final data = err.response?.data;
+    return err.response?.statusCode == 429 &&
+        !(data is Map && data['error'] is String);
+  }
+
   bool _shouldRetry(DioException err) {
     final status = err.response?.statusCode;
     if (status != null && status >= 500) return true;
+    if (_isPlatformRateLimit(err)) return true;
     // connectionTimeout, not connectionError, is what a sleeping free-tier
     // host produces (accepts the socket, then stalls).
     return err.type == DioExceptionType.connectionTimeout ||

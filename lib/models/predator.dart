@@ -1,10 +1,12 @@
+import '../utils/formatting/json_utils.dart';
+
 class PredatorResponse {
   final Map<String, PlatformPredator> rp;
 
   PredatorResponse({required this.rp});
 
   factory PredatorResponse.fromJson(Map<String, dynamic> json) {
-    final rpData = json['RP'] as Map<String, dynamic>? ?? {};
+    final rpData = asObject(json['RP']) ?? {};
     final rp = <String, PlatformPredator>{};
     rpData.forEach((platform, data) {
       if (data is Map<String, dynamic>) {

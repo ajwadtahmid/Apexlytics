@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode, listEquals;
 
 import '../utils/app_logger.dart';
+import '../utils/formatting/json_utils.dart';
 import 'season_meta.dart';
 
 class PlayerStats {
@@ -48,28 +49,26 @@ class PlayerStats {
   }
 
   factory PlayerStats.fromJson(Map<String, dynamic> json) {
-    final global = (json['global'] as Map?)?.cast<String, dynamic>() ?? {};
-    final legendsBlock =
-        (json['legends'] as Map?)?.cast<String, dynamic>() ?? {};
-    final selected =
-        (legendsBlock['selected'] as Map?)?.cast<String, dynamic>() ?? {};
-    final realtime = (json['realtime'] as Map?)?.cast<String, dynamic>() ?? {};
-    final rankMap = (global['rank'] as Map?)?.cast<String, dynamic>();
+    final global = asObject(json['global']) ?? {};
+    final legendsBlock = asObject(json['legends']) ?? {};
+    final selected = asObject(legendsBlock['selected']) ?? {};
+    final realtime = asObject(json['realtime']) ?? {};
+    final rankMap = asObject(global['rank']);
 
     return PlayerStats(
-      name: global['name'] as String? ?? 'Unknown',
+      name: asString(global['name']) ?? 'Unknown',
       uid: global['uid']?.toString() ?? '',
       level: _parseInt(global['level']),
-      rank: rankMap?['rankName'] as String? ?? 'Unranked',
+      rank: asString(rankMap?['rankName']) ?? 'Unranked',
       rankScore: _parseInt(rankMap?['rankScore']),
-      platform: global['platform'] as String? ?? 'Unknown',
+      platform: asString(global['platform']) ?? 'Unknown',
       // API returns 'LegendName' in PascalCase — not a typo.
-      currentLegend: selected['LegendName'] as String? ?? 'Unknown',
+      currentLegend: asString(selected['LegendName']) ?? 'Unknown',
       isOnline: _parseBool(realtime['isOnline']),
       isInGame: _parseBool(realtime['isInGame']),
-      trackers: _parseTrackers(selected['data'] as List? ?? []),
+      trackers: _parseTrackers(asList(selected['data']) ?? []),
       legendStats: _parseLegendStats(
-        (legendsBlock['all'] as Map?)?.cast<String, dynamic>() ?? {},
+        asObject(legendsBlock['all']) ?? {},
       ),
       rankedSeason: _parseRankedSeason(rankMap),
     );
@@ -98,16 +97,16 @@ class PlayerStats {
     final legendStats = <LegendStat>[];
     allLegends.forEach((legendName, legendData) {
       if (legendData is! Map) return;
-      final data = legendData.cast<String, dynamic>()['data'] as List? ?? [];
+      final data = asList(asObject(legendData)?['data']) ?? [];
       final trackers = <LegendTracker>[];
       for (final stat in data) {
         if (stat is! Map) continue;
-        final key = stat['key'] as String? ?? '';
+        final key = asString(stat['key']) ?? '';
         if (key.isEmpty) continue;
         trackers.add(
           LegendTracker(
             key: key,
-            displayName: stat['name'] as String? ?? key,
+            displayName: asString(stat['name']) ?? key,
             value: _parseInt(stat['value']),
           ),
         );
@@ -120,17 +119,16 @@ class PlayerStats {
   }
 
   static SeasonMeta? _parseRankedSeason(Map<String, dynamic>? rankMap) {
-    final seasonId = rankMap?['rankedSeason'] as String?;
-    final seasonMetaRaw = (rankMap?['rankedSeasonMeta'] as Map?)
-        ?.cast<String, dynamic>();
+    final seasonId = asString(rankMap?['rankedSeason']);
+    final seasonMetaRaw = asObject(rankMap?['rankedSeasonMeta']);
     if (seasonId == null || seasonMetaRaw == null) return null;
-    final startTs = (seasonMetaRaw['start'] as num?)?.toInt();
-    final endTs = (seasonMetaRaw['end'] as num?)?.toInt();
-    if (startTs == null || endTs == null) return null;
+    final startTs = seasonMetaRaw['start'];
+    final endTs = seasonMetaRaw['end'];
+    if (startTs is! num || endTs is! num) return null;
     return SeasonMeta.fromApi(
       id: seasonId,
-      startSeconds: startTs,
-      endSeconds: endTs,
+      startSeconds: startTs.toInt(),
+      endSeconds: endTs.toInt(),
     );
   }
 

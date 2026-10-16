@@ -18,14 +18,16 @@ class TimeoutConstants {
   /// Upper bound on one logical request, covering every retry and failover
   /// attempt combined. Enforced via [withOverallDeadline].
   ///
-  /// Sized for the worst chain `RetryInterceptor` runs: one timed-out primary
-  /// attempt (a timeout moves straight to the backup), then the backup's
-  /// full ladder — attempt, retry delay, retry — which is what gives a
-  /// sleeping backup time to wake up. 15+15+1+15 = 46s. Derived rather than
-  /// written down, since a shorter deadline would silently cut the failover
-  /// it exists to allow.
+  /// Sized for the worst chain `RetryInterceptor` runs: the primary (a fast
+  /// failure, the retry delay, then one stalled attempt; a timeout alone skips
+  /// the retry and is cheaper), then the backup's full ladder — attempt, retry
+  /// delay, retry — which is what gives a sleeping backup time to wake up.
+  /// 15+1+15+1+15 = 47s. Derived rather than written down, since a shorter
+  /// deadline would silently cut the failover it exists to allow. A primary
+  /// stalling on both connect and receive is rare enough to ignore.
   static final Duration overallRequestDeadline =
       _attempt +
+      retryDelay * retriesPerHost +
       (_attempt * (retriesPerHost + 1)) +
       retryDelay * retriesPerHost;
 

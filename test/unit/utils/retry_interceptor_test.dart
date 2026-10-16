@@ -130,6 +130,116 @@ void main() {
     expect(calledBaseUrls, [primary, primary, primary, primary]);
   });
 
+  // The Worker's failoverResponse() (cloudflare/src/index.ts in
+  // apex_proxy_server): what it answers when its state store is down or it is
+  // misconfigured. Deliberately not the JSON {error} shape, so it must be read
+  // as an outage, not as the proxy answering.
+  ResponseBody workerFailover() => ResponseBody.fromString(
+    'Service unavailable',
+    503,
+    headers: {
+      Headers.contentTypeHeader: ['text/plain; charset=UTF-8'],
+      'retry-after': ['60'],
+      'x-proxy-failover': ['1'],
+    },
+  );
+
+  test('the Worker\'s plain-text failover 503 fails over to the backup and '
+      'opens the sticky window', () async {
+    final calledBaseUrls = <String>[];
+    final dio = buildDio(
+      maxRetries: 1,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        return o.baseUrl == backup ? _status(200) : workerFailover();
+      },
+    );
+
+    final response = await dio.get('/maprotation');
+    expect(response.statusCode, 200);
+    // The same-host retry, then the backup.
+    expect(calledBaseUrls, [primary, primary, backup]);
+
+    // The next request starts on the backup instead of re-discovering the
+    // outage from scratch.
+    calledBaseUrls.clear();
+    await dio.get('/servers');
+    expect(calledBaseUrls, [backup]);
+  });
+
+  test('the Worker\'s failover 503 still never moves a /games request to the '
+      'backup', () async {
+    final calledBaseUrls = <String>[];
+    final dio = buildDio(
+      maxRetries: 0,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        return workerFailover();
+      },
+    );
+
+    await expectLater(
+      dio.get('/games', options: Options(extra: {kNoFailoverKey: true})),
+      throwsA(isA<DioException>()),
+    );
+    expect(calledBaseUrls, [primary]);
+  });
+
+  group('Cloudflare answering for the Worker (a free limit reached)', () {
+    // Cloudflare's own error pages are HTML, not the proxy's JSON `{error}`.
+    ResponseBody cloudflarePage(int code) => ResponseBody.fromString(
+      '<html><body>error code: 1027</body></html>',
+      code,
+      headers: {
+        'content-type': ['text/html; charset=UTF-8'],
+      },
+    );
+
+    for (final code in [429, 500, 502, 503, 504]) {
+      test('an HTML $code from the edge fails over to the backup', () async {
+        final calledBaseUrls = <String>[];
+        final dio = buildDio(
+          maxRetries: 1,
+          backupBaseUrl: backup,
+          onFetch: (o) async {
+            calledBaseUrls.add(o.baseUrl);
+            return o.baseUrl == backup ? _status(200) : cloudflarePage(code);
+          },
+        );
+
+        final response = await dio.get('/maprotation');
+        expect(response.statusCode, 200);
+        expect(calledBaseUrls.last, backup);
+      });
+    }
+
+    test('the proxy\'s own JSON 429 is not an outage and stays put', () async {
+      final calledBaseUrls = <String>[];
+      final dio = buildDio(
+        maxRetries: 1,
+        backupBaseUrl: backup,
+        onFetch: (o) async {
+          calledBaseUrls.add(o.baseUrl);
+          return ResponseBody.fromString(
+            '{"error":"Too many requests — try again shortly"}',
+            429,
+            headers: {
+              'content-type': ['application/json'],
+            },
+          );
+        },
+      );
+
+      await expectLater(
+        dio.get('/maprotation'),
+        throwsA(isA<DioException>()),
+      );
+      expect(calledBaseUrls, [primary]);
+    });
+  });
+
   test('a primary timeout fails straight over to the backup', () async {
     // A spun-down free-tier host produces connectionTimeout, not
     // connectionError - treating it as non-retryable skipped the failover.
@@ -233,19 +343,60 @@ void main() {
     expect(calledBaseUrls, [backup, primary, primary]);
   });
 
+  test('a preferred backup that answers in the proxy\'s JSON error shape still '
+      'falls back to the recovered primary', () async {
+    // A busy backup says nothing about whether the primary has recovered.
+    final calledBaseUrls = <String>[];
+    var primaryRecovered = false;
+    final dio = buildDio(
+      maxRetries: 1,
+      backupBaseUrl: backup,
+      onFetch: (o) async {
+        calledBaseUrls.add(o.baseUrl);
+        if (o.baseUrl == backup) {
+          if (!primaryRecovered) return _status(200);
+          return ResponseBody.fromString(
+            '{"error":"Server busy — try again shortly"}',
+            503,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        return primaryRecovered ? _status(200) : _status(503);
+      },
+    );
+
+    await dio.get('/first'); // primary down, backup serves: arms the window
+    primaryRecovered = true;
+    calledBaseUrls.clear();
+
+    final response = await dio.get('/second');
+    expect(response.statusCode, 200);
+    // The backup (preferred) with its one retry, then the primary.
+    expect(calledBaseUrls, [backup, backup, primary]);
+
+    // The primary answered, so the window is closed.
+    calledBaseUrls.clear();
+    await dio.get('/third');
+    expect(calledBaseUrls, [primary]);
+  });
+
   test('the overall deadline covers the longest failover chain', () {
-    // One timed-out primary attempt, then the backup's full ladder. A
-    // shorter deadline cancels the request before the backup gets its
-    // chance, which is how failover used to be cut off.
+    // The primary's fast failure, its retry delay and one stalled retry, then
+    // the backup's full ladder. A shorter deadline cancels the request before
+    // the backup gets its chance, which is how failover used to be cut off.
     final attempt = TimeoutConstants.apiConnect > TimeoutConstants.apiReceive
         ? TimeoutConstants.apiConnect
         : TimeoutConstants.apiReceive;
     final backupLadder =
         attempt * (TimeoutConstants.retriesPerHost + 1) +
         TimeoutConstants.retryDelay * TimeoutConstants.retriesPerHost;
+    final primaryFastFailureThenStall =
+        TimeoutConstants.retryDelay * TimeoutConstants.retriesPerHost + attempt;
     expect(
       TimeoutConstants.overallRequestDeadline,
-      greaterThanOrEqualTo(attempt + backupLadder),
+      greaterThanOrEqualTo(primaryFastFailureThenStall + backupLadder),
     );
   });
 

@@ -33,20 +33,13 @@ void main() {
   /// A minimal ranked match, just enough to give a split a non-zero
   /// [RankedSummary.currentRp] via [RankedMatch.cumulativeRp].
   RankedMatch matchWith({required String uid, required int cumulativeRp}) =>
-      RankedMatch.fromJson({
-        'uid': uid,
-        'name': 'TestPlayer',
-        'legendPlayed': 'Wraith',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': 1700000000,
-        'gameEndTimestamp': 1700000600,
-        'gameData': const [],
-        'BRScoreChange': 40,
-        'BRScore': cumulativeRp,
-        'map': 'olympus_rotation',
-        'isPartyFull': false,
-      });
+      buildMatch(
+        uid: uid,
+        start: 1700000000,
+        legend: 'Wraith',
+        rp: 40,
+        cumulativeRp: cumulativeRp,
+      );
 
   Widget app({
     required SharedPreferences prefs,
@@ -159,7 +152,7 @@ void main() {
       app(
         prefs: prefs,
         outcome: RankedSyncOutcome.cooldown,
-        eligibility: (eligible: false, lastPolledAt: null, pollCount: 0),
+        eligibility: (eligible: false, pollCount: 0),
       ),
     );
     // gamesEligibilityProvider resolves one microtask after rankedSyncProvider
@@ -177,7 +170,7 @@ void main() {
       app(
         prefs: prefs,
         outcome: RankedSyncOutcome.queued,
-        eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+        eligibility: (eligible: true, pollCount: 5),
       ),
     );
     await tester.pump();
@@ -193,7 +186,7 @@ void main() {
         app(
           prefs: prefs,
           outcome: RankedSyncOutcome.queued,
-          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          eligibility: (eligible: true, pollCount: 5),
           capacity: (
             maxPerHour: 15,
             used: 12,
@@ -224,7 +217,7 @@ void main() {
         app(
           prefs: prefs,
           outcome: RankedSyncOutcome.queued,
-          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          eligibility: (eligible: true, pollCount: 5),
           capacity: (
             maxPerHour: 15,
             used: 15,
@@ -254,7 +247,7 @@ void main() {
         app(
           prefs: prefs,
           outcome: RankedSyncOutcome.busy,
-          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          eligibility: (eligible: true, pollCount: 5),
           // Slots are free, which is exactly why "N free, resets in M min"
           // would be wrong here.
           capacity: (
@@ -314,7 +307,7 @@ void main() {
       app(
         prefs: prefs,
         outcome: RankedSyncOutcome.synced,
-        eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+        eligibility: (eligible: true, pollCount: 5),
       ),
     );
     await tester.pump();
@@ -330,7 +323,7 @@ void main() {
         app(
           prefs: prefs,
           outcome: RankedSyncOutcome.cooldown,
-          eligibility: (eligible: false, lastPolledAt: 123, pollCount: 5),
+          eligibility: (eligible: false, pollCount: 5),
         ),
       );
       await tester.pump();
@@ -352,7 +345,7 @@ void main() {
         app(
           prefs: prefs,
           outcome: RankedSyncOutcome.synced,
-          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          eligibility: (eligible: true, pollCount: 5),
           snapshots: [StatSnapshot(timestamp: DateTime(2026, 1, 1), rp: 1200)],
         ),
       );
@@ -371,7 +364,7 @@ void main() {
         app(
           prefs: prefs,
           outcome: RankedSyncOutcome.synced,
-          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          eligibility: (eligible: true, pollCount: 5),
           legendStats: [buildLegend()],
         ),
       );
@@ -390,7 +383,7 @@ void main() {
         app(
           prefs: prefs,
           outcome: RankedSyncOutcome.synced,
-          eligibility: (eligible: true, lastPolledAt: null, pollCount: 5),
+          eligibility: (eligible: true, pollCount: 5),
         ),
       );
       await tester.pump();
