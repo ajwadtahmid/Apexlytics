@@ -13,9 +13,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../constants/api_constants.dart';
 import '../../constants/prefs_keys.dart';
 import '../app_logger.dart';
-import 'legend_stats_storage.dart';
 import 'ranked_history_store.dart';
 import 'rp_snapshot_storage.dart';
 import 'season_storage.dart' show mergeRestoredSeasonHistory;
@@ -59,8 +59,8 @@ const _staticBackupKeys = {
 };
 
 const _dynamicBackupPrefixes = [
-  legendStatsKeyPrefix,
-  snapshotKeyPrefix,
+  PrefsKeys.legendStatsKeyPrefix,
+  PrefsKeys.snapshotKeyPrefix,
   // Deliberate user input, and the second setting to escape backups by being
   // a UID-scoped key nobody added here. See the exhaustiveness test.
   PrefsKeys.rankGoalPrefix,
@@ -85,7 +85,8 @@ bool backupIncludesKey(String key) => _include(key);
 /// Masks any embedded UID in a pref key before logging - `log.w` forwards to
 /// Sentry, and UID-scoped keys (`rank_goal_1006838015507`) carry the player
 /// identifier in the key name itself.
-String _redactUid(String key) => key.replaceAll(RegExp(r'\d{10,20}'), '<uid>');
+String _redactUid(String key) =>
+    key.replaceAll(ApiConstants.uidPattern, '<uid>');
 
 /// Every prefs key a restore of [prefsData] touches: written (present in the
 /// backup and allowlisted) or cleared (a [_staticBackupKeys] entry that's
@@ -99,8 +100,13 @@ Set<String> prefsKeysTouchedByRestore(
   Map<String, dynamic> prefsData,
 ) {
   final written = prefsData.keys.where(_include);
+  // Season windows are learned from the API and can't be re-learned for past
+  // splits, so a backup without them leaves the device's alone.
   final cleared = prefs.getKeys().where(
-    (k) => _staticBackupKeys.contains(k) && !prefsData.containsKey(k),
+    (k) =>
+        _staticBackupKeys.contains(k) &&
+        k != PrefsKeys.seasonHistory &&
+        !prefsData.containsKey(k),
   );
   return {...written, ...cleared};
 }
@@ -385,7 +391,8 @@ Future<String?> exportBackup(
   final (bytes: compressed, :matchCount) = await buildBackupBytes(
     prefs: payload,
     matchPages: rankedStore?.exportRowPages() ?? const Stream.empty(),
-    snapshotPages: rankedStore?.exportSnapshotRowPages() ?? const Stream.empty(),
+    snapshotPages:
+        rankedStore?.exportSnapshotRowPages() ?? const Stream.empty(),
   );
   final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
   final defaultFilename = 'apexlytics_$stamp.json.gz';
@@ -469,13 +476,11 @@ String savedBackupName(Uri saved, String fallback) {
 sealed class ImportResult {}
 
 class ImportSuccess extends ImportResult {
-  final int keyCount;
-
   /// Match/snapshot rows the file carried that couldn't be read and were
   /// left out, rather than failing the whole restore over them.
   final int skippedRows;
 
-  ImportSuccess(this.keyCount, {this.skippedRows = 0});
+  ImportSuccess({this.skippedRows = 0});
 }
 
 class ImportError extends ImportResult {
@@ -582,17 +587,26 @@ class PreviewError extends PreviewResult {
 /// Deletes the picker's private copy of a chosen file (and its folder, if now
 /// empty). On Android and iOS the picker copies the file into the app's cache
 /// and nothing else removes it, so an imported backup would outlive "Clear all
-/// data". Only a file inside [tempDir] is touched, so a desktop user's own file
-/// is never deleted. Never throws.
+/// data". Only a file inside [tempDir] or [alsoWithin] is touched, so a desktop
+/// user's own file is never deleted. iOS copies into its `tmp/` folder rather
+/// than the cache, hence [alsoWithin]. Never throws.
 @visibleForTesting
-Future<void> deletePickerCopy(String path, Directory tempDir) async {
+Future<void> deletePickerCopy(
+  String path,
+  Directory tempDir, {
+  Directory? alsoWithin,
+}) async {
   try {
-    if (!p.isWithin(tempDir.path, path)) return;
+    final root = [
+      tempDir,
+      ?alsoWithin,
+    ].where((d) => p.isWithin(d.path, path)).firstOrNull;
+    if (root == null) return;
     final file = File(path);
     if (await file.exists()) await file.delete();
-    // Android nests the copy in a folder of its own.
+    // The copy is nested in a folder of its own.
     final parent = file.parent;
-    if (p.isWithin(tempDir.path, parent.path)) {
+    if (p.isWithin(root.path, parent.path)) {
       try {
         await parent.delete(); // non-recursive: only if now empty
       } on FileSystemException {
@@ -626,7 +640,11 @@ Future<PreviewResult> previewBackup({RankedHistoryStore? rankedStore}) async {
   try {
     final rawBytes = await pickedFile.readAsBytes();
     if (Platform.isAndroid || Platform.isIOS) {
-      await deletePickerCopy(pickedFile.path, await getTemporaryDirectory());
+      await deletePickerCopy(
+        pickedFile.path,
+        await getTemporaryDirectory(),
+        alsoWithin: Directory.systemTemp,
+      );
     }
     // Off the UI isolate: a large backup is tens of MB of JSON.
     final (:envelope, :sizeBytes) = await Isolate.run(
@@ -899,7 +917,7 @@ Future<ImportResult> commitBackupImport(
     log.i(
       'Backup restored: ${prefsData.length} keys from v${preview.version} backup',
     );
-    return ImportSuccess(prefsData.length, skippedRows: skippedRows);
+    return ImportSuccess(skippedRows: skippedRows);
   } catch (e) {
     log.w('Backup import failed', error: e);
     // The database half is transactional, restorePrefsData rolls back its

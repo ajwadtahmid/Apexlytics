@@ -1,7 +1,9 @@
 import 'package:sentry_flutter/sentry_flutter.dart';
 
-/// Player UIDs are 10-20 digit numbers; nothing else the app reports is.
-final _uidPattern = RegExp(r'\d{10,20}');
+import '../constants/api_constants.dart';
+
+/// Nothing else the app reports is a 10-20 digit number.
+final _uidPattern = ApiConstants.uidPattern;
 
 /// Longest a single scrubbed string may be. Real error messages fit easily;
 /// anything longer is most likely carrying a payload.
@@ -30,10 +32,12 @@ String scrubForCrashReport(String text) {
 
 /// Sentry `beforeSend`: scrubs every free-text field of an outgoing event
 /// that app or error text can reach — exception values, the message, and
-/// the breadcrumb trail attached to it. Also drops the event's user, which the SDK
-/// can fill with a per-install id.
+/// the breadcrumb trail attached to it. Also drops the event's user and the
+/// identifiers the SDK merges in from the native side: the per-install device
+/// id (Android) and the app's device hash (iOS).
 SentryEvent scrubSentryEvent(SentryEvent event, Hint hint) {
   event.user = null;
+  _dropDeviceIdentifiers(event.contexts);
   for (final exception in event.exceptions ?? const <SentryException>[]) {
     final value = exception.value;
     if (value != null) exception.value = scrubForCrashReport(value);
@@ -46,6 +50,20 @@ SentryEvent scrubSentryEvent(SentryEvent event, Hint hint) {
     _scrubBreadcrumb(breadcrumb);
   }
   return event;
+}
+
+void _dropDeviceIdentifiers(Contexts contexts) {
+  // The device id is not a typed field in the SDK's protocol, so it is removed
+  // through the JSON form.
+  final device = contexts.device;
+  if (device != null) {
+    final json = device.toJson()
+      ..remove('id')
+      ..remove('device_unique_identifier')
+      ..remove('boot_time');
+    contexts.device = SentryDevice.fromJson(json);
+  }
+  contexts.app?.deviceAppHash = null;
 }
 
 /// Sentry `beforeBreadcrumb`: breadcrumbs from `log.w`/`log.e` carry the

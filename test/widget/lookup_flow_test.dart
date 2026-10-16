@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/search/search_screen.dart';
@@ -7,6 +10,7 @@ import 'package:apexlytics/utils/formatting/search_utils.dart';
 import 'package:apexlytics/utils/storage/api_cache_store.dart';
 import 'package:apexlytics/widgets/player_lookup_form.dart';
 import 'package:apexlytics/widgets/profile_manager_sheet.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +35,23 @@ const _switchUidNotice =
 const _switchWarning =
     'Nintendo Switch players can only be searched by UID. Pick another platform to search by name.';
 const _cooldownNotice = 'One moment — try again in a few seconds.';
+
+/// Answers like [FakeHttpAdapter], but only once [gate] completes, so a test
+/// decides when a lookup finishes.
+class _GatedAdapter extends FakeHttpAdapter {
+  final Future<void> gate;
+  _GatedAdapter(super.routes, this.gate);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    await gate;
+    return super.fetch(options, requestStream, cancelFuture);
+  }
+}
 
 void main() {
   setUpAll(useFfiDatabase);
@@ -392,8 +413,9 @@ void main() {
 
     Future<ProviderContainer> openSheet(
       WidgetTester t,
-      FakeHttpAdapter adapter,
-    ) async {
+      FakeHttpAdapter adapter, {
+      Map<String, Object> stored = oneProfile,
+    }) async {
       final c = await boot(
         t,
         Scaffold(
@@ -409,7 +431,7 @@ void main() {
           ),
         ),
         adapter,
-        prefs: oneProfile,
+        prefs: stored,
       );
       await t.tap(find.text('open'));
       await t.pumpAndSettle();
@@ -480,6 +502,45 @@ void main() {
       expect(c.read(playerSettingsProvider).profiles.single.name, 'Aceu2');
       expect(find.byType(ProfileManagerSheet), findsOneWidget);
       expect(find.byType(PlayerLookupForm), findsNothing);
+    });
+
+    testWidgets('a lookup that finishes after backing out cannot overwrite '
+        'the slot opened next', (t) async {
+      const twoProfiles = {
+        'player_profiles':
+            '[{"name":"Aceu","uid":"1001","platform":"PC"},'
+            '{"name":"Bea","uid":"1002","platform":"PC"}]',
+        'active_profile_index': 0,
+      };
+      final release = Completer<void>();
+      final c = await openSheet(
+        t,
+        _GatedAdapter({'/player': player('Gamma', '9009')}, release.future),
+        stored: twoProfiles,
+      );
+
+      // Edit the first profile and submit, but back out before it answers.
+      await t.tap(find.byIcon(Icons.edit_outlined).first);
+      await t.pump();
+      await t.enterText(find.byType(TextField), 'Gamma');
+      await t.tap(find.widgetWithText(ElevatedButton, 'Update Profile'));
+      await t.pump();
+      await t.tap(find.byIcon(Icons.arrow_back));
+      await t.pump();
+
+      // Open the second profile; then the first lookup comes back.
+      await t.tap(find.byIcon(Icons.edit_outlined).last);
+      await t.pump();
+      release.complete();
+      await settle(t);
+
+      expect(c.read(playerSettingsProvider).profiles.map((p) => p.name), [
+        'Aceu',
+        'Bea',
+      ]);
+      // And the user is still looking at the second profile's form.
+      expect(find.byType(PlayerLookupForm), findsOneWidget);
+      expect(fieldText(t), 'Bea');
     });
 
     testWidgets('editing a Switch profile opens in UID mode on its UID', (

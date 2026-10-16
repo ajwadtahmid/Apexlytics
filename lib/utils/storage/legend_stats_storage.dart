@@ -4,10 +4,6 @@ import '../../constants/prefs_keys.dart';
 import '../../models/player_stats.dart';
 import '../app_logger.dart';
 
-/// Prefix for legend stats keys. Keys are stored as `legendStats_<uid>`.
-/// Included in backups to preserve legend statistics across app reinstalls.
-const String legendStatsKeyPrefix = '${PrefsKeys.legendStats}_';
-
 List<LegendStat> _parseLegendStats(String? raw) {
   try {
     final decoded = jsonDecode(raw ?? '[]');

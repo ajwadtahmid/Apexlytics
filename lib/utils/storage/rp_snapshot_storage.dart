@@ -10,13 +10,6 @@ import 'ranked_history_store.dart';
 import 'season_storage.dart';
 import '../formatting/snapshot_types.dart';
 
-/// Legacy prefix for RP snapshot keys, `stat_snapshots_<uid>`.
-///
-/// Snapshots now live in the `stat_snapshots` table (schema v8). This is kept
-/// for two reasons: [migrateSnapshotsFromPrefs] drains it, and v2 backup files
-/// still carry the prefs form, so `backup_service` must keep accepting it.
-const String snapshotKeyPrefix = 'stat_snapshots_';
-
 /// Per-UID snapshots held in memory, oldest first - the table is the durable
 /// copy, but the RP graph renders on frame 1 and SQLite is async, so reads
 /// are served from here. [primeSnapshots] fills it, [loadSnapshotsSync] reads
@@ -96,7 +89,9 @@ Future<void> migrateSnapshotsFromPrefs(
   final legacyKeys = prefs
       .getKeys()
       .where(
-        (k) => k.startsWith(snapshotKeyPrefix) || k == PrefsKeys.statSnapshots,
+        (k) =>
+            k.startsWith(PrefsKeys.snapshotKeyPrefix) ||
+            k == PrefsKeys.statSnapshots,
       )
       .toList();
   if (legacyKeys.isEmpty) return;
@@ -116,7 +111,7 @@ Future<void> migrateSnapshotsFromPrefs(
     // the empty-uid bucket matches how snapshotKeyFor(null) already reads it.
     final uid = key == PrefsKeys.statSnapshots
         ? ''
-        : key.substring(snapshotKeyPrefix.length);
+        : key.substring(PrefsKeys.snapshotKeyPrefix.length);
     await store.appendSnapshotsFor(uid, snaps);
     log.i('Migrated ${snaps.length} RP snapshots to SQLite');
     drained.add(key); // only after the rows commit
@@ -198,11 +193,9 @@ Future<List<StatSnapshot>> appendSnapshot(
   // Only the entry still pointing at *this* link is cleared — a newer call
   // may already have chained onto it and replaced the map entry.
   unawaited(
-    chained
-        .catchError((_, _) => const <StatSnapshot>[])
-        .whenComplete(() {
-          if (identical(_appending[key], chained)) _appending.remove(key);
-        }),
+    chained.catchError((_, _) => const <StatSnapshot>[]).whenComplete(() {
+      if (identical(_appending[key], chained)) _appending.remove(key);
+    }),
   );
   return chained;
 }
@@ -272,15 +265,8 @@ Future<List<StatSnapshot>> _appendSnapshotLocked(
 Future<List<StatSnapshot>> appendAndLoadSnapshots(
   PlayerStats stats,
   RankedHistoryStore store, {
-  bool deduplicateRp = true,
   DateTime? staleAt,
-}) => appendSnapshot(
-  stats,
-  store,
-  uid: stats.uid,
-  deduplicateRp: deduplicateRp,
-  staleAt: staleAt,
-);
+}) => appendSnapshot(stats, store, uid: stats.uid, staleAt: staleAt);
 
 /// Loads snapshots and seasons for a player in one call. Used by state
 /// initialization in stats views to populate all snapshot-related data.

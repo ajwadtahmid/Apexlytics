@@ -177,6 +177,21 @@ void main() {
       expect(prefs.getInt(PrefsKeys.onboardingVersion), kOnboardingVersion);
     });
 
+    testWidgets('leaving with back counts as seen', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+
+      await tester.pumpWidget(_wrap(prefs, const _GateHarness()));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome to Apexlytics'), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Welcome to Apexlytics'), findsNothing);
+      expect(prefs.getInt(PrefsKeys.onboardingVersion), kOnboardingVersion);
+    });
+
     testWidgets('does not show when already seen at the current version', (
       tester,
     ) async {

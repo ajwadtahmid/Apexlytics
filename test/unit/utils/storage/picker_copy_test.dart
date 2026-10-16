@@ -49,6 +49,26 @@ void main() {
     expect(await original.exists(), isTrue);
   });
 
+  test('also removes a copy in the second root, as iOS leaves it in tmp/', () async {
+    final cache = await Directory.systemTemp.createTemp('picker_ios_cache');
+    addTearDown(() => cache.delete(recursive: true));
+    final copy = await fileIn(temp, p.join('app.id-Inbox', 'backup.gz'));
+
+    await deletePickerCopy(copy.path, cache, alsoWithin: temp);
+
+    expect(await copy.exists(), isFalse);
+    expect(await copy.parent.exists(), isFalse);
+    expect(await temp.exists(), isTrue, reason: 'tmp/ itself stays');
+  });
+
+  test('the second root does not widen what is deleted', () async {
+    final original = await fileIn(elsewhere, 'my-backup.gz');
+
+    await deletePickerCopy(original.path, temp, alsoWithin: temp);
+
+    expect(await original.exists(), isTrue);
+  });
+
   test('a missing file is not an error', () async {
     await deletePickerCopy(p.join(temp.path, 'gone', 'x.gz'), temp);
   });

@@ -16,12 +16,9 @@ final uidOnlyInputFormatters = <TextInputFormatter>[
 bool isDigitsOnly(String text) =>
     text.isNotEmpty && RegExp(r'^\d+$').hasMatch(text);
 
-/// Fewest digits that read as a UID rather than a numeric name. Apex UIDs are 10+ digits.
-const _kMinUidDigits = 8;
-
 /// Whether [text] is long and numeric enough to be a UID typed into the name field.
 bool looksLikeUid(String text) =>
-    text.length >= _kMinUidDigits && isDigitsOnly(text);
+    text.length >= ApiConstants.minUidDigits && isDigitsOnly(text);
 
 /// "Looks like a UID" hint shown under the name field when [controller] holds digits only.
 /// Hidden in UID mode. Tapping the action calls [onUseUid], which should switch to UID search.

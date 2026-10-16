@@ -100,6 +100,39 @@ void main() {
       expect(scrubSentryEvent(event, Hint()).user, isNull);
     });
 
+    test('scrubSentryEvent drops the device ids the native side merges in', () {
+      // Android puts the per-install id in the device context; iOS puts a
+      // per-device hash in the app context.
+      final event = SentryEvent(
+        contexts: Contexts(
+          device: SentryDevice.fromJson({
+            'id': 'per-install-uuid',
+            'device_unique_identifier': 'abc',
+            'boot_time': '2026-10-01T00:00:00.000Z',
+            'model': 'Pixel 9',
+            'arch': 'arm64',
+          }),
+          app: SentryApp(name: 'Apexlytics', deviceAppHash: 'device-hash'),
+        ),
+      );
+
+      final scrubbed = scrubSentryEvent(event, Hint());
+
+      final device = scrubbed.contexts.device!.toJson();
+      expect(device.containsKey('id'), isFalse);
+      expect(device.containsKey('device_unique_identifier'), isFalse);
+      expect(device.containsKey('boot_time'), isFalse);
+      // What a crash report needs stays.
+      expect(device['model'], 'Pixel 9');
+      expect(device['arch'], 'arm64');
+      expect(scrubbed.contexts.app!.deviceAppHash, isNull);
+      expect(scrubbed.contexts.app!.name, 'Apexlytics');
+    });
+
+    test('scrubSentryEvent copes with an event that has no device context', () {
+      expect(() => scrubSentryEvent(SentryEvent(), Hint()), returnsNormally);
+    });
+
     test('scrubSentryBreadcrumb scrubs the message and string data only', () {
       final crumb = scrubSentryBreadcrumb(
         Breadcrumb(

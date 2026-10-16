@@ -165,6 +165,25 @@ void main() {
       expect(coerceRestoredPref(PrefsKeys.legendStatsKeyFor('1'), '{}'), '{}');
     });
 
+    test('a backup with no season history leaves the device\'s windows alone',
+        () async {
+      const day = 86400000;
+      final device = jsonEncode([
+        {'id': 'br_ranked_s29_s2', 'start': 100 * day, 'end': 150 * day},
+      ]);
+      SharedPreferences.setMockInitialValues({
+        PrefsKeys.seasonHistory: device,
+        PrefsKeys.keepScreenOn: true,
+      });
+      final prefs = await SharedPreferences.getInstance();
+
+      await restorePrefsData(prefs, {PrefsKeys.statsRefreshMinutes: 5});
+
+      expect(prefs.getString(PrefsKeys.seasonHistory), device);
+      // Other absent keys are still cleared: a restore replaces the settings.
+      expect(prefs.containsKey(PrefsKeys.keepScreenOn), isFalse);
+    });
+
     test('a restored season history is validated and merged with the device\'s '
         'own seasons', () async {
       const day = 86400000;
@@ -285,23 +304,16 @@ void main() {
   });
 
   group('exportBackup → previewBackup → commitBackupImport round trip', () {
-    RankedMatch match(String uid, int startSecs) => RankedMatch.fromJson({
-      'uid': uid,
-      'name': 'Tester',
-      'legendPlayed': 'Wraith',
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': 600,
-      'gameStartTimestamp': startSecs,
-      'gameEndTimestamp': startSecs + 600,
-      'gameData': [
-        {'key': 'kills', 'value': 5, 'name': 'BR Kills'},
-        {'key': 'damage', 'value': 800, 'name': 'BR Damage'},
-      ],
-      'BRScoreChange': 20,
-      'BRScore': 1020,
-      'map': 'olympus_rotation',
-      'isPartyFull': true,
-    });
+    RankedMatch match(String uid, int startSecs) => buildMatch(
+      uid: uid,
+      start: startSecs,
+      legend: 'Wraith',
+      kills: 5,
+      damage: 800,
+      rp: 20,
+      cumulativeRp: 1020,
+      isPartyFull: true,
+    );
 
     test('a real export round-trips through preview and commit: prefs, '
         'ranked history, and RP snapshots all land', () async {
@@ -391,19 +403,8 @@ void main() {
   });
 
   group('buildBackupBytes', () {
-    RankedMatch game(String uid, int start) => RankedMatch.fromJson({
-      'uid': uid,
-      'name': 'Tester',
-      'legendPlayed': 'Axle',
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': 600,
-      'gameStartTimestamp': start,
-      'gameEndTimestamp': start + 600,
-      'gameData': const [],
-      'BRScoreChange': 10,
-      'BRScore': 1000,
-      'map': 'olympus_rotation',
-    });
+    RankedMatch game(String uid, int start) =>
+        buildMatch(uid: uid, start: start);
 
     Map<String, dynamic> decode(List<int> bytes) =>
         jsonDecode(utf8.decode(decompressIfGzipped(bytes)))

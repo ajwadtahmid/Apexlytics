@@ -171,6 +171,9 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
               : 'Player not found. Check the name and platform.',
         );
       }
+      // Closed while the lookup ran: nothing to save, and the caller has
+      // moved on (it may now be editing another profile).
+      if (!mounted) return;
       if (widget.onPlayerFound != null) {
         await widget.onPlayerFound!(stats.name, stats.uid, _platform);
       } else {

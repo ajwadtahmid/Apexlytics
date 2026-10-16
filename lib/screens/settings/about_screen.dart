@@ -11,6 +11,7 @@ import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart' show SettingsCard;
 import '../../utils/navigation_utils.dart';
+import '../../utils/formatting/format.dart' show kNoReading;
 
 /// Dedicated "about" destination reached from Settings — version, release
 /// notes, store rating, data-source credits, privacy policy, and attribution.
@@ -54,7 +55,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     final info = ref
         .watch(packageInfoProvider)
         .whenOrNull(data: (info) => info);
-    final version = info?.version ?? '—';
+    final version = info?.version ?? kNoReading;
 
     return Scaffold(
       appBar: AppBar(title: const Text('About')),
@@ -152,7 +153,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
           const Center(
             child: Text(
               'Made by Ajwad Tahmid Ayon',
-              style: TextStyle(color: AppTheme.muted, fontSize: 11),
+              style: AppTheme.captionSmall,
             ),
           ),
           const SizedBox(height: AppTheme.xl),
@@ -211,7 +212,21 @@ class _OwnerDialogState extends ConsumerState<_OwnerDialog> {
   }
 
   Future<void> _lock() async {
-    await ref.read(ownerUnlockedProvider.notifier).lock();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(ownerUnlockedProvider.notifier).lock();
+    } catch (_) {
+      // The secure store refused the delete: the token is still there.
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = "Couldn't remove the token. Try again.";
+      });
+      return;
+    }
     if (!mounted) return;
     Navigator.pop(context);
     context.showMessage('Owner mode off');
@@ -223,7 +238,20 @@ class _OwnerDialogState extends ConsumerState<_OwnerDialog> {
     return AlertDialog(
       title: const Text('Owner mode'),
       content: unlocked
-          ? const Text('This device is unlocked.')
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('This device is unlocked.'),
+                if (_error != null) ...[
+                  const SizedBox(height: AppTheme.sm),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: AppTheme.red, fontSize: 12),
+                  ),
+                ],
+              ],
+            )
           : TextField(
               controller: _controller,
               obscureText: true,
@@ -242,7 +270,10 @@ class _OwnerDialogState extends ConsumerState<_OwnerDialog> {
           child: const Text('Close'),
         ),
         if (unlocked)
-          TextButton(onPressed: _lock, child: const Text('Remove'))
+          TextButton(
+            onPressed: _busy ? null : _lock,
+            child: const Text('Remove'),
+          )
         else
           TextButton(
             onPressed: _busy ? null : _unlock,
@@ -262,7 +293,7 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      padding: const EdgeInsets.only(bottom: 12, left: AppTheme.xs),
       child: Text(
         label,
         style: const TextStyle(
@@ -338,7 +369,7 @@ class _CreditRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                  style: AppTheme.caption,
                 ),
               ],
             ),

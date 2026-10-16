@@ -318,11 +318,7 @@ class CacheSettingsSection extends ConsumerWidget {
         // Same UID as before restore, so these families' cached values would
         // otherwise survive and the Ranked section of My Stats would show stale data.
         invalidatePlayerDerivedProviders(ref);
-        // Same counts the preview dialog already showed the user, not
-        // ImportSuccess.keyCount — that's the number of raw SharedPreferences
-        // keys restored (settings, favourites, ...), an internal bookkeeping
-        // detail nobody asked about. Showing it as "N items" read as a wildly
-        // wrong match/profile count and was more confusing than useful.
+        // The same counts the preview dialog showed.
         context.showMessage(
           'Backup restored: ${_profilesLabel(preview.profileCount)}, '
           '${preview.matchCount} matches.'

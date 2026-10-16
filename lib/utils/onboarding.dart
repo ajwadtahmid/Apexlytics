@@ -33,6 +33,12 @@ Future<void> showOnboardingIfNeeded(BuildContext context, WidgetRef ref) async {
     ),
   );
 
+  // Leaving by back or a swipe counts as seen too, or the tour would return on
+  // every launch.
+  if ((prefs.getInt(PrefsKeys.onboardingVersion) ?? 0) < kOnboardingVersion) {
+    await prefs.setInt(PrefsKeys.onboardingVersion, kOnboardingVersion);
+  }
+
   // Land on My Stats so the profile-setup form is the first thing they reach.
   ref.read(currentTabProvider.notifier).setTab(AppTab.stats);
 }
