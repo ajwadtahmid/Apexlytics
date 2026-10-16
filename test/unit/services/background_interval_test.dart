@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:apexlytics/constants/prefs_keys.dart';
@@ -19,6 +20,49 @@ void main() {
       expect(backgroundFetchIntervalFor(20), 20);
       expect(backgroundFetchIntervalFor(60), 60);
       expect(backgroundFetchIntervalFor(120), 60);
+    });
+  });
+
+  group('isBackgroundRefreshUnavailable', () {
+    // Background App Refresh being off is "nothing to do", not a failure.
+    test(
+      'iOS "restricted" and "denied" are the user\'s setting, not an error',
+      () {
+        for (final code in const ['0', '1']) {
+          expect(
+            isBackgroundRefreshUnavailable(
+              PlatformException(code: code),
+              ios: true,
+            ),
+            isTrue,
+            reason: 'status $code',
+          );
+        }
+      },
+    );
+
+    test('any other failure still surfaces', () {
+      expect(
+        isBackgroundRefreshUnavailable(PlatformException(code: '2'), ios: true),
+        isFalse,
+      );
+      expect(
+        isBackgroundRefreshUnavailable(
+          PlatformException(code: 'unexpected'),
+          ios: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('the same codes are not special off iOS', () {
+      expect(
+        isBackgroundRefreshUnavailable(
+          PlatformException(code: '1'),
+          ios: false,
+        ),
+        isFalse,
+      );
     });
   });
 

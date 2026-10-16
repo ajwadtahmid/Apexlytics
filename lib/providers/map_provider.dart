@@ -9,13 +9,14 @@ import '../utils/app_logger.dart';
 import 'api_provider.dart';
 import 'settings_provider.dart';
 import '../constants/api_constants.dart';
+import '../constants/prefs_keys.dart';
 
 final mapRotationProvider = FutureProvider<ApiResult<MapRotation>>(
   (ref) => ref.watch(mapServiceProvider).getMapRotation(),
 );
 
 class SeasonalMapsNotifier extends AsyncNotifier<SeasonalMaps> {
-  static const String _cacheKey = SeasonalMaps.cacheKey;
+  static const String _cacheKey = PrefsKeys.seasonalMapsCache;
 
   @override
   Future<SeasonalMaps> build() async {

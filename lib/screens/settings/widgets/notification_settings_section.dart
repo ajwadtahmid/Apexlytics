@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/settings_provider.dart';
-import '../../../services/background_service.dart' show kLastFetchResultKey;
 import '../../../utils/formatting/format.dart' show timeAgo;
 import '../../../utils/theme.dart';
 import '../../../widgets/widgets.dart';
 import '../map_alerts_sheet.dart';
 import 'notification_health_banners.dart';
+import '../../../constants/prefs_keys.dart';
 
 class NotificationSettingsSection extends ConsumerWidget {
   const NotificationSettingsSection({super.key});
@@ -120,7 +120,7 @@ class _LastBackgroundRefreshRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final raw = ref
         .watch(sharedPreferencesProvider)
-        .getString(kLastFetchResultKey);
+        .getString(PrefsKeys.bgFetchLastResult);
 
     final (label, color) = switch (_parse(raw)) {
       null => (

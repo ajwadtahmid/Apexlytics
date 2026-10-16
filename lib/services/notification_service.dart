@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
+import '../constants/map_constants.dart';
 import '../models/map_rotation.dart';
 import '../utils/app_logger.dart';
 
@@ -319,7 +320,8 @@ class NotificationService {
   }) async {
     if (!_supported || !_initialized) return;
 
-    await _cancelAllInternal();
+    // Pending only: an alert already posted stays in the shade.
+    await _cancelAllInternal(pendingOnly: true);
 
     // OS permission revoked after alerts were enabled: scheduling would only
     // be rejected (iOS UNErrorDomain 2003). The Settings banner covers it.
@@ -444,10 +446,12 @@ class NotificationService {
 
     final durationSecs = nextMap.durationMins * 60;
     final filtering = favoriteMapNames.isNotEmpty;
+    final favouriteKeys = favoriteMapNames.map(mapNameKey).toSet();
 
     // Where the next map sits in the rotation cycle. Rotation i is then
     // sequence[(nextIndex + i) % length], so future maps can be named.
-    final nextIndex = mapSequence.indexOf(nextMap.map);
+    final nextKey = mapNameKey(nextMap.map);
+    final nextIndex = mapSequence.indexWhere((n) => mapNameKey(n) == nextKey);
     final hasSequence = nextIndex >= 0;
 
     var rotationStartSecs = currentRemainingSecs;
@@ -465,7 +469,7 @@ class NotificationService {
       // known name we can't tell, so stop projecting.
       if (filtering) {
         if (mapName == null) break;
-        if (!favoriteMapNames.contains(mapName)) {
+        if (!favouriteKeys.contains(mapNameKey(mapName))) {
           if (durationSecs <= 0) break;
           rotationStartSecs += durationSecs;
           continue;
@@ -551,13 +555,18 @@ class NotificationService {
   /// schedule that started before it.
   static Future<void> cancelAll() => _serialized(_cancelAllInternal);
 
-  static Future<void> _cancelAllInternal() async {
+  /// [pendingOnly] keeps alerts already posted in the shade (Android and iOS only).
+  static Future<void> _cancelAllInternal({bool pendingOnly = false}) async {
     for (final t in _desktopTimers) {
       t.cancel();
     }
     _desktopTimers.clear();
     try {
-      await _plugin.cancelAll();
+      if (pendingOnly && _supportsScheduled) {
+        await _plugin.cancelAllPendingNotifications();
+      } else {
+        await _plugin.cancelAll();
+      }
     } catch (e) {
       // Best-effort: no worse than the unconditional no-op this used to be,
       // and the desktop-timer cleanup above has already run either way.

@@ -85,16 +85,17 @@ bool isUnknownMapKey(String mapKey) {
 BattleRoyaleMapInfo? battleRoyaleMapInfo(String mapKey) =>
     kBattleRoyaleMaps[_baseKey(mapKey)];
 
-/// Lowercased letters and digits only, so display names match the catalog.
-String _nameKey(String name) =>
+/// Lowercased letters and digits only, so the same map matches however a
+/// source spells it ("World's Edge", "Worlds Edge").
+String mapNameKey(String name) =>
     name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
 /// The catalog entry for a rotation display name, or null if not bundled.
 BattleRoyaleMapInfo? battleRoyaleMapInfoByName(String displayName) {
-  final key = _nameKey(displayName);
+  final key = mapNameKey(displayName);
   if (key.isEmpty) return null;
   for (final info in kBattleRoyaleMaps.values) {
-    if (_nameKey(info.name) == key) return info;
+    if (mapNameKey(info.name) == key) return info;
   }
   return null;
 }
@@ -135,6 +136,8 @@ String canonicalMapKey(String mapKey) => isUnknownMapKey(mapKey)
 /// Case doesn't need to be exhaustive here — `matchesForMap` matches
 /// case-insensitively.
 List<String> battleRoyaleMapKeyVariants(String mapKey) {
+  // Blank and UNKNOWN are one map; SQL folds a blank column to UNKNOWN.
+  if (isUnknownMapKey(mapKey)) return const ['unknown', 'unknown_rotation'];
   final info = battleRoyaleMapInfo(mapKey);
   if (info == null) {
     final base = _baseKey(mapKey);

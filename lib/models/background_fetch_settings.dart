@@ -28,24 +28,41 @@ class BackgroundFetchSettings {
     required this.favoritePubsMapNames,
   });
 
+  // A wrong-typed value reads as absent: the typed getters throw, which would
+  // stop every background fetch.
+  static bool? _bool(SharedPreferences p, String key) {
+    final v = p.get(key);
+    return v is bool ? v : null;
+  }
+
+  static int? _int(SharedPreferences p, String key) {
+    final v = p.get(key);
+    return v is int ? v : null;
+  }
+
+  static String? _string(SharedPreferences p, String key) {
+    final v = p.get(key);
+    return v is String ? v : null;
+  }
+
   /// Returns null if no modes are enabled or all active modes have 0 timing.
   static BackgroundFetchSettings? fromPrefs(SharedPreferences prefs) {
-    final notifyPubs = prefs.getBool(PrefsKeys.notifyPubsMapRotation) ?? false;
+    final notifyPubs = _bool(prefs, PrefsKeys.notifyPubsMapRotation) ?? false;
     final notifyRanked =
-        prefs.getBool(PrefsKeys.notifyRankedMapRotation) ?? false;
+        _bool(prefs, PrefsKeys.notifyRankedMapRotation) ?? false;
     final notifyMixtape =
-        prefs.getBool(PrefsKeys.notifyMixtapeMapRotation) ?? false;
+        _bool(prefs, PrefsKeys.notifyMixtapeMapRotation) ?? false;
     final notifyWildcard =
-        prefs.getBool(PrefsKeys.notifyWildcardMapRotation) ?? false;
+        _bool(prefs, PrefsKeys.notifyWildcardMapRotation) ?? false;
     if (!notifyPubs && !notifyRanked && !notifyMixtape && !notifyWildcard) {
       return null;
     }
 
-    final legacy = prefs.getInt(PrefsKeys.mapNotifyMinutes) ?? 0;
-    final ranked = prefs.getInt(PrefsKeys.rankedNotifyMinutes) ?? legacy;
-    final pubs = prefs.getInt(PrefsKeys.pubsNotifyMinutes) ?? legacy;
-    final mixtape = prefs.getInt(PrefsKeys.mixtapeNotifyMinutes) ?? legacy;
-    final wildcard = prefs.getInt(PrefsKeys.wildcardNotifyMinutes) ?? 0;
+    final legacy = _int(prefs, PrefsKeys.mapNotifyMinutes) ?? 0;
+    final ranked = _int(prefs, PrefsKeys.rankedNotifyMinutes) ?? legacy;
+    final pubs = _int(prefs, PrefsKeys.pubsNotifyMinutes) ?? legacy;
+    final mixtape = _int(prefs, PrefsKeys.mixtapeNotifyMinutes) ?? legacy;
+    final wildcard = _int(prefs, PrefsKeys.wildcardNotifyMinutes) ?? 0;
 
     final anyTiming =
         (notifyRanked && ranked > 0) ||
@@ -64,10 +81,10 @@ class BackgroundFetchSettings {
       mixtapeMinutesBefore: mixtape,
       wildcardMinutesBefore: wildcard,
       favoriteRankedMapNames: parseStringList(
-        prefs.getString(PrefsKeys.favoriteRankedMapNames),
+        _string(prefs, PrefsKeys.favoriteRankedMapNames),
       ),
       favoritePubsMapNames: parseStringList(
-        prefs.getString(PrefsKeys.favoritePubsMapNames),
+        _string(prefs, PrefsKeys.favoritePubsMapNames),
       ),
     );
   }

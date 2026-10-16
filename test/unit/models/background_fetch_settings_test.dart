@@ -30,6 +30,21 @@ void main() {
       },
     );
 
+    test('a wrongly-typed value reads as absent instead of throwing', () async {
+      final prefs = await prefsWith({
+        PrefsKeys.notifyPubsMapRotation: 1,
+        PrefsKeys.notifyRankedMapRotation: true,
+        PrefsKeys.rankedNotifyMinutes: '10',
+        PrefsKeys.mapNotifyMinutes: 15,
+        PrefsKeys.favoriteRankedMapNames: 7,
+      });
+      final settings = BackgroundFetchSettings.fromPrefs(prefs);
+      expect(settings, isNotNull);
+      expect(settings!.notifyPubs, isFalse);
+      expect(settings.rankedMinutesBefore, 15); // the legacy timing
+      expect(settings.favoriteRankedMapNames, isEmpty);
+    });
+
     test('returns settings when one mode is enabled with timing', () async {
       final prefs = await prefsWith({
         PrefsKeys.notifyRankedMapRotation: true,

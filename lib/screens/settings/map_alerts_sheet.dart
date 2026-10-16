@@ -15,6 +15,7 @@ import '../../widgets/error_card.dart';
 import '../../widgets/setting_row.dart';
 import 'widgets/map_mode_list.dart';
 import 'widgets/notification_health_banners.dart';
+import '../../widgets/sheet_handle.dart';
 
 void showMapAlertsSheet(BuildContext context) {
   showModalBottomSheet(
@@ -106,9 +107,15 @@ class _MapAlertsSheetContentState
     final result = [...proxyMaps.map((m) => m.name)];
     for (final m in kBattleRoyaleMaps.values) {
       if (proxyNames.contains(m.name)) continue;
-      if (effectiveShowAll || notifySet.contains(m.name)) result.add(m.name);
+      if (effectiveShowAll || _has(notifySet, m.name)) result.add(m.name);
     }
     return result;
+  }
+
+  // Spelling-insensitive, like the alert planner.
+  static bool _has(Set<String> names, String name) {
+    final key = mapNameKey(name);
+    return names.any((n) => mapNameKey(n) == key);
   }
 
   // Number of non-proxy, unselected maps still hidden behind the expand tile.
@@ -120,9 +127,7 @@ class _MapAlertsSheetContentState
     if (showAll || proxyMaps.isEmpty) return 0;
     final proxyNames = proxyMaps.map((m) => m.name).toSet();
     return kBattleRoyaleMaps.values
-        .where(
-          (m) => !proxyNames.contains(m.name) && !notifySet.contains(m.name),
-        )
+        .where((m) => !proxyNames.contains(m.name) && !_has(notifySet, m.name))
         .length;
   }
 
@@ -293,29 +298,44 @@ class _MapAlertsSheetContentState
         }
       }
     } else if (!enabled) {
-      await _cancelIfAllOff(disabledMode: mode);
+      await _cancelIfAllOff();
     }
   }
 
-  Future<void> _cancelIfAllOff({required _NotifMode disabledMode}) async {
-    final s = ref.read(playerSettingsProvider);
-    final anyEnabled =
-        (disabledMode != _NotifMode.pubs && s.notifyPubsMapRotation) ||
-        (disabledMode != _NotifMode.ranked && s.notifyRankedMapRotation) ||
-        (disabledMode != _NotifMode.wildcard && s.notifyWildcardMapRotation) ||
-        (disabledMode != _NotifMode.mixtape && s.notifyMixtapeMapRotation);
-    if (!anyEnabled) await NotificationService.cancelAll();
+  Future<void> _cancelIfAllOff() async {
+    if (!ref.read(playerSettingsProvider).anyMapAlertActive) {
+      await NotificationService.cancelAll();
+    }
   }
 
   Future<void> _toggleMap(
+    _NotifMode mode,
+    String modeLabel,
     String mapName,
     Set<String> notifySet,
     Set<String> allNames,
     Future<void> Function(List<String>) save,
   ) async {
+    // Unticking the last map turns the mode off: an empty favourites list means
+    // "every map". Favourites reset to all, so re-enabling shows every map ticked.
+    if (notifySet.length == 1 && _has(notifySet, mapName)) {
+      setState(() {
+        notifySet
+          ..clear()
+          ..addAll(allNames);
+      });
+      await save(const <String>[]);
+      if (!mounted) return;
+      await _toggleMode(context, mode, false);
+      if (!mounted) return;
+      context.showMessage(
+        '$modeLabel alerts are off: no maps were left selected.',
+      );
+      return;
+    }
     setState(
-      () => notifySet.contains(mapName)
-          ? notifySet.remove(mapName)
+      () => _has(notifySet, mapName)
+          ? notifySet.removeWhere((n) => mapNameKey(n) == mapNameKey(mapName))
           : notifySet.add(mapName),
     );
     final toSave =
@@ -337,6 +357,8 @@ class _MapAlertsSheetContentState
             .toSet() ??
         {};
     await _toggleMap(
+      _NotifMode.ranked,
+      'Ranked',
       mapName,
       _rankedNotify,
       allNames,
@@ -357,6 +379,8 @@ class _MapAlertsSheetContentState
             .toSet() ??
         {};
     await _toggleMap(
+      _NotifMode.pubs,
+      'Pubs',
       mapName,
       _pubsNotify,
       allNames,
@@ -422,16 +446,7 @@ class _MapAlertsSheetContentState
             AppTheme.lg,
           ),
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.muted,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            const SheetHandle(),
             const SizedBox(height: AppTheme.md),
             const Text(
               'Map Rotation Alerts',
@@ -485,7 +500,7 @@ class _MapAlertsSheetContentState
                     ).map(
                       (name) => MapAlertTile(
                         name: name,
-                        notify: _rankedNotify.contains(name),
+                        notify: _has(_rankedNotify, name),
                         onTap: () => _toggleRanked(name),
                       ),
                     ),
@@ -527,7 +542,7 @@ class _MapAlertsSheetContentState
                     ).map(
                       (name) => MapAlertTile(
                         name: name,
-                        notify: _pubsNotify.contains(name),
+                        notify: _has(_pubsNotify, name),
                         onTap: () => _togglePubs(name),
                       ),
                     ),

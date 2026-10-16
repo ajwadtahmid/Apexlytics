@@ -18,6 +18,7 @@ import '../utils/api_deadline.dart';
 import '../utils/app_logger.dart';
 import '../utils/retry_interceptor.dart';
 import 'notification_service.dart';
+import '../constants/prefs_keys.dart';
 
 const int _backgroundFetchIntervalMinutes = 30;
 
@@ -29,11 +30,16 @@ int backgroundFetchIntervalFor(int minNotifyMinutes) => minNotifyMinutes > 0
     ? minNotifyMinutes.clamp(15, 60)
     : _backgroundFetchIntervalMinutes;
 
+/// Whether [e] is iOS reporting Background App Refresh as restricted ("0") or
+/// denied ("1").
+@visibleForTesting
+bool isBackgroundRefreshUnavailable(PlatformException e, {required bool ios}) =>
+    ios && (e.code == '0' || e.code == '1');
+
 /// Outcome of the most recent background fetch, as `ok:<iso8601>` or
 /// `error:<iso8601>`. Surfaced in Settings - background fetch is otherwise
 /// completely invisible, and "are my map alerts actually being rescheduled?"
 /// has no other answer from inside the app.
-const String kLastFetchResultKey = 'bg_fetch_last_result';
 
 /// `debugPrint` is **not** stripped in release builds, and this runs in a
 /// detached isolate where the app logger and Sentry may not be initialised -
@@ -46,7 +52,7 @@ void _debugLog(String message) {
 /// Reads the cached rotation order written by the foreground /maps provider.
 /// Returns null if absent or unparseable — callers fall back to generic copy.
 SeasonalMaps? _cachedSeasonalMaps(SharedPreferences prefs) {
-  final jsonStr = prefs.getString(SeasonalMaps.cacheKey);
+  final jsonStr = prefs.getString(PrefsKeys.seasonalMapsCache);
   if (jsonStr == null) return null;
   try {
     return SeasonalMaps.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
@@ -55,7 +61,7 @@ SeasonalMaps? _cachedSeasonalMaps(SharedPreferences prefs) {
   }
 }
 
-/// Writes [kLastFetchResultKey]. Timestamp only — a failure reason used to be
+/// Writes [PrefsKeys.bgFetchLastResult]. Timestamp only — a failure reason used to be
 /// appended here, which put an exception string into a pref a support
 /// screenshot could carry off the device. Never throws.
 Future<void> _recordFetchResult({
@@ -65,7 +71,7 @@ Future<void> _recordFetchResult({
   try {
     prefs ??= await SharedPreferences.getInstance();
     await prefs.setString(
-      kLastFetchResultKey,
+      PrefsKeys.bgFetchLastResult,
       '${ok ? 'ok' : 'error'}:${DateTime.now().toIso8601String()}',
     );
   } catch (e) {
@@ -190,20 +196,31 @@ class BackgroundService {
         startOnBoot: true,
       );
 
-  static Future<void> _configure(
-    int intervalMinutes,
-  ) => BackgroundFetch.configure(
-    _config(intervalMinutes),
-    (String taskId) async {
-      try {
-        await _backgroundFetchAndSchedule();
-      } finally {
-        BackgroundFetch.finish(taskId);
+  /// Whether the OS accepted the configuration; false when iOS has Background
+  /// App Refresh off.
+  static Future<bool> _configure(int intervalMinutes) async {
+    try {
+      await BackgroundFetch.configure(
+        _config(intervalMinutes),
+        (String taskId) async {
+          try {
+            await _backgroundFetchAndSchedule();
+          } finally {
+            BackgroundFetch.finish(taskId);
+          }
+        },
+        // Invoked if the task doesn't finish within the deadline.
+        _onTaskTimeout,
+      );
+      return true;
+    } on PlatformException catch (e) {
+      if (isBackgroundRefreshUnavailable(e, ios: Platform.isIOS)) {
+        log.w('Background fetch unavailable on this device (status ${e.code})');
+        return false;
       }
-    },
-    // Timeout handler — invoked if the task doesn't finish within the deadline.
-    _onTaskTimeout,
-  );
+      rethrow;
+    }
+  }
 
   static Future<void> init() async {
     if (!_supported) return;
@@ -213,16 +230,7 @@ class BackgroundService {
     final interval = backgroundFetchIntervalFor(
       BackgroundFetchSettings.fromPrefs(prefs)?.minActiveMinutes ?? 0,
     );
-    try {
-      await _configure(interval);
-    } on PlatformException catch (e) {
-      // iOS UIBackgroundRefreshStatus: "0" restricted, "1" denied.
-      if (Platform.isIOS && (e.code == '0' || e.code == '1')) {
-        log.w('Background fetch unavailable on this device (status ${e.code})');
-        return;
-      }
-      rethrow;
-    }
+    if (!await _configure(interval)) return;
     if (Platform.isAndroid) {
       BackgroundFetch.registerHeadlessTask(backgroundFetchHeadlessTask);
     }
@@ -237,7 +245,7 @@ class BackgroundService {
     // iOS and Android enforce a 15-min minimum for background fetch — values
     // below 15 (e.g. user picks 5 or 10 min) are silently rounded up by the OS.
     final interval = backgroundFetchIntervalFor(minNotifyMinutes);
-    await _configure(interval);
+    if (!await _configure(interval)) return;
     log.i('BackgroundService interval updated to ${interval}min');
   }
 

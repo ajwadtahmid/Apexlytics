@@ -134,6 +134,13 @@ abstract class PlayerSettings with _$PlayerSettings {
   String get platform =>
       activeProfile?.platform ?? ApiConstants.defaultPlatform;
   bool get isPlayerSet => activeProfile?.isSet ?? false;
+
+  /// A mode is on and its lead time is above 0.
+  bool get anyMapAlertActive =>
+      (notifyRankedMapRotation && rankedNotifyMinutesBefore > 0) ||
+      (notifyPubsMapRotation && pubsNotifyMinutesBefore > 0) ||
+      (notifyMixtapeMapRotation && mixtapeNotifyMinutesBefore > 0) ||
+      (notifyWildcardMapRotation && wildcardNotifyMinutesBefore > 0);
 }
 
 class PlayerSettingsNotifier extends Notifier<PlayerSettings> {

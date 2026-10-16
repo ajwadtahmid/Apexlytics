@@ -12,12 +12,7 @@ class MapNotificationService {
 
   static void schedule(WidgetRef ref, MapRotation data) {
     final s = ref.read(playerSettingsProvider);
-    final anyActive =
-        (s.notifyRankedMapRotation && s.rankedNotifyMinutesBefore > 0) ||
-        (s.notifyPubsMapRotation && s.pubsNotifyMinutesBefore > 0) ||
-        (s.notifyMixtapeMapRotation && s.mixtapeNotifyMinutesBefore > 0) ||
-        (s.notifyWildcardMapRotation && s.wildcardNotifyMinutesBefore > 0);
-    if (anyActive) {
+    if (s.anyMapAlertActive) {
       // The cyclic rotation order (from /maps) lets every projected Ranked/Pubs
       // alert be named, not just the next one. Falls back to generic copy if the
       // sequence hasn't loaded yet.

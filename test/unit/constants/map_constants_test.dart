@@ -77,6 +77,25 @@ void main() {
     });
   });
 
+  group('battleRoyaleMapKeyVariants', () {
+    test('a blank key and UNKNOWN expand to the same unknown spellings', () {
+      // SQL folds a blank column to 'UNKNOWN'.
+      for (final key in const ['', '  ', 'UNKNOWN', 'unknown']) {
+        expect(battleRoyaleMapKeyVariants(key), [
+          'unknown',
+          'unknown_rotation',
+        ], reason: 'key "$key"');
+      }
+    });
+
+    test('a known map still lists every spelling of it', () {
+      expect(
+        battleRoyaleMapKeyVariants('edistrict'),
+        containsAll(['edistrict', 'edistrict_rotation']),
+      );
+    });
+  });
+
   group('kBattleRoyaleMaps', () {
     test('carries a stable id for every catalog entry', () {
       expect(kBattleRoyaleMaps['kings_canyon']?.id, '1');

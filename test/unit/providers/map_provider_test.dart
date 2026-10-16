@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:apexlytics/models/seasonal_maps.dart';
 import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/map_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:apexlytics/constants/prefs_keys.dart';
 
 class MockApiService extends Mock implements ApiService {}
 
@@ -41,7 +41,7 @@ void main() {
 
   Future<void> setUp_({Map<String, Object>? cachedPool}) async {
     SharedPreferences.setMockInitialValues({
-      if (cachedPool != null) SeasonalMaps.cacheKey: jsonEncode(cachedPool),
+      if (cachedPool != null) PrefsKeys.seasonalMapsCache: jsonEncode(cachedPool),
     });
     prefs = await SharedPreferences.getInstance();
     api = MockApiService();
@@ -85,7 +85,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final stillCached = jsonDecode(
-        prefs.getString(SeasonalMaps.cacheKey)!,
+        prefs.getString(PrefsKeys.seasonalMapsCache)!,
       ) as Map<String, dynamic>;
       expect((stillCached['ranked'] as List).length, 0);
     },
@@ -113,7 +113,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(result.rankedNames, ["World's Edge"]);
-    expect(prefs.getString(SeasonalMaps.cacheKey), isNotNull);
+    expect(prefs.getString(PrefsKeys.seasonalMapsCache), isNotNull);
   });
 
   test('a network failure falls back to the cache when one exists', () async {

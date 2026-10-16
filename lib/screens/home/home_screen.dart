@@ -98,12 +98,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _rotationRefreshTimer?.cancel();
 
     final s = ref.read(playerSettingsProvider);
-    final anyNotif =
-        (s.notifyRankedMapRotation && s.rankedNotifyMinutesBefore > 0) ||
-        (s.notifyPubsMapRotation && s.pubsNotifyMinutesBefore > 0) ||
-        (s.notifyMixtapeMapRotation && s.mixtapeNotifyMinutesBefore > 0) ||
-        (s.notifyWildcardMapRotation && s.wildcardNotifyMinutesBefore > 0);
-    if (!anyNotif) return;
+    if (!s.anyMapAlertActive) return;
 
     final delay = rotationRefreshDelay(
       rotation,

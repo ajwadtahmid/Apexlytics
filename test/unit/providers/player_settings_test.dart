@@ -19,24 +19,27 @@ Future<ProviderContainer> makeContainer([
 
 void main() {
   group('PlayerSettingsNotifier', () {
-    test('a wrongly-typed stored value reads as absent instead of throwing', () async {
-      // What an older build's unchecked backup restore could leave behind.
-      final container = await makeContainer({
-        PrefsKeys.activeProfileIndex: '0',
-        PrefsKeys.keepScreenOn: 1,
-        PrefsKeys.statsRefreshMinutes: 'ten',
-        PrefsKeys.defaultTab: true,
-        PrefsKeys.profiles: 5,
-      });
-      addTearDown(container.dispose);
+    test(
+      'a wrongly-typed stored value reads as absent instead of throwing',
+      () async {
+        // What an older build's unchecked backup restore could leave behind.
+        final container = await makeContainer({
+          PrefsKeys.activeProfileIndex: '0',
+          PrefsKeys.keepScreenOn: 1,
+          PrefsKeys.statsRefreshMinutes: 'ten',
+          PrefsKeys.defaultTab: true,
+          PrefsKeys.profiles: 5,
+        });
+        addTearDown(container.dispose);
 
-      final settings = container.read(playerSettingsProvider);
-      expect(settings.activeProfileIndex, 0);
-      expect(settings.keepScreenOn, isFalse);
-      expect(settings.statsRefreshMinutes, kDefaultStatsRefreshMinutes);
-      expect(settings.defaultTab, 0);
-      expect(settings.profiles, isEmpty);
-    });
+        final settings = container.read(playerSettingsProvider);
+        expect(settings.activeProfileIndex, 0);
+        expect(settings.keepScreenOn, isFalse);
+        expect(settings.statsRefreshMinutes, kDefaultStatsRefreshMinutes);
+        expect(settings.defaultTab, 0);
+        expect(settings.profiles, isEmpty);
+      },
+    );
 
     test('initial state has no player set', () async {
       final container = await makeContainer();
@@ -524,22 +527,25 @@ void main() {
       expect(prefs.containsKey(PrefsKeys.ownerUnlocked), isFalse);
     });
 
-    test('clearAll(keepOwnerUnlock: true) also spares the owner flag', () async {
-      final container = await makeContainer({
-        PrefsKeys.ownerUnlocked: true,
-        PrefsKeys.keepScreenOn: true,
-        PrefsKeys.onboardingVersion: 1,
-      });
-      addTearDown(container.dispose);
-      await container
-          .read(playerSettingsProvider.notifier)
-          .clearAll(keepOwnerUnlock: true);
+    test(
+      'clearAll(keepOwnerUnlock: true) also spares the owner flag',
+      () async {
+        final container = await makeContainer({
+          PrefsKeys.ownerUnlocked: true,
+          PrefsKeys.keepScreenOn: true,
+          PrefsKeys.onboardingVersion: 1,
+        });
+        addTearDown(container.dispose);
+        await container
+            .read(playerSettingsProvider.notifier)
+            .clearAll(keepOwnerUnlock: true);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool(PrefsKeys.ownerUnlocked), isTrue);
-      expect(prefs.containsKey(PrefsKeys.keepScreenOn), isFalse);
-      expect(prefs.getInt(PrefsKeys.onboardingVersion), 1);
-    });
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool(PrefsKeys.ownerUnlocked), isTrue);
+        expect(prefs.containsKey(PrefsKeys.keepScreenOn), isFalse);
+        expect(prefs.getInt(PrefsKeys.onboardingVersion), 1);
+      },
+    );
 
     test('clearProfilesAndFavorites() keeps settings and history', () async {
       const uid = '1006838015507';
@@ -709,6 +715,36 @@ void main() {
     test('every field on PlayerSettings has a mutator above', () {
       // Bump this alongside the map when a field is added to the class.
       expect(mutators.length, 15);
+    });
+  });
+
+  group('PlayerSettings.anyMapAlertActive', () {
+    test('is off by default', () {
+      expect(const PlayerSettings().anyMapAlertActive, isFalse);
+    });
+
+    test('a mode that is on but has no lead time does not count', () {
+      expect(
+        const PlayerSettings(notifyRankedMapRotation: true).anyMapAlertActive,
+        isFalse,
+      );
+    });
+
+    test('a lead time on a mode that is off does not count', () {
+      expect(
+        const PlayerSettings(pubsNotifyMinutesBefore: 5).anyMapAlertActive,
+        isFalse,
+      );
+    });
+
+    test('any one mode on with a lead time counts', () {
+      expect(
+        const PlayerSettings(
+          notifyWildcardMapRotation: true,
+          wildcardNotifyMinutesBefore: 10,
+        ).anyMapAlertActive,
+        isTrue,
+      );
     });
   });
 }

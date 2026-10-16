@@ -217,6 +217,20 @@ void main() {
       expect(alerts.every((a) => a.body.contains('Olympus')), isTrue);
     });
 
+    test('matches a favourite however the map name is spelled', () {
+      final alerts = project(
+        mode('Worlds Edge'),
+        remainingSecs: 20 * 60,
+        budget: 5,
+        favorites: ["World's Edge"],
+        sequence: ["World's Edge", 'Olympus'],
+      );
+      // The favourite is the live next map, and it is found in the cycle.
+      expect(alerts, isNotEmpty);
+      expect(alerts.first.body, contains('Worlds Edge'));
+      expect(alerts.length, greaterThan(1));
+    });
+
     test('stops projecting once the map name is unknown while filtering', () {
       final alerts = project(
         mode('WE'),
