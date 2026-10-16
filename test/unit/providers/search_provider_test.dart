@@ -20,6 +20,7 @@ void main() {
       container = ProviderContainer(
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
+      addTearDown(container.dispose);
     });
 
     test('initializes with empty favorites', () async {

@@ -58,20 +58,7 @@ Map<String, Object> coolingDown(String uid, RankedSyncOutcome outcome) => {
 /// A minimal valid match, ranked (non-zero RP change) so it round-trips
 /// through `upsertAll` without special-casing.
 RankedMatch _match(String uid, int startSecs, {int rp = 10}) =>
-    RankedMatch.fromJson({
-      'uid': uid,
-      'name': 'Tester',
-      'legendPlayed': 'Axle',
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': 600,
-      'gameStartTimestamp': startSecs,
-      'gameEndTimestamp': startSecs + 600,
-      'gameData': <Map<String, Object?>>[],
-      'BRScoreChange': rp,
-      'BRScore': 1000 + rp,
-      'map': 'olympus_rotation',
-      'isPartyFull': false,
-    });
+    buildMatch(uid: uid, start: startSecs, rp: rp, cumulativeRp: 1000 + rp);
 
 void main() {
   const uid = 'uid123';

@@ -18,6 +18,7 @@ void main() {
     container = ProviderContainer(
       overrides: [newsServiceProvider.overrideWithValue(mockNewsService)],
     );
+    addTearDown(container.dispose);
   });
 
   group('NewsNotifier', () {

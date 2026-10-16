@@ -1,10 +1,11 @@
 import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/providers/rank_goal_provider.dart';
-import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/utils/storage/backup_service.dart' show backupIncludesKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../helpers.dart';
 
 void main() {
   const uid = '1006838015507';
@@ -16,15 +17,7 @@ void main() {
 
   Future<(ProviderContainer, SharedPreferences)> setUp(
     Map<String, Object> values,
-  ) async {
-    SharedPreferences.setMockInitialValues(values);
-    final prefs = await SharedPreferences.getInstance();
-    final container = ProviderContainer(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-    );
-    addTearDown(container.dispose);
-    return (container, prefs);
-  }
+  ) => prefsContainer(values: values);
 
   test('a goal set in one split does not show in another', () async {
     final (c, _) = await setUp({});

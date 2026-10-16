@@ -4,6 +4,7 @@ import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/utils/ranked/ranked_period.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../helpers.dart';
 
 void main() {
   const uid = 'uid123';
@@ -18,19 +19,7 @@ void main() {
   );
 
   RankedMatch match(int startSecs, {required int cumulativeRp}) =>
-      RankedMatch.fromJson({
-        'uid': uid,
-        'name': 'Tester',
-        'legendPlayed': 'Axle',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': startSecs,
-        'gameEndTimestamp': startSecs + 600,
-        'gameData': const [],
-        'BRScoreChange': 10,
-        'BRScore': cumulativeRp,
-        'map': 'olympus_rotation',
-      });
+      buildMatch(uid: uid, start: startSecs, cumulativeRp: cumulativeRp);
 
   // Week 1 ends at 1000 RP, week 2 at 1500 RP.
   final week1 = match(splitStart + day, cumulativeRp: 1000);
