@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../utils/theme.dart';
 import 'icon_text_row.dart';
 import 'surface_card.dart';
-import '../utils/navigation_utils.dart';
 
 class SectionLabel extends StatelessWidget {
   final String label;
@@ -12,7 +11,7 @@ class SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      padding: const EdgeInsets.only(bottom: 12, left: AppTheme.xs),
       child: IconTextRow(
         icon: icon,
         text: label,
@@ -67,50 +66,6 @@ class ActionRow extends StatelessWidget {
         iconSize: 20,
         iconColor: color,
         textStyle: TextStyle(color: color, fontSize: 14),
-      ),
-    );
-  }
-}
-
-class LinkRow extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  final String url;
-  const LinkRow({
-    super.key,
-    required this.label,
-    required this.subtitle,
-    required this.url,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      onTap: () => openExternalLink(context, Uri.parse(url)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: AppTheme.blue,
-                    fontSize: 14,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.open_in_new, color: AppTheme.muted, size: 14),
-        ],
       ),
     );
   }

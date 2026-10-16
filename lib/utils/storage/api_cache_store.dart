@@ -114,9 +114,4 @@ class ApiCacheStore {
     final db = await _open();
     await db.delete(_table);
   }
-
-  Future<void> close() async {
-    await _db?.close();
-    _db = null;
-  }
 }

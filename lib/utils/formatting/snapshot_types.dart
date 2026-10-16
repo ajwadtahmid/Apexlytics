@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart' show listEquals;
-import '../../models/season_meta.dart';
 
 /// RP-drop size read as a reset on snapshots with no split id. See
 /// [lastResetIndex].
@@ -29,12 +27,6 @@ class StatSnapshot {
     required this.rp,
     this.seasonId,
   });
-
-  Map<String, dynamic> toJson() => {
-    'ts': timestamp.millisecondsSinceEpoch,
-    'rp': rp,
-    if (seasonId != null) 'sid': seasonId,
-  };
 
   factory StatSnapshot.fromJson(Map<String, dynamic> json) => StatSnapshot(
     timestamp: DateTime.fromMillisecondsSinceEpoch(json['ts'] as int),
@@ -79,22 +71,4 @@ int? lastResetIndex(List<StatSnapshot> snaps, {DateTime? splitStart}) {
     }
   }
   return null;
-}
-
-/// Aggregated snapshot metadata for a ranked season.
-class SeasonSnapshot {
-  final SeasonMeta season;
-  final List<StatSnapshot> snapshots;
-
-  const SeasonSnapshot({required this.season, required this.snapshots});
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SeasonSnapshot &&
-          season == other.season &&
-          listEquals(snapshots, other.snapshots);
-
-  @override
-  int get hashCode => Object.hash(season, Object.hashAll(snapshots));
 }
