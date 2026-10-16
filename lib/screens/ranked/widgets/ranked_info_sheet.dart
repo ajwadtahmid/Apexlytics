@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../constants/api_constants.dart';
 import '../../../utils/theme.dart';
 import '../../../utils/navigation_utils.dart';
+import '../../../widgets/sheet_handle.dart';
 
 Future<void> _openProfileSearch(BuildContext context) =>
     openExternalLink(context, Uri.parse(ApiConstants.alsProfileSearchUrl));
@@ -32,16 +33,7 @@ void showRankedInfoSheet(BuildContext context) {
           AppTheme.lg,
         ),
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.muted,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetHandle(),
           const SizedBox(height: AppTheme.md),
           const Text(
             'How Ranked Tracking Works',

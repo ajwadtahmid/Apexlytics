@@ -44,7 +44,7 @@ class PlayerInfoCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 stats.presence,
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: AppTheme.caption,
               ),
             ],
           ),
@@ -53,7 +53,7 @@ class PlayerInfoCard extends StatelessWidget {
             children: [
               Text.rich(
                 TextSpan(
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                  style: AppTheme.captionLarge,
                   children: [
                     TextSpan(text: 'Level ${stats.level}'),
                     separatorDot,
@@ -64,7 +64,7 @@ class PlayerInfoCard extends StatelessWidget {
               const SizedBox(width: 4),
               Text.rich(
                 TextSpan(
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                  style: AppTheme.captionLarge,
                   children: [
                     TextSpan(text: stats.rank),
                     separatorDot,
@@ -83,10 +83,7 @@ class PlayerInfoCard extends StatelessWidget {
                     children: [
                       Text(
                         'UID: ${stats.uid}',
-                        style: const TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 12,
-                        ),
+                        style: AppTheme.caption,
                       ),
                       const SizedBox(width: 2),
                       GestureDetector(
@@ -102,7 +99,7 @@ class PlayerInfoCard extends StatelessWidget {
                           }
                         },
                         child: const Padding(
-                          padding: EdgeInsets.all(4),
+                          padding: EdgeInsets.all(AppTheme.xs),
                           child: Icon(
                             Icons.copy,
                             size: 12,
@@ -142,10 +139,7 @@ class PlayerInfoCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             t.name,
-                            style: const TextStyle(
-                              color: AppTheme.muted,
-                              fontSize: 13,
-                            ),
+                            style: AppTheme.captionLarge,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -161,7 +155,7 @@ class PlayerInfoCard extends StatelessWidget {
           else
             const Text(
               'No trackers equipped',
-              style: TextStyle(color: AppTheme.muted, fontSize: 13),
+              style: AppTheme.captionLarge,
             ),
         ],
       ),

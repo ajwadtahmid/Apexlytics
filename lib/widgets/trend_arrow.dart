@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme.dart';
 
 /// Up / flat / down arrow for a change of [delta]. Exactly zero is flat; callers
 /// that round first (so a tiny change reads as "unchanged") pass 0 themselves.
@@ -15,7 +16,7 @@ InlineSpan trendArrow(
   IconData icon,
   Color color, {
   double size = 14,
-  EdgeInsets padding = const EdgeInsets.only(right: 4),
+  EdgeInsets padding = const EdgeInsets.only(right: AppTheme.xs),
 }) => WidgetSpan(
   alignment: PlaceholderAlignment.middle,
   child: Padding(

@@ -21,7 +21,7 @@ class RoleBadge extends StatelessWidget {
     final iconSize = compact ? 10.0 : 12.0;
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: compact ? 6 : 8,
+        horizontal: compact ? 6 : AppTheme.sm,
         vertical: compact ? 2 : 3,
       ),
       decoration: BoxDecoration(

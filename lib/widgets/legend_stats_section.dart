@@ -56,7 +56,7 @@ class _LegendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final info = kLegendsByName[legend.name.toLowerCase()];
+    final info = legendInfo(legend.name);
 
     // Deduplicate trackers by display name, keeping the highest value.
     // Weapon trackers are excluded here; they appear in the Guns tab instead.
@@ -121,7 +121,7 @@ class _LegendCard extends StatelessWidget {
                         children: trackers
                             .map(
                               (t) => Container(
-                                margin: const EdgeInsets.only(right: 8),
+                                margin: const EdgeInsets.only(right: AppTheme.sm),
                                 child: StatDisplay(
                                   label: t.displayName,
                                   value: formatNumber(t.value),

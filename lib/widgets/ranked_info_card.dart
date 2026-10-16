@@ -105,7 +105,7 @@ class RankedInfoCard extends ConsumerWidget {
                   ),
                   Text(
                     '${formatNumber(myRp)} RP',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                    style: AppTheme.captionLarge,
                   ),
                 ],
               ),
@@ -128,7 +128,7 @@ class RankedInfoCard extends ConsumerWidget {
               children: [
                 Text(
                   '${formatNumber(curRp)} RP',
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  style: AppTheme.captionSmall,
                 ),
                 Text(
                   '${formatNumber(gap)} RP to $nextLabel',
@@ -140,7 +140,7 @@ class RankedInfoCard extends ConsumerWidget {
                 ),
                 Text(
                   '${formatNumber(nextRp)} RP',
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  style: AppTheme.captionSmall,
                 ),
               ],
             ),
@@ -156,7 +156,7 @@ class RankedInfoCard extends ConsumerWidget {
             const SizedBox(height: AppTheme.sm),
             Text(
               splitLabel,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              style: AppTheme.captionSmall,
             ),
           ],
         ],

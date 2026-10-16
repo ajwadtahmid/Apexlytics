@@ -5,6 +5,7 @@ import '../providers/owner_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/theme.dart';
 import 'player_lookup_form.dart';
+import 'sheet_handle.dart';
 
 class ProfileManagerSheet extends ConsumerStatefulWidget {
   const ProfileManagerSheet({super.key});
@@ -75,16 +76,7 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.muted,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            const SheetHandle(),
             const SizedBox(height: AppTheme.md),
             if (_editingIndex != null || _isAdding) ...[
               _buildLookupView(profiles),
@@ -162,6 +154,9 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
   Widget _buildLookupView(List<PlayerProfile> profiles) {
     final isAdding = _isAdding;
     final notifier = ref.read(playerSettingsProvider.notifier);
+    // The slot this form was opened for, fixed now: the callback runs after a
+    // lookup, by when another slot may be open.
+    final editIndex = _editingIndex;
     final editedProfile =
         !isAdding && _editingIndex != null && _editingIndex! < profiles.length
         ? profiles[_editingIndex!]
@@ -198,7 +193,7 @@ class _ProfileManagerSheetState extends ConsumerState<ProfileManagerSheet> {
               ? (name, uid, platform) =>
                     notifier.addProfile(name, uid, platform)
               : (name, uid, platform) =>
-                    notifier.updateProfile(_editingIndex!, name, uid, platform),
+                    notifier.updateProfile(editIndex!, name, uid, platform),
           onSuccess: () {
             if (!mounted) return;
             if (isAdding) {
@@ -269,14 +264,14 @@ class _ProfileTile extends StatelessWidget {
                   ),
                   Text(
                     ApiConstants.labelFor(profile.platform),
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    style: AppTheme.caption,
                   ),
                 ],
               ),
             ),
             if (isActive)
               const Padding(
-                padding: EdgeInsets.only(right: 4),
+                padding: EdgeInsets.only(right: AppTheme.xs),
                 child: Icon(
                   Icons.check_circle,
                   color: AppTheme.accent,

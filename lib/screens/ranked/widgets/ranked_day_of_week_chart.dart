@@ -35,7 +35,7 @@ class RankedDayOfWeekChart extends StatelessWidget {
           const SizedBox(height: 2),
           const Text(
             'Bar height = games played · green = net RP gain',
-            style: TextStyle(color: AppTheme.muted, fontSize: 11),
+            style: AppTheme.captionSmall,
           ),
           const SizedBox(height: AppTheme.md),
           SizedBox(
@@ -83,7 +83,7 @@ class RankedDayOfWeekChart extends StatelessWidget {
                           return const SizedBox.shrink();
                         }
                         return Padding(
-                          padding: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.only(top: AppTheme.xs),
                           child: Text(
                             _weekdayLabel(buckets[i].weekday),
                             style: const TextStyle(

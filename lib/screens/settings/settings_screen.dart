@@ -13,6 +13,7 @@ import 'widgets/general_settings_section.dart';
 import 'widgets/notification_settings_section.dart';
 import 'widgets/stats_refresh_section.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/formatting/format.dart' show kNoReading;
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -78,8 +79,8 @@ class SettingsScreen extends ConsumerWidget {
                     final info = ref
                         .watch(packageInfoProvider)
                         .whenOrNull(data: (info) => info);
-                    final version = info?.version ?? '—';
-                    final build = info?.buildNumber ?? '—';
+                    final version = info?.version ?? kNoReading;
+                    final build = info?.buildNumber ?? kNoReading;
                     return Column(
                       children: [
                         _SupportRow(

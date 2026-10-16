@@ -83,7 +83,7 @@ class _WeekTabStripState extends State<WeekTabStrip> {
                 margin: const EdgeInsets.only(right: 6),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
-                  vertical: 4,
+                  vertical: AppTheme.xs,
                 ),
                 decoration: BoxDecoration(
                   color: isSelected

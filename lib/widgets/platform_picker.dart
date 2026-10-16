@@ -56,7 +56,7 @@ class PlatformPicker extends StatelessWidget {
           child: Padding(padding: const EdgeInsets.only(right: 6), child: pill),
         );
       }
-      return Padding(padding: const EdgeInsets.only(right: 8), child: pill);
+      return Padding(padding: const EdgeInsets.only(right: AppTheme.sm), child: pill);
     }).toList();
 
     if (expanded) return Row(children: pills);

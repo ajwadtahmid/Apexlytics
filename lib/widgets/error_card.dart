@@ -132,7 +132,7 @@ class ErrorCard extends StatelessWidget {
                   ),
                   const Text(
                     'Failed to load',
-                    style: TextStyle(color: AppTheme.muted, fontSize: 13),
+                    style: AppTheme.captionLarge,
                   ),
                 ],
               ),
@@ -165,7 +165,7 @@ class ErrorCard extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+            style: AppTheme.captionLarge,
           ),
           if (onRetry != null)
             TextButton(
@@ -266,7 +266,7 @@ class ErrorCard extends StatelessWidget {
               onPressed: onLearnMore,
               child: const Text(
                 'How does this work?',
-                style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: AppTheme.caption,
               ),
             ),
         ],

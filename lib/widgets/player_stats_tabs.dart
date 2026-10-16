@@ -5,6 +5,7 @@ import '../models/player_stats.dart';
 import '../utils/theme.dart';
 import 'legend_stats_section.dart';
 import 'weapon_stats_section.dart';
+import 'control_pill.dart';
 
 enum _LegendSortOrder { byLastPlayed, byKills, byDamage, byWins, byRole }
 
@@ -58,7 +59,7 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
     final sorted = _sortedLegends;
     if (_roleFilter == null) return sorted;
     return sorted
-        .where((l) => kLegendsByName[l.name.toLowerCase()]?.role == _roleFilter)
+        .where((l) => legendInfo(l.name)?.role == _roleFilter)
         .toList();
   }
 
@@ -101,14 +102,14 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
       case _LegendSortOrder.byRole:
         list.sort((a, b) {
           final roleA =
-              kLegendsByName[a.name.toLowerCase()]?.role ?? LegendRole.assault;
+              legendInfo(a.name)?.role ?? LegendRole.assault;
           final roleB =
-              kLegendsByName[b.name.toLowerCase()]?.role ?? LegendRole.assault;
+              legendInfo(b.name)?.role ?? LegendRole.assault;
           final roleIdxA = kRoleDisplayOrder.indexOf(roleA);
           final roleIdxB = kRoleDisplayOrder.indexOf(roleB);
           if (roleIdxA != roleIdxB) return roleIdxA.compareTo(roleIdxB);
-          final na = kLegendsByName[a.name.toLowerCase()]?.number ?? 999;
-          final nb = kLegendsByName[b.name.toLowerCase()]?.number ?? 999;
+          final na = legendInfo(a.name)?.number ?? 999;
+          final nb = legendInfo(b.name)?.number ?? 999;
           return na.compareTo(nb);
         });
       case _LegendSortOrder.byLastPlayed:
@@ -146,12 +147,22 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              const Text(
-                'Sort:',
-                style: TextStyle(color: AppTheme.muted, fontSize: 12),
-              ),
-              const SizedBox(width: 4),
-              GestureDetector(
+              ControlPill(
+                prefix: 'Sort:',
+                icon: switch (_sort) {
+                  _LegendSortOrder.byLastPlayed => Icons.access_time,
+                  _LegendSortOrder.byKills => Icons.sports_kabaddi,
+                  _LegendSortOrder.byDamage => Icons.bolt,
+                  _LegendSortOrder.byWins => Icons.emoji_events,
+                  _LegendSortOrder.byRole => Icons.category,
+                },
+                label: switch (_sort) {
+                  _LegendSortOrder.byLastPlayed => 'Recent',
+                  _LegendSortOrder.byKills => 'Kills',
+                  _LegendSortOrder.byDamage => 'Damage',
+                  _LegendSortOrder.byWins => 'Wins',
+                  _LegendSortOrder.byRole => 'Role',
+                },
                 onTap: () => setState(() {
                   _sort = switch (_sort) {
                     _LegendSortOrder.byLastPlayed => _LegendSortOrder.byKills,
@@ -161,47 +172,6 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
                     _LegendSortOrder.byRole => _LegendSortOrder.byLastPlayed,
                   };
                 }),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface2,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        switch (_sort) {
-                          _LegendSortOrder.byLastPlayed => Icons.access_time,
-                          _LegendSortOrder.byKills => Icons.sports_kabaddi,
-                          _LegendSortOrder.byDamage => Icons.bolt,
-                          _LegendSortOrder.byWins => Icons.emoji_events,
-                          _LegendSortOrder.byRole => Icons.category,
-                        },
-                        size: 13,
-                        color: AppTheme.accent,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        switch (_sort) {
-                          _LegendSortOrder.byLastPlayed => 'Recent',
-                          _LegendSortOrder.byKills => 'Kills',
-                          _LegendSortOrder.byDamage => 'Damage',
-                          _LegendSortOrder.byWins => 'Wins',
-                          _LegendSortOrder.byRole => 'Role',
-                        },
-                        style: const TextStyle(
-                          color: AppTheme.accent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ],
           ),
@@ -267,7 +237,7 @@ class _RoleChip extends StatelessWidget {
       child: AnimatedContainer(
         duration: AppTheme.chipAnimation,
         margin: const EdgeInsets.only(right: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppTheme.xs),
         decoration: BoxDecoration(
           color: selected ? color.withAlpha(40) : AppTheme.surface2,
           borderRadius: BorderRadius.circular(AppTheme.radiusFull),

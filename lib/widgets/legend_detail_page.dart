@@ -35,7 +35,7 @@ class LegendDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final info = kLegendsByName[legend.name.toLowerCase()];
+    final info = legendInfo(legend.name);
     final raw = legend.trackers;
     final displayTrackers = _displayTrackers;
 
@@ -178,11 +178,15 @@ class LegendDetailPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            _displayName,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              _displayName,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                           if (info != null) ...[
@@ -269,13 +273,16 @@ class LegendDetailPage extends StatelessWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              t.displayName,
-                              style: const TextStyle(
-                                color: AppTheme.muted,
-                                fontSize: 14,
+                            Expanded(
+                              child: Text(
+                                t.displayName,
+                                style: const TextStyle(
+                                  color: AppTheme.muted,
+                                  fontSize: 14,
+                                ),
                               ),
                             ),
+                            const SizedBox(width: AppTheme.sm),
                             Text(
                               formatNumber(t.value),
                               style: const TextStyle(
@@ -348,10 +355,7 @@ class _CalcRow extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         'via ${sources.join(' & ')}',
-                        style: const TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 11,
-                        ),
+                        style: AppTheme.captionSmall,
                       ),
                     ],
                   ],

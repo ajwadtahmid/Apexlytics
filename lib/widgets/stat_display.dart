@@ -40,7 +40,7 @@ class StatDisplay extends StatelessWidget {
     final labelSize = compact ? 9.0 : 10.0;
     final valueSize = compact ? 12.0 : 15.0;
     final pad = compact
-        ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
+        ? const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: 3)
         : const EdgeInsets.symmetric(horizontal: 10, vertical: 7);
 
     return Container(

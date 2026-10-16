@@ -101,7 +101,7 @@ class _FavoritesHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppTheme.sm, left: 4),
+      padding: const EdgeInsets.only(bottom: AppTheme.sm, left: AppTheme.xs),
       child: Row(
         children: [
           const Icon(Icons.star, size: 14, color: AppTheme.accent),
@@ -119,7 +119,7 @@ class _FavoritesHeader extends StatelessWidget {
           GestureDetector(
             onTap: onClear,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppTheme.xs),
               decoration: BoxDecoration(
                 color: AppTheme.red.withAlpha(25),
                 borderRadius: BorderRadius.circular(AppTheme.radiusSm),
@@ -181,7 +181,7 @@ class _FavoriteTile extends ConsumerWidget {
         title = playerRef.query;
         subtitle = Text(
           platformLabel,
-          style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+          style: AppTheme.caption,
         );
       } else {
         title = cachedStats.name;
@@ -219,7 +219,7 @@ class _FavoriteTile extends ConsumerWidget {
         title = playerRef.query;
         subtitle = Text(
           platformLabel,
-          style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+          style: AppTheme.caption,
         );
       } else {
         leadingColor = playerPresenceColor(stats);
@@ -266,17 +266,17 @@ class _RankSubtitle extends StatelessWidget {
       children: [
         Text(
           platformLabel,
-          style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+          style: AppTheme.caption,
         ),
         const SizedBox(width: AppTheme.xs),
-        const Text('·', style: TextStyle(color: AppTheme.muted, fontSize: 12)),
+        const Text('·', style: AppTheme.caption),
         const SizedBox(width: AppTheme.xs),
         RankBadge(assetPath: rankAsset, size: 12),
         const SizedBox(width: AppTheme.xs),
         Expanded(
           child: Text(
             '$rankText · $rpText',
-            style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            style: AppTheme.caption,
             overflow: TextOverflow.ellipsis,
           ),
         ),

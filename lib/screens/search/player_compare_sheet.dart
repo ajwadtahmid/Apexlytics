@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/player_stats.dart';
 import '../../models/rank_info.dart';
-import '../../utils/formatting/format.dart' show formatNumber, capitalize;
+import '../../utils/formatting/format.dart' show capitalize, formatNumber, formatNumberOrNone, kNoReading;
 import '../../utils/formatting/tracker_utils.dart';
 import '../../utils/theme.dart';
 
@@ -171,12 +171,12 @@ class _RankedCompare extends StatelessWidget {
           _CompareRow(
             label: 'Next rank',
             myChild: Text(
-              myInfo.nextLabel ?? '—',
+              myInfo.nextLabel ?? kNoReading,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
             ),
             theirChild: Text(
-              theirInfo.nextLabel ?? '—',
+              theirInfo.nextLabel ?? kNoReading,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
             ),
@@ -190,7 +190,7 @@ class _RankedCompare extends StatelessWidget {
             myChild: Text(
               myInfo.rpToNext != null
                   ? '${formatNumber(myInfo.rpToNext!)} RP'
-                  : '—',
+                  : kNoReading,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -203,7 +203,7 @@ class _RankedCompare extends StatelessWidget {
             theirChild: Text(
               theirInfo.rpToNext != null
                   ? '${formatNumber(theirInfo.rpToNext!)} RP'
-                  : '—',
+                  : kNoReading,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -250,7 +250,7 @@ class _LegendCompare extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
         child: Text(
           'No $legendName stats available for either player',
-          style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+          style: AppTheme.captionLarge,
         ),
       );
     }
@@ -271,7 +271,7 @@ class _LegendCompare extends StatelessWidget {
           return _CompareRow(
             label: capitalize(statName),
             myChild: Text(
-              myVal != null ? formatNumber(myVal) : '—',
+              formatNumberOrNone(myVal),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -283,7 +283,7 @@ class _LegendCompare extends StatelessWidget {
               ),
             ),
             theirChild: Text(
-              theirVal != null ? formatNumber(theirVal) : '—',
+              formatNumberOrNone(theirVal),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,
@@ -318,14 +318,14 @@ class _CompareRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: shaded ? AppTheme.surface2.withAlpha(60) : null,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
       child: Row(
         children: [
           Expanded(
             flex: 2,
             child: Text(
               label,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+              style: AppTheme.captionLarge,
             ),
           ),
           Expanded(child: myChild),

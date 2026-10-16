@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/api_constants.dart';
 import '../utils/theme.dart';
+import 'sheet_handle.dart';
 
 void showTrackerInfoSheet(BuildContext context) {
   showModalBottomSheet(
@@ -20,16 +21,7 @@ void showTrackerInfoSheet(BuildContext context) {
           AppTheme.lg,
         ),
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppTheme.muted,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          const SheetHandle(),
           const SizedBox(height: AppTheme.md),
           const Text(
             'Tracker Info',
