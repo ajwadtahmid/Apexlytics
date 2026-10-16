@@ -81,7 +81,8 @@ void main() async {
       options.release =
           'apexlytics@${packageInfo.version}+${packageInfo.buildNumber}';
       options.dist = packageInfo.buildNumber;
-      // Never send IP addresses, device identifiers, or user identity.
+      // No IP addresses, device identifiers or user identity from Dart events
+      // (scrubSentryEvent). Native crash reports are out of its reach.
       options.sendDefaultPii = false;
       // Sessions carry a per-install id, i.e. a device identifier.
       options.enableAutoSessionTracking = false;
