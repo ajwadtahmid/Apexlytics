@@ -4,6 +4,7 @@ import '../../models/server_status.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/formatting/format.dart' show kNoReading;
 
 // ── Latency color helper ──────────────────────────────────────────────────────
 
@@ -41,17 +42,19 @@ class ServerStatusPage extends StatelessWidget {
                         children: [
                           StatusDot(color: color),
                           const SizedBox(width: AppTheme.sm),
-                          Text(
-                            svc.displayName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
+                          Expanded(
+                            child: Text(
+                              svc.displayName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: AppTheme.sm),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
+                              horizontal: AppTheme.sm,
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
@@ -75,18 +78,23 @@ class ServerStatusPage extends StatelessWidget {
                           spacing: AppTheme.sm,
                           runSpacing: 4,
                           children: svc.regions.entries.map((e) {
-                            final rc = latencyColor(e.value.responseTime);
+                            final region = e.value;
+                            // Latency says how healthy a region that is up is;
+                            // a region that isn't takes its status colour.
+                            final rc = region.status == 'UP'
+                                ? latencyColor(region.responseTime)
+                                : AppTheme.statusColor(region.status);
+                            final latency = region.responseTime > 0
+                                ? '${region.responseTime}ms'
+                                : kNoReading;
                             return Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 StatusDot(color: rc, size: 6),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '${e.key} | ${e.value.responseTime}ms',
-                                  style: const TextStyle(
-                                    color: AppTheme.muted,
-                                    fontSize: 11,
-                                  ),
+                                  '${e.key} | $latency',
+                                  style: AppTheme.captionSmall,
                                 ),
                               ],
                             );

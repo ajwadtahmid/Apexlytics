@@ -143,10 +143,7 @@ class _CardTile extends StatelessWidget {
                             description,
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppTheme.muted,
-                              fontSize: 13,
-                            ),
+                            style: AppTheme.captionLarge,
                           ),
                         ],
                       ],

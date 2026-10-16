@@ -11,6 +11,23 @@ const _kModePubs = 'Pubs';
 const _kModeWildcard = 'Wildcards';
 const _kModeMixtape = 'Mixtape';
 
+/// Clock time the next map ends ("5:40 PM", plus "tomorrow" on another day),
+/// or null when its length is unknown.
+@visibleForTesting
+String? formatNextMapEnd({
+  required int remainingSecs,
+  required int durationMins,
+  DateTime? now,
+}) {
+  if (durationMins <= 0) return null;
+  final from = now ?? DateTime.now();
+  final end = from.add(Duration(seconds: remainingSecs + durationMins * 60));
+  final time = DateFormat('h:mm a').format(end);
+  final sameDay =
+      end.year == from.year && end.month == from.month && end.day == from.day;
+  return sameDay ? time : '$time tomorrow';
+}
+
 /// Map rotation card: mode picker + the selected mode's current/next map,
 /// with a live countdown. Owns its own mode-selection state since switching
 /// modes is purely a display concern, not something the rest of Home cares
@@ -99,7 +116,7 @@ class _ModePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SurfaceCard(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(AppTheme.xs),
       radius: AppTheme.radiusFull,
       child: Row(
         children: List.generate(modes.length, (i) {
@@ -318,6 +335,10 @@ class _NextMapRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nextEnd = formatNextMapEnd(
+      remainingSecs: remaining,
+      durationMins: next.durationMins,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -335,7 +356,7 @@ class _NextMapRow extends StatelessWidget {
             ),
             Text(
               'Starts at ${formatEndTime(remaining)}',
-              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              style: AppTheme.caption,
             ),
           ],
         ),
@@ -347,9 +368,16 @@ class _NextMapRow extends StatelessWidget {
             Expanded(
               child: Text(
                 formatMapDisplay(next.map, next.eventName, isMixtape),
-                style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                style: AppTheme.captionLarge,
               ),
             ),
+            if (nextEnd != null) ...[
+              const SizedBox(width: AppTheme.sm),
+              Text(
+                'Ends at $nextEnd',
+                style: AppTheme.caption,
+              ),
+            ],
           ],
         ),
       ],

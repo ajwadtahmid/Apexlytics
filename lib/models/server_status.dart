@@ -33,7 +33,11 @@ class ServiceStatus {
     final statuses = regions.values.map((r) => r.status).toList();
     if (statuses.any((s) => s == 'DOWN')) return 'DOWN';
     if (statuses.any((s) => s == 'SLOW')) return 'SLOW';
-    return 'UP';
+    // Anything else that isn't up is shown as it came, not as healthy.
+    return statuses.firstWhere(
+      (s) => s != 'UP' && s != 'OK',
+      orElse: () => 'UP',
+    );
   }
 
   static const priorityKeys = {
@@ -57,19 +61,16 @@ class ServiceStatus {
 
 class RegionStatus {
   final String status;
-  final int httpCode;
   final int responseTime;
 
   RegionStatus({
     required this.status,
-    required this.httpCode,
     required this.responseTime,
   });
 
   factory RegionStatus.fromJson(Map<String, dynamic> json) {
     return RegionStatus(
       status: json['Status'] as String? ?? 'UNKNOWN',
-      httpCode: (json['HTTPCode'] as num?)?.toInt() ?? 0,
       responseTime: (json['ResponseTime'] as num?)?.toInt() ?? 0,
     );
   }

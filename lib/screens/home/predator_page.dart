@@ -3,7 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../constants/api_constants.dart';
 import '../../constants/ui_strings.dart';
 import '../../models/predator.dart';
-import '../../utils/formatting/format.dart' show formatNumber, timeAgo;
+import '../../utils/formatting/format.dart' show formatNumber, kNoReading, timeAgo;
 import '../../utils/formatting/platform_utils.dart';
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
@@ -86,8 +86,8 @@ class PlatformCard extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                info.updatedAt != null ? timeAgo(info.updatedAt!) : '—',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                info.updatedAt != null ? timeAgo(info.updatedAt!) : kNoReading,
+                style: AppTheme.caption,
               ),
             ],
           ),
@@ -118,7 +118,7 @@ class PlatformCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '${formatNumber(info.totalMastersAndPreds)} Masters + Preds',
-            style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+            style: AppTheme.captionLarge,
           ),
         ],
       ),
