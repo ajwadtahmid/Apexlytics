@@ -40,7 +40,7 @@ class RankedStatsCard extends StatelessWidget {
           StatGrid(
             rows: [
               [
-                WinLossStat(wins: s.wins, losses: s.losses, centered: true),
+                WinLossStat(wins: s.wins, losses: s.losses,),
                 StatDisplay(
                   label: 'Games',
                   centered: true,

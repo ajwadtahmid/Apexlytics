@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../utils/formatting/format.dart' show formatPercent;
+import '../utils/formatting/format.dart' show formatPercent, kNoReading;
 import '../utils/theme.dart';
 
 /// Single win-rate chip: the win rate as the headline value with the raw win
@@ -24,9 +24,6 @@ class WinLossStat extends StatelessWidget {
   /// one line of chips.
   final bool compact;
 
-  /// Centres the label and value instead of left-aligning them.
-  final bool centered;
-
   const WinLossStat({
     super.key,
     required this.wins,
@@ -34,13 +31,12 @@ class WinLossStat extends StatelessWidget {
     this.onImage = false,
     this.showRecord = true,
     this.compact = false,
-    this.centered = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final decided = wins + losses;
-    final rateText = decided == 0 ? '—' : formatPercent(wins / decided);
+    final rateText = decided == 0 ? kNoReading : formatPercent(wins / decided);
     final valueSize = compact ? 12.0 : (onImage ? 14.0 : 15.0);
 
     final value = Text.rich(
@@ -81,9 +77,7 @@ class WinLossStat extends StatelessWidget {
     );
 
     final content = Column(
-      crossAxisAlignment: centered
-          ? CrossAxisAlignment.center
-          : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
@@ -103,7 +97,7 @@ class WinLossStat extends StatelessWidget {
 
     return Container(
       padding: compact
-          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 3)
+          ? const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: 3)
           : const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: AppTheme.surface2,

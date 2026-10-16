@@ -4,10 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/utils/theme.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart' show kSessionGap;
+import 'package:apexlytics/screens/ranked/ranked_entity_history_screen.dart';
 import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_tags.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_history_items.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_history_list.dart';
+import '../helpers.dart';
 
 void main() {
   // Noon local time today, so a game never lands on the wrong side of
@@ -28,25 +30,16 @@ void main() {
     int length = 600,
   }) {
     final start = base - dayOffset * 86400 + slot * 1000;
-    final m = RankedMatch.fromJson({
-      'uid': '1',
-      'name': 'Tester',
-      'legendPlayed': legend,
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': length,
-      'gameStartTimestamp': start,
-      'gameEndTimestamp': start + length,
-      'gameData': [
-        if (kills != null) {'key': 'kills', 'value': kills, 'name': 'BR Kills'},
-        if (damage != null)
-          {'key': 'damage', 'value': damage, 'name': 'BR Damage'},
-      ],
-      'BRScoreChange': rp,
-      'BRScore': 1000,
-      'map': map,
-      'isPartyFull': false,
-    });
-    return excluded ? m.withExcluded(true) : m;
+    return buildMatch(
+      start: start,
+      legend: legend,
+      map: map,
+      rp: rp,
+      kills: kills,
+      damage: damage,
+      length: length,
+      excluded: excluded,
+    );
   }
 
   group('grouping by map and legend', () {
@@ -76,6 +69,42 @@ void main() {
       expect(headers.single.name, 'Bloodhound');
       expect(headers.single.games, 2);
     });
+
+    test('a group\'s average RP counts ranked games that count, like a '
+        'session header and the Legends and Maps tabs', () {
+      // The excluded game adds nothing to the total, so it isn't in the average.
+      final items = buildGroupedItems([
+        game(dayOffset: 0, slot: 3, rp: 50),
+        game(dayOffset: 0, slot: 2, rp: 30),
+        game(dayOffset: 0, slot: 1, rp: -200, excluded: true),
+      ], MatchGrouping.byMap);
+
+      final header = items.whereType<GroupHeaderItem>().single;
+      expect(header.games, 3);
+      expect(header.netRp, 80);
+      expect(header.avgRp, closeTo(40, 0.001)); // not 80 / 3
+    });
+
+    test('casual games do not dilute a group\'s average either', () {
+      final items = buildGroupedItems([
+        game(dayOffset: 0, slot: 2, rp: 20),
+        game(dayOffset: 0, slot: 1, rp: 0), // pubs: no RP movement
+      ], MatchGrouping.byMap);
+
+      expect(
+        items.whereType<GroupHeaderItem>().single.avgRp,
+        closeTo(20, 0.001),
+      );
+    });
+
+    test('a group with no counted ranked game has no average to show', () {
+      final items = buildGroupedItems([
+        game(dayOffset: 0, slot: 1, rp: 0),
+        game(dayOffset: 0, slot: 2, rp: -200, excluded: true),
+      ], MatchGrouping.byMap);
+
+      expect(items.whereType<GroupHeaderItem>().single.avgRp, isNull);
+    });
   });
 
   group('session header summary', () {
@@ -91,8 +120,18 @@ void main() {
       expect(h.avgRp, closeTo(40 / 3, 0.001));
       expect(h.kills, 8);
       expect(h.damage, 2000);
-      expect(h.avgDamage, closeTo(2000 / 3, 0.001));
       expect(h.playSecs, 1800);
+    });
+
+    test('counts the games that reported kills and damage', () {
+      final h = buildSessionItems([
+        game(dayOffset: 0, slot: 3, kills: null, damage: null),
+        game(dayOffset: 0, slot: 2, kills: 4, damage: null),
+        game(dayOffset: 0, slot: 1, kills: 1, damage: 300),
+      ]).whereType<SessionHeaderItem>().single;
+      expect(h.killsGames, 2);
+      expect(h.damageGames, 1);
+      expect(h.kills, 5);
     });
 
     test('skips auto-excluded games like hand-excluded ones', () {
@@ -165,6 +204,101 @@ void main() {
       expect(f.apply(pool), hasLength(1));
       expect(f.activeCount, 2);
     });
+
+    test('a map or legend matches however its games spell it', () {
+      // Sync stores `olympus_rotation`; the edit sheet writes `olympus`.
+      final synced = game(dayOffset: 0, slot: 1, map: 'olympus_rotation');
+      final corrected = game(dayOffset: 0, slot: 2, map: 'olympus');
+      final other = game(dayOffset: 0, slot: 3, map: 'kings_canyon');
+      final f = const HistoryFilter(mapKeys: {'olympus'});
+      expect(f.apply([synced, corrected, other]), [synced, corrected]);
+
+      final proper = game(dayOffset: 0, slot: 1, legend: 'Axle');
+      final lower = game(dayOffset: 0, slot: 2, legend: 'axle');
+      final wraith = game(dayOffset: 0, slot: 3, legend: 'Wraith');
+      final byLegend = const HistoryFilter(legends: {'Axle'});
+      expect(byLegend.apply([proper, lower, wraith]), [proper, lower]);
+    });
+
+    testWidgets('the sheet offers one chip per map, not one per spelling', (
+      tester,
+    ) async {
+      final pool = [
+        game(dayOffset: 0, slot: 1, map: 'olympus_rotation'),
+        game(dayOffset: 0, slot: 2, map: 'olympus'),
+        game(dayOffset: 0, slot: 3, legend: 'axle', map: 'kings_canyon'),
+      ];
+      var filter = const HistoryFilter();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showHistoryFilterSheet(
+                  context,
+                  filter: filter,
+                  pool: pool,
+                  onChanged: (f) => filter = f,
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Olympus'), findsOneWidget);
+      // `axle` and `Axle` would otherwise be two legend chips.
+      expect(find.text('Axle'), findsOneWidget);
+
+      // Choosing it finds both games.
+      await tester.tap(find.text('Olympus'));
+      await tester.pump();
+      expect(filter.apply(pool), hasLength(2));
+    });
+
+    testWidgets('the Done button is on screen without scrolling, however many '
+        'legends the player has used', (tester) async {
+      // 25 legends on a phone: the button used to sit under all the chips.
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final pool = [
+        for (var i = 0; i < 25; i++)
+          game(dayOffset: 0, slot: i + 1, legend: 'Legend $i'),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showHistoryFilterSheet(
+                  context,
+                  filter: const HistoryFilter(),
+                  pool: pool,
+                  onChanged: (_) {},
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Done'), findsOneWidget);
+      expect(tester.getRect(find.text('Done')).bottom, lessThanOrEqualTo(640));
+      // The last legend is below the fold.
+      expect(find.text('Legend 24').hitTestable(), findsNothing);
+
+      // Tapping it closes the sheet.
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('Done'), findsNothing);
+    });
   });
 
   group('exclusion tags', () {
@@ -193,20 +327,7 @@ void main() {
     int secs(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
 
     RankedMatch at(DateTime start, {bool ranked = true, int length = 600}) =>
-        RankedMatch.fromJson({
-          'uid': '1',
-          'name': 'Tester',
-          'legendPlayed': 'Axle',
-          'gameMode': 'BATTLE_ROYALE',
-          'gameLengthSecs': length,
-          'gameStartTimestamp': secs(start),
-          'gameEndTimestamp': secs(start) + length,
-          'gameData': const [],
-          'BRScoreChange': ranked ? 10 : 0,
-          'BRScore': 1000,
-          'map': 'olympus_rotation',
-          'isPartyFull': false,
-        });
+        buildMatch(start: secs(start), rp: ranked ? 10 : 0, length: length);
 
     // Newest first, as the list expects.
     List<RankedMatch> newestFirst(Iterable<RankedMatch> ms) =>
@@ -287,6 +408,39 @@ void main() {
       expect(withPool.single.games, 2);
     });
 
+    test('a legend\'s page over the whole history shows no break for time spent '
+        'on another legend', () {
+      // Axle 10:00, another legend 11:30, Axle 13:00: no break, though the Axle
+      // games alone are 2h50 apart.
+      final first = at(DateTime(2025, 3, 10, 10));
+      final other = at(DateTime(2025, 3, 10, 11, 30));
+      final last = at(DateTime(2025, 3, 10, 13));
+      final pool = newestFirst([first, other, last]);
+      final onePage = newestFirst([first, last]);
+
+      final alone = buildSessionItems(onePage);
+      expect(headers(alone), hasLength(2));
+      expect(alone.whereType<SessionBreakItem>(), hasLength(1));
+
+      final withPool = buildSessionItems(onePage, sessionPool: pool);
+      expect(headers(withPool), hasLength(1));
+      expect(withPool.whereType<SessionBreakItem>(), isEmpty);
+    });
+
+    test('break rows can be left out when the sessions are not found over '
+        'everything played', () {
+      final games = newestFirst([
+        at(DateTime(2025, 3, 10, 10)),
+        at(DateTime(2025, 3, 10, 14)),
+      ]);
+
+      expect(buildSessionItems(games).whereType<SessionBreakItem>(), hasLength(1));
+      final without = buildSessionItems(games, includeBreaks: false);
+      expect(without.whereType<SessionBreakItem>(), isEmpty);
+      // Only the break row goes: both sessions are still there.
+      expect(headers(without), hasLength(2));
+    });
+
     test('a page cut never splits a session, even across midnight', () {
       final games = newestFirst([
         for (var i = 0; i < 6; i++) at(DateTime(2025, 3, 10, 23, i * 15)),
@@ -316,6 +470,30 @@ void main() {
       final h = headers(buildSessionItems(games)).single;
       expect(h.start.toLocal(), DateTime(2025, 3, 10, 23, 30));
       expect(h.end.toLocal(), DateTime(2025, 3, 11, 0, 20));
+    });
+  });
+
+  group('historyGrewAtFront', () {
+    final older = [for (var i = 1; i <= 4; i++) game(dayOffset: 0, slot: i)];
+    final newer = game(dayOffset: 0, slot: 9);
+
+    test('new games added at the front are the same list grown', () {
+      expect(historyGrewAtFront(older, [newer, ...older]), isTrue);
+    });
+
+    test('an unchanged list is not a different one', () {
+      expect(historyGrewAtFront(older, [...older]), isTrue);
+    });
+
+    test('a narrowed or reordered set is a different one', () {
+      expect(historyGrewAtFront(older, older.sublist(1)), isFalse);
+      expect(historyGrewAtFront(older, older.reversed.toList()), isFalse);
+      expect(historyGrewAtFront(older, [newer, ...older.sublist(1)]), isFalse);
+    });
+
+    test('from or to nothing is a different set', () {
+      expect(historyGrewAtFront(const [], older), isFalse);
+      expect(historyGrewAtFront(older, const []), isFalse);
     });
   });
 
@@ -356,9 +534,11 @@ void main() {
     ];
 
     Future<void> pump(WidgetTester tester, ProviderContainer? c) async {
+      final container = c ?? ProviderContainer();
+      if (c == null) addTearDown(container.dispose);
       await tester.pumpWidget(
         UncontrolledProviderScope(
-          container: c ?? ProviderContainer(),
+          container: container,
           child: MaterialApp(
             home: Scaffold(
               body: MatchHistoryList(
@@ -512,20 +692,8 @@ void main() {
 
     testWidgets('a session header gives both dates when it crosses midnight, '
         'and the detail sheet names the weekday', (tester) async {
-      RankedMatch at(DateTime start) => RankedMatch.fromJson({
-        'uid': '1',
-        'name': 'Tester',
-        'legendPlayed': 'Axle',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': start.millisecondsSinceEpoch ~/ 1000,
-        'gameEndTimestamp': start.millisecondsSinceEpoch ~/ 1000 + 600,
-        'gameData': const [],
-        'BRScoreChange': 10,
-        'BRScore': 1000,
-        'map': 'olympus_rotation',
-        'isPartyFull': false,
-      });
+      RankedMatch at(DateTime start) =>
+          buildMatch(start: start.millisecondsSinceEpoch ~/ 1000);
       final games = [
         at(DateTime(2025, 3, 11, 0, 10)),
         at(DateTime(2025, 3, 10, 23, 30)),
@@ -617,6 +785,101 @@ void main() {
       await tester.tap(find.byTooltip('Previous match'));
       await tester.pumpAndSettle();
       expect(find.text('1 of 33'), findsOneWidget);
+    });
+  });
+
+  group('a session no game reported kills or damage for', () {
+    Finder noReading() => find.byWidgetPredicate(
+      (w) => w is Text && w.textSpan?.toPlainText() == '—',
+    );
+
+    testWidgets('shows no reading, not a measured 0', (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final games = [
+        game(dayOffset: 0, slot: 2, kills: null, damage: null),
+        game(dayOffset: 0, slot: 1, kills: null, damage: null),
+      ];
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(matches: games, onRefresh: () async {}),
+            ),
+          ),
+        ),
+      );
+
+      // Kills and Damage columns of the one session header.
+      expect(noReading(), findsNWidgets(2));
+    });
+  });
+
+  group('a legend\'s drill-down page', () {
+    // Axle at slots 0 and 8 with another legend between: 7400 s apart alone,
+    // 3400 s over everything.
+    final older = game(dayOffset: 0, slot: 0);
+    final between = game(dayOffset: 0, slot: 4, legend: 'Wraith');
+    final newer = game(dayOffset: 0, slot: 8);
+    final axle = [newer, older]; // newest first
+    final everything = [newer, between, older];
+
+    Future<void> pumpScreen(
+      WidgetTester tester, {
+      List<RankedMatch>? sessionPool,
+    }) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: RankedEntityHistoryScreen(
+              title: 'Axle',
+              subtitle: '2 ranked games',
+              matches: axle,
+              onRefresh: () async {},
+              groupLabel: 'map',
+              grouping: MatchGrouping.byMap,
+              sessionPool: sessionPool,
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('over the split\'s whole history it shows one session and no '
+        '"break" for time spent on another legend', (tester) async {
+      await pumpScreen(tester, sessionPool: everything);
+
+      expect(find.textContaining('break'), findsNothing);
+    });
+
+    testWidgets('with no whole-history list (Lifetime) it names no break it '
+        'cannot know', (tester) async {
+      await pumpScreen(tester);
+
+      expect(find.textContaining('break'), findsNothing);
+    });
+
+    testWidgets('the same two games do show the false break when sessions '
+        'are found over them alone', (tester) async {
+      // Control: the false break shows without the session pool.
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(matches: axle, onRefresh: () async {}),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('break'), findsOneWidget);
     });
   });
 }

@@ -4,14 +4,15 @@ import 'package:intl/intl.dart';
 import '../../constants/map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../../providers/ranked_provider.dart';
-import '../../utils/formatting/format.dart' show formatNumber, formatSigned;
+import '../../utils/formatting/format.dart'
+    show formatNumber, formatShortDateTime, formatSignedInt;
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart' show RankedSplitBucket;
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_compare_tab.dart';
+import '../../widgets/nav_entry_card.dart';
 
-final _dateFmt = DateFormat('MMM d, h:mm a');
 
 /// Entry point for the Personal Records screen: standout single-game and
 /// win-streak stats. Hides itself when there are no ranked matches to draw
@@ -22,55 +23,34 @@ class RankedPersonalRecordsEntry extends StatelessWidget {
   final String uid;
   final List<RankedMatch> matches;
   final List<RankedSplitBucket> splits;
+
+  /// False for a past week or split, whose last streak ended then.
+  final bool live;
   const RankedPersonalRecordsEntry({
     super.key,
     required this.uid,
     required this.matches,
     required this.splits,
+    this.live = true,
   });
 
   @override
   Widget build(BuildContext context) {
     if (matches.isEmpty) return const SizedBox.shrink();
 
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: () => Navigator.of(context).push(
+    return NavEntryCard(
+      icon: Icons.emoji_events_outlined,
+      title: 'Personal Records',
+      onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => RankedPersonalRecordsScreen(
               uid: uid,
               matches: matches,
               splits: splits,
+              live: live,
             ),
           ),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(AppTheme.md),
-          child: Row(
-            children: [
-              Icon(
-                Icons.emoji_events_outlined,
-                size: 18,
-                color: AppTheme.accent,
-              ),
-              SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Text(
-                  'Personal Records',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.muted),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -79,11 +59,15 @@ class RankedPersonalRecordsScreen extends StatelessWidget {
   final String uid;
   final List<RankedMatch> matches;
   final List<RankedSplitBucket> splits;
+
+  /// See [RankedPersonalRecordsEntry.live].
+  final bool live;
   const RankedPersonalRecordsScreen({
     super.key,
     required this.uid,
     required this.matches,
     required this.splits,
+    this.live = true,
   });
 
   @override
@@ -104,9 +88,9 @@ class RankedPersonalRecordsScreen extends StatelessWidget {
             const SizedBox(height: AppTheme.md),
             _StreakCard(
               currentStreak: records.currentWinStreak,
-              currentStreakStart: records.currentStreakStart,
               bestStreak: records.bestWinStreak,
               bestStreakStart: records.bestStreakStart,
+              live: live,
             ),
             const SizedBox(height: AppTheme.lg),
             const Divider(color: AppTheme.surface2, height: 1),
@@ -145,38 +129,12 @@ class RankedPersonalBestEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        onTap: () => Navigator.of(context).push(
+    return NavEntryCard(
+      icon: Icons.emoji_events_outlined,
+      title: 'Personal Best',
+      onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => RankedPersonalBestScreen(uid: uid)),
         ),
-        child: const Padding(
-          padding: EdgeInsets.all(AppTheme.md),
-          child: Row(
-            children: [
-              Icon(
-                Icons.emoji_events_outlined,
-                size: 18,
-                color: AppTheme.accent,
-              ),
-              SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Text(
-                  'Personal Best',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 20, color: AppTheme.muted),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -230,7 +188,7 @@ List<Widget> _recordCards({
       match: bestRpGame,
       value: bestRpGame == null
           ? null
-          : formatSigned(bestRpGame.effectiveRpChange.toDouble()),
+          : formatSignedInt(bestRpGame.effectiveRpChange),
     ),
     const SizedBox(height: AppTheme.md),
     _RecordCard(
@@ -289,7 +247,7 @@ class _RecordCard extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+                  style: AppTheme.captionSmall,
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -306,8 +264,8 @@ class _RecordCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${m.legend} · ${battleRoyaleMapName(m.mapKey)} · '
-                    '${_dateFmt.format(m.endTime.toLocal())}',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    '${formatShortDateTime(m.endTime)}',
+                    style: AppTheme.caption,
                   ),
                 ],
               ],
@@ -324,20 +282,33 @@ class _RecordCard extends StatelessWidget {
 /// streak, or confirms it's tied with the best.
 class _StreakCard extends StatelessWidget {
   final int currentStreak;
-  final DateTime? currentStreakStart;
   final int bestStreak;
   final DateTime? bestStreakStart;
 
+  /// False for a past week or split: worded in the past tense.
+  final bool live;
+
   const _StreakCard({
     required this.currentStreak,
-    required this.currentStreakStart,
     required this.bestStreak,
     required this.bestStreakStart,
+    required this.live,
   });
 
   @override
   Widget build(BuildContext context) {
     final isPersonalBest = currentStreak > 0 && currentStreak == bestStreak;
+    final statusText = live
+        ? (isPersonalBest
+              ? 'You\'re on it now!'
+              : currentStreak > 0
+              ? 'Currently on a $currentStreak-game streak'
+              : 'No active streak right now')
+        : (isPersonalBest
+              ? 'Ended on its best streak'
+              : currentStreak > 0
+              ? 'Ended on a $currentStreak-game streak'
+              : 'Ended without a win streak');
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
@@ -351,12 +322,13 @@ class _StreakCard extends StatelessWidget {
               children: [
                 const Text(
                   'Best Win Streak',
-                  style: TextStyle(color: AppTheme.muted, fontSize: 11),
+                  style: AppTheme.captionSmall,
                 ),
                 const SizedBox(height: 2),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.end,
                   children: [
                     Text(
                       bestStreak > 0 ? '$bestStreak games' : 'No streak yet',
@@ -368,16 +340,12 @@ class _StreakCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    if (bestStreak > 0) ...[
-                      const SizedBox(width: 6),
+                    if (bestStreak > 0)
                       Text(
-                        'since ${_formatStreakDate(bestStreakStart!)}',
-                        style: const TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 12,
-                        ),
+                        '${live ? 'since' : 'from'} '
+                        '${_formatStreakDate(bestStreakStart!)}',
+                        style: AppTheme.caption,
                       ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: AppTheme.sm),
@@ -391,18 +359,18 @@ class _StreakCard extends StatelessWidget {
                       color: isPersonalBest ? AppTheme.green : AppTheme.muted,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      isPersonalBest
-                          ? 'You\'re on it now!'
-                          : currentStreak > 0
-                          ? 'Currently on a $currentStreak-game streak'
-                          : 'No active streak right now',
-                      style: TextStyle(
-                        color: isPersonalBest ? AppTheme.green : AppTheme.muted,
-                        fontSize: 12,
-                        fontWeight: isPersonalBest
-                            ? FontWeight.w600
-                            : FontWeight.normal,
+                    Expanded(
+                      child: Text(
+                        statusText,
+                        style: TextStyle(
+                          color: isPersonalBest
+                              ? AppTheme.green
+                              : AppTheme.muted,
+                          fontSize: 12,
+                          fontWeight: isPersonalBest
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
                       ),
                     ),
                   ],

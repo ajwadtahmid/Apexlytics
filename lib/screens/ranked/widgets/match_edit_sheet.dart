@@ -336,7 +336,7 @@ class _MatchEditSheetState extends ConsumerState<MatchEditSheet> {
               const SizedBox(height: AppTheme.xs),
               const Text(
                 'Corrected values are kept when new match data arrives.',
-                style: TextStyle(color: AppTheme.muted, fontSize: 13),
+                style: AppTheme.captionLarge,
               ),
               const SizedBox(height: AppTheme.md),
               _LegendRow(
@@ -438,7 +438,7 @@ class _FieldLabel extends StatelessWidget {
           Flexible(
             child: Text(
               label,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+              style: AppTheme.captionLarge,
             ),
           ),
           if (edited) ...[
@@ -485,7 +485,9 @@ class _LegendRow extends StatelessWidget {
                     children: [
                       LegendIcon(legendName: name, size: 16),
                       const SizedBox(width: 8),
-                      Text(name),
+                      Flexible(
+                        child: Text(name, overflow: TextOverflow.ellipsis),
+                      ),
                     ],
                   ),
                 ),
@@ -575,7 +577,7 @@ class _ExcludeRow extends StatelessWidget {
                           'normal range. Correct the RP above to include it.'
                     : 'Removed from every stat, breakdown, and trend. Still '
                           'shows here in History.',
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: AppTheme.caption,
               ),
             ],
           ),
@@ -641,7 +643,7 @@ class _NumericFieldRowState extends State<_NumericFieldRow> {
             decoration: InputDecoration(
               isDense: true,
               hintText: widget.field.hint,
-              hintStyle: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              hintStyle: AppTheme.caption,
               errorText: error,
               errorStyle: const TextStyle(fontSize: 11),
             ),

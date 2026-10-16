@@ -826,7 +826,7 @@ class RankedHistoryStore {
     final db = await _open();
     final rows = await db.rawQuery(
       'SELECT COALESCE(season_id, ?) AS sid, COUNT(*) AS c FROM $table '
-      "WHERE uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0 "
+      'WHERE uid = ? AND $kSqlIsRanked '
       'GROUP BY sid',
       [kUnknownSeasonId, uid],
     );
@@ -890,9 +890,7 @@ class RankedHistoryStore {
     String? seasonId, {
     bool includeNonCounting = false,
   }) {
-    final buf = StringBuffer(
-      "uid = ? AND game_mode = 'BATTLE_ROYALE' AND rp_change != 0",
-    );
+    final buf = StringBuffer('uid = ? AND $kSqlIsRanked');
     if (!includeNonCounting) {
       buf.write(' AND excluded = 0 AND $kSqlPlausibleRpChange');
     }
@@ -911,8 +909,7 @@ class RankedHistoryStore {
   // keeps implausible RP swings out, so net RP and win/loss need no test of
   // their own - restating the rule here is what let these columns drift from
   // the Dart aggregates in the past.
-  static const _aggCols =
-      '''
+  static const _aggCols = '''
       COUNT(*) AS games,
       COALESCE(SUM(kills), 0) AS kills,
       COALESCE(SUM(damage), 0) AS damage,
@@ -1041,8 +1038,7 @@ class RankedHistoryStore {
 
     final byPair = <(String, String), List<Map<String, Object?>>>{};
     for (final r in rows) {
-      final legend =
-          kLegendsByName[(r['legend'] as String? ?? '').toLowerCase()]?.name;
+      final legend = legendInfo(r['legend'] as String? ?? '')?.name;
       final mapName = battleRoyaleMapInfo(r['map_key'] as String? ?? '')?.name;
       if (legend == null || mapName == null) continue;
       byPair.putIfAbsent((legend, mapName), () => []).add(r);
@@ -1081,7 +1077,7 @@ class RankedHistoryStore {
     );
   }
 
-  /// Ranked matches for one legend across [seasonId] (null = lifetime), newest
+  /// Ranked matches for one legend across the whole history, newest
   /// first — the lazy drill-down query the Lifetime Legends tab uses on tap
   /// instead of filtering a whole in-memory history.
   ///
@@ -1094,13 +1090,9 @@ class RankedHistoryStore {
   /// Folds a NULL `legend` into `'Unknown'` first, matching
   /// [legendBreakdownsFor]'s grouping — plain equality never matches NULL,
   /// so the "Unknown" row would otherwise drill down to too few matches.
-  Future<List<RankedMatch>> matchesForLegend(
-    String uid,
-    String legend, {
-    String? seasonId,
-  }) async {
+  Future<List<RankedMatch>> matchesForLegend(String uid, String legend) async {
     final db = await _open();
-    final (where, args) = _rankedScope(uid, seasonId);
+    final (where, args) = _rankedScope(uid, null);
     final rows = await db.rawQuery(
       "SELECT * FROM $table WHERE $where AND "
       "LOWER(COALESCE(NULLIF(TRIM(legend), ''), 'Unknown')) = LOWER(?) "
@@ -1110,7 +1102,7 @@ class RankedHistoryStore {
     return rows.map(RankedMatch.fromStoredMap).toList();
   }
 
-  /// Ranked matches for one map across [seasonId] (null = lifetime), newest
+  /// Ranked matches for one map across the whole history, newest
   /// first — the lazy drill-down query the Lifetime Maps tab uses on tap.
   ///
   /// Matches every raw spelling [battleRoyaleMapKeyVariants] considers the same map
@@ -1125,13 +1117,9 @@ class RankedHistoryStore {
   /// unrecognised map or differently-cased key returned fewer matches than
   /// the row it was opened from counted, since a plain `IN (...)` is
   /// exact-string and never matches NULL.
-  Future<List<RankedMatch>> matchesForMap(
-    String uid,
-    String mapKey, {
-    String? seasonId,
-  }) async {
+  Future<List<RankedMatch>> matchesForMap(String uid, String mapKey) async {
     final db = await _open();
-    final (where, args) = _rankedScope(uid, seasonId);
+    final (where, args) = _rankedScope(uid, null);
     final variants = battleRoyaleMapKeyVariants(mapKey);
     final placeholders = List.filled(variants.length, 'LOWER(?)').join(', ');
     final rows = await db.rawQuery(
@@ -1144,8 +1132,8 @@ class RankedHistoryStore {
     return rows.map(RankedMatch.fromStoredMap).toList();
   }
 
-  /// The single best RP/kills/damage game for [uid] across [seasonId] (null =
-  /// lifetime) — one `ORDER BY ... LIMIT 1` query per stat rather than
+  /// The single best RP/kills/damage game for [uid] across the whole history
+  /// — one `ORDER BY ... LIMIT 1` query per stat rather than
   /// hydrating the whole history, so this stays cheap at Lifetime scope. Only
   /// matches that count toward the stats are considered; a null kills/damage
   /// game means no row in scope ever reported that tracker.
@@ -1153,12 +1141,9 @@ class RankedHistoryStore {
   /// Ties go to the most recently ended match (`end_ms DESC`), the same rule
   /// [personalRecords] applies — equal kill counts are common, and without
   /// an explicit tie-break SQLite may pick any of the tied rows.
-  Future<PersonalBestGames> personalBestGamesFor(
-    String uid, {
-    String? seasonId,
-  }) async {
+  Future<PersonalBestGames> personalBestGamesFor(String uid) async {
     final db = await _open();
-    final (where, args) = _rankedScope(uid, seasonId);
+    final (where, args) = _rankedScope(uid, null);
 
     Future<RankedMatch?> top(String column, {String? extraWhere}) async {
       final rows = await db.rawQuery(
@@ -1571,7 +1556,10 @@ class RankedHistoryStore {
   /// that loads it). Positive like a sync; [allowZero] is for an end time,
   /// which a sync stores as 0 when upstream sent none.
   static bool _isEpochMs(Object? v, {bool allowZero = false}) =>
-      v is num && v.isFinite && (allowZero ? v >= 0 : v > 0) && v <= _maxEpochMs;
+      v is num &&
+      v.isFinite &&
+      (allowZero ? v >= 0 : v > 0) &&
+      v <= _maxEpochMs;
 
   /// [r] as a row [importRows] can queue, or null when it isn't usable —
   /// see [importRows] for the rules.

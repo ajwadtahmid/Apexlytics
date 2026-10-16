@@ -136,8 +136,6 @@ class RankedAgg {
     mapName: mapName,
     games: games,
     totalRp: rp,
-    wins: wins,
-    losses: losses,
   );
 }
 
@@ -311,7 +309,8 @@ List<LegendBreakdown> legendBreakdowns(List<RankedMatch> matches) {
     byLegend.putIfAbsent(canonicalLegendName(m.legend), () => []).add(m);
   }
   return [
-    for (final e in byLegend.entries) (RankedAgg()..addAll(e.value)).toLegend(e.key),
+    for (final e in byLegend.entries)
+      (RankedAgg()..addAll(e.value)).toLegend(e.key),
   ]..sort(byTotalRpThenName);
 }
 
@@ -366,7 +365,6 @@ class MapBreakdown {
   double? get avgDamage => damageGames == 0 ? null : totalDamage / damageGames;
   double get avgLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
   int get decidedGames => wins + losses;
-  double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
 }
 
 /// Per-map breakdown, sorted by games played (descending).
@@ -416,16 +414,12 @@ class LegendMapCell {
   final String mapName;
   final int games;
   final int totalRp;
-  final int wins;
-  final int losses;
 
   const LegendMapCell({
     required this.legend,
     required this.mapName,
     required this.games,
     required this.totalRp,
-    required this.wins,
-    required this.losses,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
@@ -441,7 +435,7 @@ class LegendMapCell {
 List<LegendMapCell> legendMapBreakdowns(List<RankedMatch> matches) {
   final byPair = <(String, String), List<RankedMatch>>{};
   for (final m in matches) {
-    final legend = kLegendsByName[m.legend.toLowerCase()]?.name;
+    final legend = legendInfo(m.legend)?.name;
     final mapName = battleRoyaleMapInfo(m.mapKey)?.name;
     if (legend == null || mapName == null) continue;
     byPair.putIfAbsent((legend, mapName), () => []).add(m);
@@ -509,21 +503,39 @@ class RankedSession {
   }
 }
 
-/// Groups ranked matches into sessions separated by gaps larger than [gap].
+/// The session each match of [newestFirst] belongs to, as a number that is 0
+/// for the newest session. A new session starts wherever the gap between a
+/// match's end and the start of the one after it is larger than [kSessionGap]. The one
+/// definition of a session boundary, shared by [sessionize] and the History
+/// tab.
+List<int> sessionNumbers(List<RankedMatch> newestFirst) {
+  final numbers = <int>[];
+  var current = -1;
+  for (var i = 0; i < newestFirst.length; i++) {
+    if (i == 0 ||
+        newestFirst[i - 1].startTime.difference(newestFirst[i].endTime) >
+            kSessionGap) {
+      current++;
+    }
+    numbers.add(current);
+  }
+  return numbers;
+}
+
+/// Groups ranked matches into sessions separated by gaps larger than [kSessionGap].
 /// Returned newest session first. Assumes [ranked] is already ranked-only
 /// filtered.
-List<RankedSession> sessionize(
-  List<RankedMatch> ranked, {
-  Duration gap = kSessionGap,
-}) {
-  final chrono = ranked.toList()
-    ..sort((a, b) => a.startTime.compareTo(b.startTime));
-  if (chrono.isEmpty) return [];
+List<RankedSession> sessionize(List<RankedMatch> ranked) {
+  final newestFirst = ranked.toList()
+    ..sort((a, b) => b.startTime.compareTo(a.startTime));
+  if (newestFirst.isEmpty) return [];
 
+  final numbers = sessionNumbers(newestFirst);
   final sessions = <RankedSession>[];
-  var bucket = <RankedMatch>[chrono.first];
+  var bucket = <RankedMatch>[];
 
   void flush() {
+    bucket = bucket.reversed.toList(); // chronological
     var rp = 0, kills = 0, damage = 0, killsGames = 0, damageGames = 0;
     for (final m in bucket) {
       rp += m.effectiveRpChange;
@@ -558,19 +570,16 @@ List<RankedSession> sessionize(
     );
   }
 
-  for (var i = 1; i < chrono.length; i++) {
-    final prev = chrono[i - 1];
-    final cur = chrono[i];
-    if (cur.startTime.difference(prev.endTime) > gap) {
+  for (var i = 0; i < newestFirst.length; i++) {
+    if (i > 0 && numbers[i] != numbers[i - 1]) {
       flush();
-      bucket = [cur];
-    } else {
-      bucket.add(cur);
+      bucket = [];
     }
+    bucket.add(newestFirst[i]);
   }
   flush();
 
-  return sessions.reversed.toList();
+  return sessions;
 }
 
 // ── Rank progress (promotion tracker + optional goal) ───────────────────────
@@ -798,14 +807,13 @@ typedef PersonalBestGames = ({
 
 /// Standout single-game and streak stats for the Personal Records screen.
 /// Built from ranked matches only; null best-kills/best-damage mean no match
-/// in range reported that tracker. [currentStreakStart]/[bestStreakStart] are
-/// each streak's first match, null when that streak is 0.
+/// in range reported that tracker. [bestStreakStart] is the
+/// first match of the best streak, null when that streak is 0.
 class PersonalRecords {
   final RankedMatch? bestRpGame;
   final RankedMatch? bestKillsGame;
   final RankedMatch? bestDamageGame;
   final int currentWinStreak;
-  final DateTime? currentStreakStart;
   final int bestWinStreak;
   final DateTime? bestStreakStart;
 
@@ -814,7 +822,6 @@ class PersonalRecords {
     this.bestKillsGame,
     this.bestDamageGame,
     required this.currentWinStreak,
-    this.currentStreakStart,
     required this.bestWinStreak,
     this.bestStreakStart,
   });
@@ -882,7 +889,6 @@ PersonalRecords personalRecords(List<RankedMatch> all) {
     bestKillsGame: bestKills,
     bestDamageGame: bestDamage,
     currentWinStreak: current,
-    currentStreakStart: current > 0 ? runStart : null,
     bestWinStreak: best,
     bestStreakStart: bestStart,
   );
@@ -951,8 +957,8 @@ class TrendChange {
 TrendChange? _trendChange(
   List<RankedMatch> matches, {
   required int? Function(RankedMatch) valueOf,
-  int window = kTrendRecentGames,
 }) {
+  const window = kTrendRecentGames;
   if (matches.length < window * 2) return null;
 
   final chrono = matches.toList()

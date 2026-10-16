@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
@@ -27,6 +29,10 @@ class RankedOverviewHighlights extends StatelessWidget {
   final Future<List<RankedMatch>> Function(String mapKey) mapMatchesFor;
   final Future<void> Function() onRefresh;
 
+  /// The scope's full history, for sessions on the page a card opens. Null for
+  /// Lifetime.
+  final List<RankedMatch>? sessionPool;
+
   const RankedOverviewHighlights({
     super.key,
     required this.legends,
@@ -34,6 +40,7 @@ class RankedOverviewHighlights extends StatelessWidget {
     required this.legendMatchesFor,
     required this.mapMatchesFor,
     required this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -76,6 +83,7 @@ class RankedOverviewHighlights extends StatelessWidget {
             map: mapsRanked.first,
             matchesFor: mapMatchesFor,
             onRefresh: onRefresh,
+            sessionPool: sessionPool,
           ),
           if (mapsRanked.length > 1) ...[
             const SizedBox(height: AppTheme.sm),
@@ -84,6 +92,7 @@ class RankedOverviewHighlights extends StatelessWidget {
               map: mapsRanked.last,
               matchesFor: mapMatchesFor,
               onRefresh: onRefresh,
+              sessionPool: sessionPool,
             ),
           ],
         ],
@@ -100,6 +109,7 @@ class RankedOverviewHighlights extends StatelessWidget {
             breakdown: items[i],
             matchesFor: legendMatchesFor,
             onRefresh: onRefresh,
+            sessionPool: sessionPool,
           ),
         ],
       ],
@@ -148,11 +158,13 @@ class _CompactLegend extends StatelessWidget {
 
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
+  final List<RankedMatch>? sessionPool;
 
   const _CompactLegend({
     required this.breakdown,
     required this.matchesFor,
     required this.onRefresh,
+    this.sessionPool,
   });
 
   // The portrait fills the card's full height, flush with its left edge, and
@@ -166,13 +178,20 @@ class _CompactLegend extends StatelessWidget {
   Widget build(BuildContext context) {
     final cardHeight = AppTheme.scaledWithText(context, _cardHeight);
     final pillHeight = AppTheme.scaledWithText(context, _pillHeight);
-    final portraitWidth = cardHeight * kLegendPortraitAspectRatio;
+    // Capped so large text can't widen the portrait and squeeze the stats.
+    final portraitWidth =
+        math.min(cardHeight, _cardHeight) * kLegendPortraitAspectRatio;
 
     return SurfaceCard(
       padding: EdgeInsets.zero,
       clip: Clip.antiAlias,
-      onTap: () =>
-          showLegendDetailSheet(context, breakdown, matchesFor, onRefresh),
+      onTap: () => showLegendDetailSheet(
+        context,
+        breakdown,
+        matchesFor,
+        onRefresh,
+        sessionPool: sessionPool,
+      ),
       child: SizedBox(
         height: cardHeight,
         child: Row(
@@ -246,25 +265,30 @@ class _CompactLegend extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppTheme.sm),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                0,
-                AppTheme.sm,
-                AppTheme.sm + 2,
-                AppTheme.sm,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // The ranking metric, so the pill and the order agree.
-                  RpPill.perGame(avgRp: breakdown.avgRpPerGame),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 18,
-                    color: AppTheme.muted,
-                  ),
-                ],
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  AppTheme.sm,
+                  AppTheme.sm + 2,
+                  AppTheme.sm,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // The ranking metric, so the pill and the order agree.
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: RpPill.perGame(avgRp: breakdown.avgRpPerGame),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: AppTheme.muted,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -279,12 +303,14 @@ class _MapHighlight extends StatelessWidget {
   final MapBreakdown map;
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
+  final List<RankedMatch>? sessionPool;
 
   const _MapHighlight({
     required this.label,
     required this.map,
     required this.matchesFor,
     required this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -296,7 +322,13 @@ class _MapHighlight extends StatelessWidget {
     return SurfaceCard(
       padding: EdgeInsets.zero,
       clip: Clip.antiAlias,
-      onTap: () => showMapDetailSheet(context, map, matchesFor, onRefresh),
+      onTap: () => showMapDetailSheet(
+        context,
+        map,
+        matchesFor,
+        onRefresh,
+        sessionPool: sessionPool,
+      ),
       child: SizedBox(
         height: AppTheme.scaledWithText(context, 118),
         child: Stack(

@@ -15,6 +15,7 @@ import 'map_rp_badge.dart';
 import 'rank_badge.dart';
 import 'ranked_legend_detail_sheet.dart';
 import 'ranked_map_detail_sheet.dart';
+import '../../../widgets/control_pill.dart';
 
 enum _Sort { totalRp, games, avgRp }
 
@@ -46,11 +47,16 @@ class RankedLegendBreakdown extends StatefulWidget {
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
 
+  /// The scope's full history, for sessions on the page a row opens. Null for
+  /// Lifetime.
+  final List<RankedMatch>? sessionPool;
+
   const RankedLegendBreakdown({
     super.key,
     required this.rows,
     required this.matchesFor,
     required this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -93,6 +99,7 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
                   rows[i],
                   widget.matchesFor,
                   widget.onRefresh,
+                  sessionPool: widget.sessionPool,
                 ),
               ),
             ),
@@ -197,7 +204,6 @@ class _LegendCard extends StatelessWidget {
                           losses: row.losses,
                           showRecord: false,
                           compact: true,
-                          centered: true,
                         ),
                         _chip('Avg Kills', formatAvgKills(row.avgKills)),
                         _chip(
@@ -231,12 +237,10 @@ class _LegendCard extends StatelessWidget {
   Widget _chip(
     String label,
     String value, {
-    bool highlight = false,
     Color? valueColor,
   }) => StatDisplay(
     label: label,
     value: value,
-    highlight: highlight,
     valueColor: valueColor,
     compact: true,
     centered: true,
@@ -261,11 +265,15 @@ class RankedMapBreakdown extends StatefulWidget {
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
 
+  /// As [RankedLegendBreakdown.sessionPool].
+  final List<RankedMatch>? sessionPool;
+
   const RankedMapBreakdown({
     super.key,
     required this.rows,
     required this.matchesFor,
     required this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -312,6 +320,7 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
                   rows[i],
                   widget.matchesFor,
                   widget.onRefresh,
+                  sessionPool: widget.sessionPool,
                 ),
               ),
             ),
@@ -433,7 +442,6 @@ class _MapCard extends StatelessWidget {
                             losses: row.losses,
                             onImage: true,
                             showRecord: false,
-                            centered: true,
                           ),
                         ),
                         Expanded(
@@ -525,7 +533,7 @@ void _applySort<T>(
   }
 }
 
-/// Cycling "Sort:" pill, matching the My Stats legends sort control.
+/// Cycling "Sort:" pill.
 class _SortBar extends StatelessWidget {
   final _Sort selected;
   final VoidCallback onTap;
@@ -536,35 +544,11 @@ class _SortBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        const Text(
-          'Sort:',
-          style: TextStyle(color: AppTheme.muted, fontSize: 12),
-        ),
-        const SizedBox(width: 4),
-        GestureDetector(
+        ControlPill(
+          prefix: 'Sort:',
+          icon: _sortIcons[selected]!,
+          label: _sortLabels[selected]!,
           onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.surface2,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(_sortIcons[selected], size: 13, color: AppTheme.accent),
-                const SizedBox(width: 4),
-                Text(
-                  _sortLabels[selected]!,
-                  style: const TextStyle(
-                    color: AppTheme.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ],
     );

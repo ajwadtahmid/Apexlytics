@@ -32,8 +32,9 @@ Future<void> showLegendDetailSheet(
   BuildContext context,
   LegendBreakdown breakdown,
   Future<List<RankedMatch>> Function(String legend) matchesFor,
-  Future<void> Function() onRefresh,
-) {
+  Future<void> Function() onRefresh, {
+  List<RankedMatch>? sessionPool,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -41,6 +42,7 @@ Future<void> showLegendDetailSheet(
       breakdown: breakdown,
       matchesFor: matchesFor,
       onRefresh: onRefresh,
+      sessionPool: sessionPool,
     ),
   );
 }
@@ -60,10 +62,14 @@ class _LegendDetailSheet extends ConsumerStatefulWidget {
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
 
+  /// The scope's full history, for the history page's sessions.
+  final List<RankedMatch>? sessionPool;
+
   const _LegendDetailSheet({
     required this.breakdown,
     required this.matchesFor,
     required this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -96,6 +102,7 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
           onRefresh: onRefresh,
           groupLabel: 'map',
           grouping: MatchGrouping.byMap,
+          sessionPool: widget.sessionPool,
         ),
       ),
     );
@@ -109,7 +116,7 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final info = kLegendsByName[breakdown.legend.toLowerCase()];
+    final info = legendInfo(breakdown.legend);
     final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
     final prefs = ref.watch(sharedPreferencesProvider);
     final target = breakdown.legend.toLowerCase();
@@ -174,7 +181,6 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
                       WinLossStat(
                         wins: breakdown.wins,
                         losses: breakdown.losses,
-                        centered: true,
                       ),
                       StatDisplay(
                         label: 'Games',

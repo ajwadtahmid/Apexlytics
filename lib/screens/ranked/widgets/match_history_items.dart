@@ -1,7 +1,7 @@
 import '../../../constants/legend_constants.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
-import '../../../utils/ranked/ranked_aggregates.dart' show kSessionGap;
+import '../../../utils/ranked/ranked_aggregates.dart' show kSessionGap, sessionNumbers;
 
 /// How to bucket matches when not grouping by session. [keyOf] decides which
 /// section a match belongs to; [nameOf] is that section's display title.
@@ -55,10 +55,12 @@ class SessionHeaderItem extends HistoryItem {
   /// every other stat rollup). Kills/damage skip games that didn't report them.
   final int kills;
   final int damage;
-  final int playSecs;
 
-  /// Average damage over the counted games that reported it; null when none did.
-  final double? avgDamage;
+  /// Counted games that reported kills / damage; zero means "no reading", not
+  /// a total of 0.
+  final int killsGames;
+  final int damageGames;
+  final int playSecs;
   SessionHeaderItem({
     required this.key,
     required this.start,
@@ -72,8 +74,9 @@ class SessionHeaderItem extends HistoryItem {
     this.avgRp,
     this.kills = 0,
     this.damage = 0,
+    this.killsGames = 0,
+    this.damageGames = 0,
     this.playSecs = 0,
-    this.avgDamage,
   });
 }
 
@@ -90,11 +93,15 @@ class GroupHeaderItem extends HistoryItem {
   final String name;
   final int games;
   final int netRp;
+
+  /// Net RP per counted ranked game, as in a session header. Null if none count.
+  final double? avgRp;
   final bool isFirst;
   GroupHeaderItem({
     required this.name,
     required this.games,
     required this.netRp,
+    required this.avgRp,
     required this.isFirst,
   });
 }
@@ -124,17 +131,14 @@ class _Sessions {
   final List<String> keys = [];
 
   _Sessions(List<RankedMatch> pool) {
+    final numbers = sessionNumbers(pool);
     for (var i = 0; i < pool.length; i++) {
-      // newest-first: pool[i - 1] is later than pool[i].
-      final gap = i == 0
-          ? Duration.zero
-          : pool[i - 1].startTime.difference(pool[i].endTime);
-      if (i == 0 || gap > kSessionGap) {
+      if (numbers[i] == keys.length) {
         keys.add(pool[i].id);
       } else {
-        keys[keys.length - 1] = pool[i].id;
+        keys[numbers[i]] = pool[i].id;
       }
-      indexOf[pool[i].id] = keys.length - 1;
+      indexOf[pool[i].id] = numbers[i];
     }
   }
 
@@ -170,10 +174,14 @@ DateTime _dayOf(DateTime t) {
 /// so a filtered list keeps the sessions the whole history has. When [limit] is
 /// set, only the first [limit] matches are shown — extended to the end of the
 /// session they land in, so a session's header totals are complete.
+///
+/// [includeBreaks] false hides break rows, for when [sessionPool] isn't the
+/// whole history.
 List<HistoryItem> buildSessionItems(
   List<RankedMatch> matches, {
   int? limit,
   List<RankedMatch>? sessionPool,
+  bool includeBreaks = true,
 }) {
   final sessions = _Sessions(sessionPool ?? matches);
   final visible = limit == null
@@ -196,7 +204,7 @@ List<HistoryItem> buildSessionItems(
     final bucket = buckets[b]; // newest first
     final start = bucket.last.startTime;
     final end = bucket.first.endTime;
-    if (b > 0) {
+    if (b > 0 && includeBreaks) {
       items.add(
         SessionBreakItem(
           buckets[b - 1].last.startTime.difference(end).inSeconds,
@@ -222,11 +230,9 @@ List<HistoryItem> buildSessionItems(
         avgRp: rankedGames == 0 ? null : netRp / rankedGames,
         kills: counted.fold<int>(0, (a, m) => a + (m.kills ?? 0)),
         damage: counted.fold<int>(0, (a, m) => a + (m.damage ?? 0)),
+        killsGames: counted.where((m) => m.kills != null).length,
+        damageGames: counted.where((m) => m.damage != null).length,
         playSecs: counted.fold<int>(0, (a, m) => a + m.lengthSecs),
-        avgDamage: counted.any((m) => m.damage != null)
-            ? counted.fold<int>(0, (a, m) => a + (m.damage ?? 0)) /
-                  counted.where((m) => m.damage != null).length
-            : null,
       ),
     );
     for (var i = 0; i < bucket.length; i++) {
@@ -258,7 +264,15 @@ List<HistoryItem> buildGroupedItems(
   final groups = byKey.values.map((ms) {
     final sorted = ms.toList()..sort((a, b) => b.endTime.compareTo(a.endTime));
     final netRp = sorted.fold<int>(0, (a, m) => a + m.effectiveRpChange);
-    return (name: g.nameOf(sorted.first), matches: sorted, netRp: netRp);
+    final rankedGames = sorted
+        .where((m) => m.countsTowardStats && m.isRanked)
+        .length;
+    return (
+      name: g.nameOf(sorted.first),
+      matches: sorted,
+      netRp: netRp,
+      avgRp: rankedGames == 0 ? null : netRp / rankedGames,
+    );
   }).toList()..sort((a, b) => b.netRp.compareTo(a.netRp));
 
   final items = <HistoryItem>[];
@@ -268,6 +282,7 @@ List<HistoryItem> buildGroupedItems(
         name: grp.name,
         games: grp.matches.length,
         netRp: grp.netRp,
+        avgRp: grp.avgRp,
         isFirst: identical(grp, groups.first),
       ),
     );

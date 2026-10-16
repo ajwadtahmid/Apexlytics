@@ -3,6 +3,7 @@ import '../../models/ranked_match.dart';
 import '../../utils/theme.dart';
 import 'widgets/match_history_items.dart';
 import 'widgets/match_history_list.dart';
+import '../../widgets/control_pill.dart';
 
 /// Full-screen ranked history for a single legend or map, reached by tapping a
 /// card in the Legends/Maps tabs. Shows the same session-grouped rows as the
@@ -24,6 +25,10 @@ class RankedEntityHistoryScreen extends StatefulWidget {
   /// How to section matches when grouped mode is active.
   final MatchGrouping grouping;
 
+  /// The scope's full history (newest first), which sessions are found over.
+  /// Null for Lifetime: break rows are then hidden.
+  final List<RankedMatch>? sessionPool;
+
   const RankedEntityHistoryScreen({
     super.key,
     required this.title,
@@ -32,6 +37,7 @@ class RankedEntityHistoryScreen extends StatefulWidget {
     required this.onRefresh,
     required this.groupLabel,
     required this.grouping,
+    this.sessionPool,
   });
 
   @override
@@ -75,7 +81,7 @@ class _RankedEntityHistoryScreenState extends State<RankedEntityHistoryScreen> {
             Text(widget.title, style: const TextStyle(fontSize: 17)),
             Text(
               widget.subtitle,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              style: AppTheme.caption,
             ),
           ],
         ),
@@ -87,6 +93,8 @@ class _RankedEntityHistoryScreenState extends State<RankedEntityHistoryScreen> {
           emptyLabel: 'No ranked games here',
           grouping: _grouped ? widget.grouping : null,
           onMatchUpdated: _onMatchUpdated,
+          sessionPool: widget.sessionPool,
+          showBreaks: widget.sessionPool != null,
           collapseScope: widget.title,
           // A legend's page holds all its games, so the comparison has the
           // history it needs; a map's page only has one map's worth of each
@@ -103,8 +111,8 @@ class _RankedEntityHistoryScreenState extends State<RankedEntityHistoryScreen> {
   }
 }
 
-/// Cycling "Sort:" pill mirroring the Legends/Maps sort control. Toggles between
-/// date grouping and the secondary-entity grouping.
+/// Cycling "Sort:" pill. Toggles between date grouping and the
+/// secondary-entity grouping.
 class _SortToggle extends StatelessWidget {
   final bool grouped;
   final String groupLabel;
@@ -132,35 +140,11 @@ class _SortToggle extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          const Text(
-            'Sort:',
-            style: TextStyle(color: AppTheme.muted, fontSize: 12),
-          ),
-          const SizedBox(width: 4),
-          GestureDetector(
+          ControlPill(
+            prefix: 'Sort:',
+            icon: icon,
+            label: label,
             onTap: onTap,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.surface2,
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 13, color: AppTheme.accent),
-                  const SizedBox(width: 4),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      color: AppTheme.accent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),

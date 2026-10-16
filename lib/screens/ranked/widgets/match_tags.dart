@@ -17,7 +17,7 @@ class _TagPill extends StatelessWidget {
     this.background,
     this.fontSize = 12,
     this.weight = FontWeight.bold,
-    this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    this.padding = const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: 2),
   });
 
   @override
@@ -70,7 +70,7 @@ class EditedChip extends StatelessWidget {
     background: AppTheme.accent.withAlpha(30),
     fontSize: 11,
     weight: FontWeight.w600,
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: 3),
   );
 }
 
@@ -101,7 +101,7 @@ class MatchModeChip extends StatelessWidget {
       background: color.withAlpha(30),
       fontSize: 11,
       weight: FontWeight.w600,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm, vertical: 3),
     );
   }
 }

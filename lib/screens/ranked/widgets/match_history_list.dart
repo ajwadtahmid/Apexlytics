@@ -5,7 +5,15 @@ import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/history_collapse_provider.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, timeAgo, formatDuration, plural, formatSigned;
+    show
+        formatDuration,
+        formatNumberOrNone,
+        formatShortDate,
+        formatSigned,
+        formatTotalOrNone,
+        kNoReading,
+        plural,
+        timeAgo;
 import '../../../utils/theme.dart';
 import '../../../widgets/rp_pill.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -64,6 +72,9 @@ class MatchHistoryList extends ConsumerStatefulWidget {
   /// reshaping the sessions.
   final List<RankedMatch>? sessionPool;
 
+  /// Whether to show break rows; false when the list can't see the whole history.
+  final bool showBreaks;
+
   const MatchHistoryList({
     super.key,
     required this.matches,
@@ -75,10 +86,20 @@ class MatchHistoryList extends ConsumerStatefulWidget {
     this.averagePool,
     this.collapseScope = 'history',
     this.sessionPool,
+    this.showBreaks = true,
   });
 
   @override
   ConsumerState<MatchHistoryList> createState() => _MatchHistoryListState();
+}
+
+/// Whether [after] is [before] with newer games added at the front, which is
+/// what a sync does (newest first), as opposed to a different set of matches.
+@visibleForTesting
+bool historyGrewAtFront(List<RankedMatch> before, List<RankedMatch> after) {
+  if (before.isEmpty || after.length < before.length) return false;
+  final added = after.length - before.length;
+  return after[added].id == before.first.id && after.last.id == before.last.id;
 }
 
 // Start auto-loading the next page once the user scrolls within this many
@@ -102,6 +123,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   List<RankedMatch>? _builtPool;
   int _builtLimit = -1;
   MatchGrouping? _builtGrouping;
+  bool _builtShowBreaks = true;
   List<_Section> _sections = const [];
   List<RankedMatch> _ordered = const [];
 
@@ -114,14 +136,13 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   @override
   void didUpdateWidget(MatchHistoryList old) {
     super.didUpdateWidget(old);
-    // A genuinely different match set (filter/sort change, not just an
-    // incidental rebuild from a periodic background refetch) starts back at
-    // page one rather than showing a stale scroll depth. Compared by length +
-    // newest key rather than list identity, since callers rebuild a fresh
-    // `List` on every build even when the underlying data is unchanged.
-    if (widget.matches.length != old.matches.length ||
+    // A different match set (filter or grouping change) starts back at page one.
+    // Newly synced games at the front, or an edit in place, keep the scroll depth.
+    final changed =
         _headKey(widget.matches) != _headKey(old.matches) ||
-        widget.grouping != old.grouping) {
+        widget.matches.length != old.matches.length;
+    if (widget.grouping != old.grouping ||
+        (changed && !historyGrewAtFront(old.matches, widget.matches))) {
       _pageLimit = kHistoryPageSize;
     }
   }
@@ -186,6 +207,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
     if (identical(_builtFrom, widget.matches) &&
         identical(_builtPool, widget.sessionPool) &&
         _builtLimit == _pageLimit &&
+        _builtShowBreaks == widget.showBreaks &&
         identical(_builtGrouping, g)) {
       return;
     }
@@ -194,6 +216,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
             widget.matches,
             limit: _pageLimit,
             sessionPool: widget.sessionPool,
+            includeBreaks: widget.showBreaks,
           )
         : buildGroupedItems(widget.matches, g);
     _sections = _sectionsOf(items);
@@ -209,6 +232,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
     _builtPool = widget.sessionPool;
     _builtLimit = _pageLimit;
     _builtGrouping = g;
+    _builtShowBreaks = widget.showBreaks;
   }
 
   @override
@@ -234,10 +258,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
                         child: Center(
                           child: Text(
                             widget.emptyLabel,
-                            style: const TextStyle(
-                              color: AppTheme.muted,
-                              fontSize: 13,
-                            ),
+                            style: AppTheme.captionLarge,
                           ),
                         ),
                       ),
@@ -389,7 +410,7 @@ class _DayChange extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm),
             child: Text(
-              '${_shortDayFmt.format(later)} ↑ · ${_shortDayFmt.format(earlier)} ↓',
+              '${formatShortDate(later)} ↑ · ${formatShortDate(earlier)} ↓',
               style: const TextStyle(color: AppTheme.muted, fontSize: 10),
             ),
           ),
@@ -468,10 +489,7 @@ class _SessionTitle extends StatelessWidget {
                     '${plural(item.games, 'game')}$played',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppTheme.muted,
-                      fontSize: 12,
-                    ),
+                    style: AppTheme.caption,
                   ),
                 ],
               ),
@@ -523,7 +541,7 @@ class _SessionStats extends StatelessWidget {
     if (collapsed) {
       if (!item.hasRanked) return const SizedBox(height: 4);
       return Padding(
-        padding: const EdgeInsets.only(left: _indent, bottom: 8),
+        padding: const EdgeInsets.only(left: _indent, bottom: AppTheme.sm),
         child: Text.rich(
           TextSpan(
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -552,11 +570,17 @@ class _SessionStats extends StatelessWidget {
             ),
           _stat(
             'Kills',
-            TextSpan(text: formatNumber(item.kills), style: _value),
+            TextSpan(
+              text: formatTotalOrNone(item.kills, item.killsGames),
+              style: _value,
+            ),
           ),
           _stat(
             'Damage',
-            TextSpan(text: formatNumber(item.damage), style: _value),
+            TextSpan(
+              text: formatTotalOrNone(item.damage, item.damageGames),
+              style: _value,
+            ),
           ),
         ],
       ),
@@ -571,7 +595,7 @@ class _SessionStats extends StatelessWidget {
         const SizedBox(height: 1),
         Text(
           label,
-          style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+          style: AppTheme.captionSmall,
         ),
       ],
     ),
@@ -586,7 +610,7 @@ class _GroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avg = item.games == 0 ? 0.0 : item.netRp / item.games;
+    final avg = item.avgRp;
     return Column(
       children: [
         if (!item.isFirst)
@@ -615,11 +639,11 @@ class _GroupHeader extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      '${plural(item.games, 'game')} · ${formatSigned(avg)} avg',
-                      style: const TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 12,
-                      ),
+                      avg == null
+                          ? plural(item.games, 'game')
+                          : '${plural(item.games, 'game')} · '
+                                '${formatSigned(avg)} avg',
+                      style: AppTheme.caption,
                     ),
                   ],
                 ),
@@ -731,10 +755,7 @@ class _MatchRow extends StatelessWidget {
                     ),
                     Text(
                       '${battleRoyaleMapName(match.mapKey)} · ${timeAgo(match.endTime)}',
-                      style: const TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 12,
-                      ),
+                      style: AppTheme.caption,
                     ),
                   ],
                 ),
@@ -758,12 +779,9 @@ class _MatchRow extends StatelessWidget {
                         Text(
                           // An em dash marks a stat upstream never reported,
                           // which is not the same as a scoreless game.
-                          '${match.kills ?? '—'} K · '
-                          '${match.damage == null ? '—' : formatNumber(match.damage!)} dmg',
-                          style: const TextStyle(
-                            color: AppTheme.muted,
-                            fontSize: 11,
-                          ),
+                          '${match.kills ?? kNoReading} K · '
+                          '${formatNumberOrNone(match.damage)} dmg',
+                          style: AppTheme.captionSmall,
                         ),
                       ],
                     ),

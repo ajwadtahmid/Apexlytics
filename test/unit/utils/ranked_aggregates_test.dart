@@ -2,7 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/constants/legend_constants.dart';
 import 'package:apexlytics/constants/map_constants.dart';
 import 'package:apexlytics/models/ranked_match.dart';
+import 'package:apexlytics/screens/ranked/widgets/match_history_items.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
+import '../../helpers.dart';
 
 void main() {
   const t0 = 1782090000; // arbitrary fixed epoch (seconds)
@@ -311,7 +313,6 @@ void main() {
     // Olympus (Axle's 3 games): +40, -20, +10 → 2W / 1L.
     expect(m.first.wins, 2);
     expect(m.first.losses, 1);
-    expect(m.first.winRate, closeTo(2 / 3, 0.001));
     // Storm Point (Bangalore's +60): 1W / 0L.
     expect(m.last.wins, 1);
     expect(m.last.losses, 0);
@@ -358,14 +359,21 @@ void main() {
     );
     expect(axleOlympus.games, 3);
     expect(axleOlympus.totalRp, 30); // +40 - 20 + 10
-    expect(axleOlympus.wins, 2);
-    expect(axleOlympus.losses, 1);
 
     final bangaloreStormPoint = cells.firstWhere(
       (c) => c.legend == 'Bangalore' && c.mapName == 'Storm Point',
     );
     expect(bangaloreStormPoint.games, 1);
     expect(bangaloreStormPoint.totalRp, 60);
+  });
+
+  test('legendMapBreakdowns counts a padded legend name as the legend', () {
+    final cells = legendMapBreakdowns([
+      buildMatch(legend: ' Axle '),
+      buildMatch(legend: 'Axle', start: 1782090000 + 1000),
+    ]);
+    expect(cells.single.legend, 'Axle');
+    expect(cells.single.games, 2);
   });
 
   test(
@@ -552,9 +560,7 @@ void main() {
       final r = personalRecords(ranked);
       expect(r.bestWinStreak, 2);
       expect(r.currentWinStreak, 2);
-      // The run that set the record started at C, and it's still ongoing.
-      expect(r.bestStreakStart, r.currentStreakStart);
-      expect(r.currentStreakStart, ranked[1].startTime); // C, 3rd oldest
+      expect(r.bestStreakStart, ranked[1].startTime); // C, 3rd oldest
     });
 
     test('a reset game (implausible RP) does not break a win streak', () {
@@ -616,26 +622,16 @@ void main() {
       ]);
       final r = personalRecords(withSmallLoss);
       expect(r.currentWinStreak, 0);
-      expect(r.currentStreakStart, isNull);
       expect(r.bestWinStreak, 1);
     });
 
     test('a match with no reported kills/damage never wins those records', () {
-      final noTrackers = RankedMatch.fromJson({
-        'uid': '1',
-        'name': 'Tester',
-        'legendPlayed': 'Wraith',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': t0 + 21600,
-        'gameEndTimestamp': t0 + 22200,
-        'gameData': <Map<String, Object?>>[],
-        'BRScoreChange': 5,
-        'BRScore': 1095,
-        'BRRankImg': 'https://x/diamond4.png',
-        'isPartyFull': false,
-        'map': 'olympus_rotation',
-      });
+      final noTrackers = buildMatch(
+        start: t0 + 21600,
+        legend: 'Wraith',
+        rp: 5,
+        cumulativeRp: 1095,
+      );
       expect(noTrackers.kills, isNull);
       expect(noTrackers.damage, isNull);
 
@@ -889,27 +885,13 @@ void main() {
         'toward zero', () {
       final matches = [
         for (var i = 0; i < kTrendRecentGames * 2; i++)
-          RankedMatch.fromJson({
-            'uid': '1',
-            'name': 'Tester',
-            'legendPlayed': 'Axle',
-            'gameMode': 'BATTLE_ROYALE',
-            'gameLengthSecs': 600,
-            'gameStartTimestamp': t0 + i * 10800,
-            'gameEndTimestamp': t0 + i * 10800 + 600,
+          buildMatch(
+            start: t0 + i * 10800,
             // Only the even-indexed games report kills/damage.
-            'gameData': i.isEven
-                ? [
-                    {'key': 'kills', 'value': 5, 'name': 'BR Kills'},
-                    {'key': 'damage', 'value': 500, 'name': 'BR Damage'},
-                  ]
-                : <Map<String, Object?>>[],
-            'BRScoreChange': 10,
-            'BRScore': 1000 + i * 10,
-            'BRRankImg': 'https://x/diamond4.png',
-            'isPartyFull': false,
-            'map': 'olympus_rotation',
-          }),
+            kills: i.isEven ? 5 : null,
+            damage: i.isEven ? 500 : null,
+            cumulativeRp: 1000 + i * 10,
+          ),
       ];
 
       final trends = entityTrends(matches);
@@ -958,5 +940,29 @@ void main() {
       expect(trends.kills, isNull);
       expect(trends.damage, isNull);
     });
+  });
+  test('History and Sessions draw the same session boundaries', () {
+    // Gaps of 30 min, exactly the limit, and one second over it.
+    const t = 1782090000;
+    final gapSecs = kSessionGap.inSeconds;
+    var start = t;
+    final games = <RankedMatch>[];
+    for (final gap in [0, 1800, gapSecs, gapSecs + 1, 60]) {
+      start += 600 + gap;
+      games.add(buildMatch(start: start));
+    }
+    final newestFirst = games.reversed.toList();
+
+    final sessions = sessionize(newestFirst);
+    final headers = buildSessionItems(
+      newestFirst,
+    ).whereType<SessionHeaderItem>().toList();
+
+    expect(sessions.length, 2);
+    expect(headers.length, sessions.length);
+    for (var i = 0; i < sessions.length; i++) {
+      expect(headers[i].games, sessions[i].games);
+      expect(headers[i].start, sessions[i].start);
+    }
   });
 }

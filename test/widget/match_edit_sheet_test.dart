@@ -9,6 +9,7 @@ import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_edit_sheet.dart';
 import 'package:apexlytics/utils/ranked/ranked_period.dart' show kUnknownSplitId;
 import 'package:apexlytics/utils/storage/ranked_history_store.dart';
+import '../helpers.dart';
 
 /// In-memory stand-in for [RankedHistoryStore]'s edit surface. The store's
 /// own SQL behaviour (upsert conflict rules, `editMatch`'s range checks,
@@ -60,23 +61,14 @@ void main() {
   const uid = '1';
 
   RankedMatch match({int rp = 20, Set<String> editedFields = const {}}) {
-    final base = RankedMatch.fromJson({
-      'uid': uid,
-      'name': 'Tester',
-      'legendPlayed': 'Axle',
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': 600,
-      'gameStartTimestamp': 0,
-      'gameEndTimestamp': 600,
-      'gameData': [
-        {'key': 'kills', 'value': 3, 'name': 'BR Kills'},
-        {'key': 'damage', 'value': 1000, 'name': 'BR Damage'},
-      ],
-      'BRScoreChange': rp,
-      'BRScore': 1000 + rp,
-      'map': 'olympus_rotation',
-      'isPartyFull': false,
-    });
+    final base = buildMatch(
+      uid: uid,
+      start: 0,
+      kills: 3,
+      damage: 1000,
+      rp: rp,
+      cumulativeRp: 1000 + rp,
+    );
     return editedFields.isEmpty
         ? base
         : RankedMatch.fromStoredMap({

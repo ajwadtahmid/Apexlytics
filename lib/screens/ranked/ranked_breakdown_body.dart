@@ -461,8 +461,14 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           rows: legends,
           matchesFor: legendMatches,
           onRefresh: _refresh,
+          sessionPool: view.history,
         ),
-        RankedMapBreakdown(rows: maps, matchesFor: mapMatches, onRefresh: _refresh),
+        RankedMapBreakdown(
+          rows: maps,
+          matchesFor: mapMatches,
+          onRefresh: _refresh,
+          sessionPool: view.history,
+        ),
         // History keeps everything (pubs included), not just the ranked matches.
         RankedMatchList(matches: view.history, onRefresh: _refresh),
       ],
@@ -472,9 +478,8 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
   Widget _lifetimeTabs(RankedLifetimeAggregates agg) {
     final store = ref.read(rankedHistoryStoreProvider);
     // Lifetime spans every split, and RP resets each split — so a lifetime
-    // net-RP figure would sum across those resets (the exact bug documented
-    // in WEEKLY_RP_FIX_REPORT.md). The rank header and RP graph are both
-    // built on that figure, so they're hidden here, same as the graph.
+    // net-RP figure would sum across those resets. The rank header and RP
+    // graph are both built on that figure, so they're hidden here.
     return _tabShell(
       'lifetime',
       const ['Overview', 'Legends', 'Maps'],
@@ -638,6 +643,8 @@ class _OverviewTab extends StatelessWidget {
             legendMatchesFor: legendMatchesFor,
             mapMatchesFor: mapMatchesFor,
             onRefresh: onRefresh,
+            // The split's full history, for sessions on the drill-down pages.
+            sessionPool: data.view.history,
           ),
           const SizedBox(height: AppTheme.md),
           IntrinsicHeight(
@@ -687,6 +694,7 @@ class _OverviewTab extends StatelessWidget {
                     uid: uid,
                     matches: matches,
                     splits: data.view.splits,
+                    live: data.rpScope.live,
                   ),
                 ),
                 const SizedBox(width: AppTheme.sm),

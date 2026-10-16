@@ -4,8 +4,7 @@ import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/rank_utils.dart'
     show rankAssetPathFromImageUrl;
-import '../../../utils/formatting/format.dart'
-    show formatDuration, formatNumber;
+import '../../../utils/formatting/format.dart' show formatDuration, formatNumber, formatNumberOrNone, formatSignedInt, kNoReading;
 import '../../../utils/ranked/legend_baseline.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -190,7 +189,7 @@ class _Header extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 _MatchDetailSheetState.formatTime(match.endTime),
-                style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                style: AppTheme.caption,
               ),
             ],
           ),
@@ -227,7 +226,7 @@ class _RpBlock extends StatelessWidget {
           children: [
             const Text(
               'Ranked Points',
-              style: TextStyle(color: AppTheme.muted, fontSize: 11),
+              style: AppTheme.captionSmall,
             ),
             Text(
               formatNumber(match.cumulativeRp),
@@ -241,7 +240,7 @@ class _RpBlock extends StatelessWidget {
         ),
         const Spacer(),
         Text(
-          '${up ? '+' : ''}${match.rpChange} RP',
+          '${formatSignedInt(match.rpChange)} RP',
           style: TextStyle(
             color: color,
             fontSize: 18,
@@ -292,14 +291,14 @@ class _StatsBlock extends StatelessWidget {
                 label: 'Kills',
                 // An em dash marks a stat upstream never reported, which is
                 // not the same as a scoreless game.
-                value: kills?.toString() ?? '—',
+                value: kills?.toString() ?? kNoReading,
                 footnote: killDelta?.$1,
                 footnoteColor: killDelta?.$2,
               ),
               StatDisplay(
                 centered: true,
                 label: 'Damage',
-                value: damage == null ? '—' : formatNumber(damage),
+                value: formatNumberOrNone(damage),
                 footnote: dmgDelta?.$1,
                 footnoteColor: dmgDelta?.$2,
               ),
@@ -318,7 +317,7 @@ class _StatsBlock extends StatelessWidget {
               'Compared with your ${match.legend} average '
               '(${match.isRanked ? 'ranked' : 'casual'}, '
               'excluded games left out)',
-              style: const TextStyle(color: AppTheme.muted, fontSize: 11),
+              style: AppTheme.captionSmall,
             ),
           ),
       ],
@@ -345,7 +344,7 @@ class _NoteRow extends StatelessWidget {
           Expanded(
             child: Text(
               note.text,
-              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              style: AppTheme.caption,
             ),
           ),
         ],
@@ -363,21 +362,21 @@ class _Trackers extends StatelessWidget {
     if (match.trackers.isEmpty) {
       return const Text(
         'No tracker data for this match',
-        style: TextStyle(color: AppTheme.muted, fontSize: 13),
+        style: AppTheme.captionLarge,
       );
     }
     return Column(
       children: [
         for (final t in match.trackers)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: AppTheme.sm),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                   child: Text(
                     t.name,
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+                    style: AppTheme.captionLarge,
                   ),
                 ),
                 const SizedBox(width: AppTheme.sm),

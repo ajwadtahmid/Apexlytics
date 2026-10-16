@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:apexlytics/constants/map_constants.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/utils/formatting/season_utils.dart';
@@ -27,23 +28,16 @@ void main() {
     int rp = 10,
     String mapKey = 'olympus_rotation',
     bool isPartyFull = false,
-  }) => RankedMatch.fromJson({
-    'uid': uid,
-    'name': 'Tester',
-    'legendPlayed': legend,
-    'gameMode': 'BATTLE_ROYALE',
-    'gameLengthSecs': 600,
-    'gameStartTimestamp': startSecs,
-    'gameEndTimestamp': startSecs + 600,
-    'gameData': [
-      {'key': 'kills', 'value': 3, 'name': 'BR Kills'},
-      {'key': 'damage', 'value': 1000, 'name': 'BR Damage'},
-    ],
-    'BRScoreChange': rp,
-    'BRScore': 1000,
-    'map': mapKey,
-    'isPartyFull': isPartyFull,
-  });
+  }) => buildMatch(
+    uid: uid,
+    start: startSecs,
+    legend: legend,
+    rp: rp,
+    map: mapKey,
+    kills: 3,
+    damage: 1000,
+    isPartyFull: isPartyFull,
+  );
 
   /// [m] as a row carrying only [columns], for inserting into the deliberately
   /// older schemas the migration tests build.
@@ -74,19 +68,7 @@ void main() {
   /// A match upstream served with an empty `gameData` — a real and fairly
   /// common shape, and the reason kills/damage have to be nullable.
   RankedMatch untracked(String uid, int startSecs, {int rp = 10}) =>
-      RankedMatch.fromJson({
-        'uid': uid,
-        'name': 'Tester',
-        'legendPlayed': 'Axle',
-        'gameMode': 'BATTLE_ROYALE',
-        'gameLengthSecs': 600,
-        'gameStartTimestamp': startSecs,
-        'gameEndTimestamp': startSecs + 600,
-        'gameData': const [],
-        'BRScoreChange': rp,
-        'BRScore': 1000,
-        'map': 'olympus_rotation',
-      });
+      buildMatch(uid: uid, start: startSecs, rp: rp);
 
   test('persists matches and returns them newest first', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
@@ -1064,25 +1046,32 @@ void main() {
 
       expect(await store.matchesForMap('1', 'unknown'), hasLength(3));
     });
+
+    test('the Unknown row\'s own key opens every match behind it, even when '
+        'that key is blank', () async {
+      // The drill-down is opened with the row's own key, which is the blank one.
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.importRows([
+        row(100, mapKey: ''),
+        row(200, mapKey: 'UNKNOWN'),
+        row(300, mapKey: 'olympus_rotation'),
+      ]);
+
+      final unknown = (await store.mapBreakdownsFor(
+        '1',
+      )).firstWhere((m) => isUnknownMapKey(m.mapKey));
+      expect(unknown.games, 2);
+      expect(await store.matchesForMap('1', unknown.mapKey), hasLength(2));
+    });
   });
 
   test('a later sync updates a match\'s length, like its other columns',
       () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);
-    RankedMatch withLength(int secs) => RankedMatch.fromJson({
-      'uid': '1',
-      'name': 'Tester',
-      'legendPlayed': 'Axle',
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': secs,
-      'gameStartTimestamp': 100,
-      'gameEndTimestamp': 100 + secs,
-      'gameData': const [],
-      'BRScoreChange': 10,
-      'BRScore': 1000,
-      'map': 'olympus_rotation',
-    });
+    RankedMatch withLength(int secs) =>
+        buildMatch(start: 100, length: secs);
 
     await store.upsertAll('1', [withLength(600)]);
     await store.upsertAll('1', [withLength(900)]);
@@ -1835,8 +1824,6 @@ void main() {
         final d = dartLegendMap[(s.legend, s.mapName)]!;
         expect(s.games, d.games);
         expect(s.totalRp, d.totalRp);
-        expect(s.wins, d.wins);
-        expect(s.losses, d.losses);
       }
     });
 
@@ -1848,6 +1835,18 @@ void main() {
         await store.summaryFor('1', seasonId: 'br_ranked_s1_s2'),
         summarize(s2),
       );
+    });
+
+    test('legendMapBreakdownsFor counts a padded legend name', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [
+        buildMatch(legend: ' Axle '),
+        buildMatch(legend: 'Axle', start: 1782090000 + 1000),
+      ]);
+      final cells = await store.legendMapBreakdownsFor('1');
+      expect(cells.single.legend, 'Axle');
+      expect(cells.single.games, 2);
     });
 
     test('empty scope returns the empty summary', () async {
@@ -2044,24 +2043,13 @@ void main() {
       int? kills,
       int? damage,
       int rp = 10,
-    }) => RankedMatch.fromJson({
-      'uid': uid,
-      'name': 'Tester',
-      'legendPlayed': 'Axle',
-      'gameMode': 'BATTLE_ROYALE',
-      'gameLengthSecs': 600,
-      'gameStartTimestamp': startSecs,
-      'gameEndTimestamp': startSecs + 600,
-      'gameData': [
-        if (kills != null) {'key': 'kills', 'value': kills, 'name': 'BR Kills'},
-        if (damage != null)
-          {'key': 'damage', 'value': damage, 'name': 'BR Damage'},
-      ],
-      'BRScoreChange': rp,
-      'BRScore': 1000,
-      'map': 'olympus_rotation',
-      'isPartyFull': false,
-    });
+    }) => buildMatch(
+      uid: uid,
+      start: startSecs,
+      kills: kills,
+      damage: damage,
+      rp: rp,
+    );
 
     test('reports no best game when no row ever carried the tracker', () async {
       final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);

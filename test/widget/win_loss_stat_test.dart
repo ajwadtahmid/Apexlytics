@@ -24,4 +24,16 @@ void main() {
 
     expect(find.textContaining('—', findRichText: true), findsOneWidget);
   });
+
+  testWidgets('the label and rate are centred', (tester) async {
+    await pump(tester, 3, 1);
+
+    final column = tester.widget<Column>(
+      find.descendant(
+        of: find.byType(WinLossStat),
+        matching: find.byType(Column),
+      ),
+    );
+    expect(column.crossAxisAlignment, CrossAxisAlignment.center);
+  });
 }

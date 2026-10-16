@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../constants/legend_constants.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/theme.dart';
@@ -60,13 +61,24 @@ class HistoryFilter {
       case HistoryResult.losses:
         if (m.effectiveRpChange >= 0) return false;
     }
-    if (legends.isNotEmpty && !legends.contains(m.legend)) return false;
-    if (mapKeys.isNotEmpty && !mapKeys.contains(m.mapKey)) return false;
+    if (legends.isNotEmpty && !selectsLegend(m.legend)) return false;
+    if (mapKeys.isNotEmpty && !selectsMap(m.mapKey)) return false;
     return true;
   }
 
-  List<RankedMatch> apply(List<RankedMatch> all) =>
-      all.where(matches).toList();
+  /// Whether [legend] is chosen, compared by canonical name.
+  bool selectsLegend(String legend) {
+    final c = canonicalLegendName(legend);
+    return legends.any((l) => canonicalLegendName(l) == c);
+  }
+
+  /// Whether [mapKey] is chosen, compared by canonical key.
+  bool selectsMap(String mapKey) {
+    final c = canonicalMapKey(mapKey);
+    return mapKeys.any((k) => canonicalMapKey(k) == c);
+  }
+
+  List<RankedMatch> apply(List<RankedMatch> all) => all.where(matches).toList();
 }
 
 /// Bottom sheet for editing a [HistoryFilter]. Changes apply live through
@@ -77,14 +89,22 @@ Future<void> showHistoryFilterSheet(
   required List<RankedMatch> pool,
   required ValueChanged<HistoryFilter> onChanged,
 }) {
-  final legends = {for (final m in pool) m.legend}.toList()..sort();
-  final maps = {for (final m in pool) m.mapKey}.toList()
-    ..sort(
-      (a, b) => battleRoyaleMapName(a).compareTo(battleRoyaleMapName(b)),
-    );
+  // One chip per canonical legend and map.
+  final legends = {for (final m in pool) canonicalLegendName(m.legend)}.toList()
+    ..sort();
+  final mapByCanonical = <String, String>{};
+  for (final m in pool) {
+    mapByCanonical.putIfAbsent(canonicalMapKey(m.mapKey), () => m.mapKey);
+  }
+  final maps = mapByCanonical.values.toList()
+    ..sort((a, b) => battleRoyaleMapName(a).compareTo(battleRoyaleMapName(b)));
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    // Leaves the top of the screen showing, so it reads as a sheet.
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+    ),
     builder: (_) => _FilterSheet(
       initial: filter,
       legends: legends,
@@ -118,89 +138,130 @@ class _FilterSheetState extends State<_FilterSheet> {
     widget.onChanged(f);
   }
 
-  Set<String> _toggled(Set<String> set, String value) =>
-      set.contains(value) ? ({...set}..remove(value)) : {...set, value};
+  /// Toggles [value] in [set], comparing by [canonical].
+  Set<String> _toggled(
+    Set<String> set,
+    String value,
+    String Function(String) canonical,
+  ) {
+    final c = canonical(value);
+    return set.any((k) => canonical(k) == c)
+        ? {
+            for (final k in set)
+              if (canonical(k) != c) k,
+          }
+        : {...set, c};
+  }
 
   @override
   Widget build(BuildContext context) {
+    // The button stays visible while the chips scroll.
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppTheme.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Filter',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(
+                AppTheme.lg,
+                AppTheme.lg,
+                AppTheme.lg,
+                0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Filter',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: _filter.activeCount == 0
+                            ? null
+                            : () => _set(const HistoryFilter()),
+                        child: const Text('Reset'),
+                      ),
+                    ],
                   ),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: _filter.activeCount == 0
-                      ? null
-                      : () => _set(const HistoryFilter()),
-                  child: const Text('Reset'),
-                ),
-              ],
-            ),
-            const _Label('Mode'),
-            _Chips<HistoryMode>(
-              values: HistoryMode.values,
-              label: (v) => switch (v) {
-                HistoryMode.all => 'All',
-                HistoryMode.ranked => 'Ranked',
-                HistoryMode.casual => 'Casual',
-              },
-              selected: (v) => _filter.mode == v,
-              onTap: (v) => _set(_filter.copyWith(mode: v)),
-            ),
-            const _Label('Result (ranked games)'),
-            _Chips<HistoryResult>(
-              values: HistoryResult.values,
-              label: (v) => switch (v) {
-                HistoryResult.any => 'Any',
-                HistoryResult.wins => 'Wins',
-                HistoryResult.losses => 'Losses',
-              },
-              selected: (v) => _filter.result == v,
-              onTap: (v) => _set(_filter.copyWith(result: v)),
-            ),
-            if (widget.mapKeys.isNotEmpty) ...[
-              const _Label('Map'),
-              _Chips<String>(
-                values: widget.mapKeys,
-                label: battleRoyaleMapName,
-                selected: _filter.mapKeys.contains,
-                onTap: (v) =>
-                    _set(_filter.copyWith(mapKeys: _toggled(_filter.mapKeys, v))),
+                  const _Label('Mode'),
+                  _Chips<HistoryMode>(
+                    values: HistoryMode.values,
+                    label: (v) => switch (v) {
+                      HistoryMode.all => 'All',
+                      HistoryMode.ranked => 'Ranked',
+                      HistoryMode.casual => 'Casual',
+                    },
+                    selected: (v) => _filter.mode == v,
+                    onTap: (v) => _set(_filter.copyWith(mode: v)),
+                  ),
+                  const _Label('Result (ranked games)'),
+                  _Chips<HistoryResult>(
+                    values: HistoryResult.values,
+                    label: (v) => switch (v) {
+                      HistoryResult.any => 'Any',
+                      HistoryResult.wins => 'Wins',
+                      HistoryResult.losses => 'Losses',
+                    },
+                    selected: (v) => _filter.result == v,
+                    onTap: (v) => _set(_filter.copyWith(result: v)),
+                  ),
+                  if (widget.mapKeys.isNotEmpty) ...[
+                    const _Label('Map'),
+                    _Chips<String>(
+                      values: widget.mapKeys,
+                      label: battleRoyaleMapName,
+                      selected: _filter.selectsMap,
+                      onTap: (v) => _set(
+                        _filter.copyWith(
+                          mapKeys: _toggled(
+                            _filter.mapKeys,
+                            v,
+                            canonicalMapKey,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (widget.legends.isNotEmpty) ...[
+                    const _Label('Legend'),
+                    _Chips<String>(
+                      values: widget.legends,
+                      label: (v) => v,
+                      selected: _filter.selectsLegend,
+                      onTap: (v) => _set(
+                        _filter.copyWith(
+                          legends: _toggled(
+                            _filter.legends,
+                            v,
+                            canonicalLegendName,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ],
-            if (widget.legends.isNotEmpty) ...[
-              const _Label('Legend'),
-              _Chips<String>(
-                values: widget.legends,
-                label: (v) => v,
-                selected: _filter.legends.contains,
-                onTap: (v) =>
-                    _set(_filter.copyWith(legends: _toggled(_filter.legends, v))),
-              ),
-            ],
-            const SizedBox(height: AppTheme.md),
-            SizedBox(
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppTheme.lg),
+            child: SizedBox(
               width: double.infinity,
               child: FilledButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Done'),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

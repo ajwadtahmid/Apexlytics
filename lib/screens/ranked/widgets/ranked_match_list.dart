@@ -4,6 +4,7 @@ import '../../../utils/theme.dart';
 import 'history_filter.dart';
 import 'match_history_items.dart';
 import 'match_history_list.dart';
+import '../../../widgets/control_pill.dart';
 
 /// History tab: every match in the selected period (ranked + casual), grouped by
 /// play session with day dividers. A mode filter scopes the list; tap a row for the
@@ -114,7 +115,7 @@ class _HistoryControls extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _ControlPill(
+          ControlPill(
             icon: Icons.tune,
             label: filter.activeCount == 0
                 ? 'Filter'
@@ -122,7 +123,7 @@ class _HistoryControls extends StatelessWidget {
             onTap: onFilterTap,
           ),
           const Spacer(),
-          _ControlPill(
+          ControlPill(
             prefix: 'Sort:',
             icon: _sortIcons[sort]!,
             label: _sortLabels[sort]!,
@@ -130,62 +131,6 @@ class _HistoryControls extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// A labelled, cycling pill: `prefix [icon value]`.
-class _ControlPill extends StatelessWidget {
-  final String? prefix;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _ControlPill({
-    this.prefix,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (prefix != null) ...[
-          Text(
-            prefix!,
-            style: const TextStyle(color: AppTheme.muted, fontSize: 12),
-          ),
-          const SizedBox(width: 4),
-        ],
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.surface2,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 13, color: AppTheme.accent),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: AppTheme.accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

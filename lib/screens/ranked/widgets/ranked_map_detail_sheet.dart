@@ -26,13 +26,18 @@ Future<void> showMapDetailSheet(
   BuildContext context,
   MapBreakdown map,
   Future<List<RankedMatch>> Function(String mapKey) matchesFor,
-  Future<void> Function() onRefresh,
-) {
+  Future<void> Function() onRefresh, {
+  List<RankedMatch>? sessionPool,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (_) =>
-        _MapDetailSheet(map: map, matchesFor: matchesFor, onRefresh: onRefresh),
+    builder: (_) => _MapDetailSheet(
+      map: map,
+      matchesFor: matchesFor,
+      onRefresh: onRefresh,
+      sessionPool: sessionPool,
+    ),
   );
 }
 
@@ -44,10 +49,14 @@ class _MapDetailSheet extends StatefulWidget {
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
 
+  /// The scope's full history, for the history page's sessions.
+  final List<RankedMatch>? sessionPool;
+
   const _MapDetailSheet({
     required this.map,
     required this.matchesFor,
     required this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -79,6 +88,7 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
           onRefresh: onRefresh,
           groupLabel: 'legend',
           grouping: MatchGrouping.byLegend,
+          sessionPool: widget.sessionPool,
         ),
       ),
     );
@@ -107,12 +117,15 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
                   ),
                 ),
                 const SizedBox(width: AppTheme.sm),
-                Text(
-                  map.displayName,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Text(
+                    map.displayName,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -126,7 +139,6 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
                       WinLossStat(
                         wins: map.wins,
                         losses: map.losses,
-                        centered: true,
                       ),
                       StatDisplay(
                         label: 'Games',

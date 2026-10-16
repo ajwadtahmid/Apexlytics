@@ -7,21 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers.dart';
 
 void main() {
-  RankedMatch game(int i) => RankedMatch.fromJson({
-    'uid': '1',
-    'name': 'Tester',
-    'legendPlayed': 'Axle',
-    'gameMode': 'BATTLE_ROYALE',
-    'gameLengthSecs': 600,
-    'gameStartTimestamp': 1000000 + i * 1000,
-    'gameEndTimestamp': 1000600 + i * 1000,
-    'gameData': const [],
-    'BRScoreChange': 10,
-    'BRScore': 1000,
-    'map': 'olympus_rotation',
-  });
+  RankedMatch game(int i) => buildMatch(start: 1000000 + i * 1000);
 
   final matches = [for (var i = 0; i < 12; i++) game(i)];
 
