@@ -283,4 +283,138 @@ void main() {
       expect(asked, ['Alter']);
     });
   });
+
+  group('the table', () {
+    // Alter 8 games at -5, Bangalore 4 at +20, Wraith 4 at -3.
+    Future<void> openTable(
+      WidgetTester tester, {
+      Future<List<RankedMatch>> Function(String legend)? matchesFor,
+    }) async {
+      await pump(tester, matches, matchesFor: matchesFor);
+      await tester.tap(find.byTooltip('Show table'));
+      await tester.pump();
+    }
+
+    List<String> rowOrder(WidgetTester tester) {
+      final names = ['Alter', 'Bangalore', 'Wraith'];
+      final found = [
+        for (final n in names) (n, tester.getTopLeft(find.text(n).first).dy),
+      ]..sort((a, b) => a.$2.compareTo(b.$2));
+      return [for (final f in found) f.$1];
+    }
+
+    testWidgets('lists every legend with its figures, most played first', (
+      tester,
+    ) async {
+      await openTable(tester);
+
+      expect(rowOrder(tester), ['Alter', 'Bangalore', 'Wraith']);
+      for (final h in [
+        'LEGEND',
+        'PICK',
+        'WIN',
+        'RP/G',
+        'NET',
+        'KILLS',
+        'DMG',
+      ]) {
+        expect(find.text(h), findsOneWidget);
+      }
+      expect(find.text('8 games'), findsOneWidget);
+      expect(find.text('+20.0'), findsOneWidget);
+      expect(find.text('+80'), findsOneWidget);
+      expect(find.text('-40'), findsOneWidget);
+    });
+
+    testWidgets('a heading sorts by it, and again turns it round', (
+      tester,
+    ) async {
+      await openTable(tester);
+
+      await tester.tap(find.text('RP/G'));
+      await tester.pump();
+      expect(rowOrder(tester), ['Bangalore', 'Wraith', 'Alter']);
+      expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+
+      await tester.tap(find.text('RP/G'));
+      await tester.pump();
+      expect(rowOrder(tester), ['Alter', 'Wraith', 'Bangalore']);
+      expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+    });
+
+    testWidgets('no two headings overlap, whichever one is sorted', (
+      tester,
+    ) async {
+      await openTable(tester);
+      tester.view.physicalSize = const Size(360, 800);
+      await tester.pump();
+      const headings = ['LEGEND', 'PICK', 'WIN', 'RP/G', 'NET', 'KILLS', 'DMG'];
+
+      for (final sorted in headings) {
+        await tester.tap(find.text(sorted));
+        await tester.pump();
+        final rects = [for (final h in headings) tester.getRect(find.text(h))];
+        // The sort arrow is part of its heading.
+        final at = headings.indexOf(sorted);
+        rects[at] = rects[at].expandToInclude(
+          tester.getRect(
+            find.descendant(
+              of: find.ancestor(
+                of: find.text(sorted),
+                matching: find.byType(InkWell),
+              ),
+              matching: find.byType(Icon),
+            ),
+          ),
+        );
+        for (var i = 0; i < rects.length - 1; i++) {
+          expect(
+            rects[i + 1].left - rects[i].right,
+            greaterThanOrEqualTo(2),
+            reason:
+                '${headings[i]} runs into ${headings[i + 1]} '
+                'when sorted by $sorted',
+          );
+        }
+      }
+    });
+
+    testWidgets('the legend heading sorts A to Z first', (tester) async {
+      await openTable(tester);
+
+      await tester.tap(find.text('PICK'));
+      await tester.pump();
+      await tester.tap(find.text('LEGEND'));
+      await tester.pump();
+
+      expect(rowOrder(tester), ['Alter', 'Bangalore', 'Wraith']);
+      expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
+    });
+
+    testWidgets('tapping a row shows that legend\'s card below', (
+      tester,
+    ) async {
+      await openTable(tester);
+      expect(find.text('Best'), findsNothing);
+      expect(find.text('Pick rate'), findsNothing);
+
+      await tester.tap(find.text('Bangalore'));
+      await tester.pump();
+
+      expect(find.text('Pick rate'), findsOneWidget);
+      expect(find.text('25.0%'), findsWidgets);
+    });
+
+    testWidgets('the selection is the one the chart shows', (tester) async {
+      await openTable(tester);
+      await tester.tap(find.text('Bangalore'));
+      await tester.pump();
+
+      await tester.tap(find.byTooltip('Show chart'));
+      await tester.pump();
+
+      expect(find.text('Pick rate'), findsOneWidget);
+      expect(find.text('Tap a legend to see details'), findsNothing);
+    });
+  });
 }

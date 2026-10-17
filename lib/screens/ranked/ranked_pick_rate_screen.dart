@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../models/ranked_match.dart';
 import '../../utils/ranked/label_placement.dart';
+import '../../utils/ranked/legend_table_sort.dart';
 import '../../utils/ranked/pick_rate_quadrants.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
@@ -11,7 +12,13 @@ import '../../widgets/legend_asset_image.dart';
 import '../../widgets/stat_display.dart';
 import '../../widgets/surface_card.dart';
 import '../../utils/formatting/format.dart'
-    show plural, formatSigned, formatPercent, formatAvgKills, formatAvgDamage;
+    show
+        plural,
+        formatSigned,
+        formatSignedInt,
+        formatPercent,
+        formatAvgKills,
+        formatAvgDamage;
 import '../../widgets/nav_entry_card.dart';
 import 'widgets/ranked_legend_detail_sheet.dart' show openLegendHistory;
 
@@ -158,7 +165,7 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
                 onShowAll: () => setState(() => _showAll = true),
               )
             : _tableView
-            ? _LegendStatsTable(pool: pool, totalGames: total)
+            ? _buildTable(pool, total)
             : _buildBody(pool, total),
       ),
     );
@@ -194,6 +201,46 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
       ),
     );
   }
+
+  Widget _buildTable(List<LegendBreakdown> pool, int total) {
+    final selected = _selected;
+    return Column(
+      children: [
+        Expanded(
+          child: _LegendStatsTable(
+            pool: pool,
+            totalGames: total,
+            selected: selected?.legend,
+            onSelect: _select,
+          ),
+        ),
+        if (selected != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.md,
+              0,
+              AppTheme.md,
+              AppTheme.md,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+              ),
+              child: SingleChildScrollView(
+                child: _detail(selected.games / total),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _detail(double? pickRate) => _SelectedDetail(
+    legend: _selected,
+    pickRate: pickRate,
+    maps: _selected == null ? null : _mapCells[_selected!.legend],
+    onOpen: widget.matchesFor == null ? null : _openHistory,
+  );
 
   Widget _buildBody(List<LegendBreakdown> pool, int total) {
     final pickRateOf = {for (final l in pool) l.legend: l.games / total};
@@ -367,12 +414,7 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
           const SizedBox(height: AppTheme.md),
           const _QuadrantKey(),
           const SizedBox(height: AppTheme.md),
-          _SelectedDetail(
-            legend: _selected,
-            pickRate: _selected == null ? null : pickRateOf[_selected!.legend],
-            maps: _selected == null ? null : _mapCells[_selected!.legend],
-            onOpen: widget.matchesFor == null ? null : _openHistory,
-          ),
+          _detail(_selected == null ? null : pickRateOf[_selected!.legend]),
         ],
       ),
     );
@@ -954,81 +996,163 @@ class _MapLines extends StatelessWidget {
   }
 }
 
-/// Table alternative to the scatter chart: one row per legend, sorted by pick
-/// rate descending, showing pick rate, win rate, and avg RP gain/loss side by
-/// side — for a precise read of the same pool the chart plots.
-class _LegendStatsTable extends StatelessWidget {
+/// Relative widths of the table's columns, in order of [LegendSort.values].
+const _tableFlex = [12, 8, 6, 6, 7, 6, 6];
+
+/// Table alternative to the scatter chart: one row per legend with its pick
+/// share, win rate, RP and kills/damage side by side, for a precise read of the
+/// same pool the chart plots. A header sorts by its column; a row selects its
+/// legend, the same as tapping its dot.
+class _LegendStatsTable extends StatefulWidget {
   final List<LegendBreakdown> pool;
   final int totalGames;
+  final String? selected;
+  final ValueChanged<LegendBreakdown> onSelect;
 
-  const _LegendStatsTable({required this.pool, required this.totalGames});
+  const _LegendStatsTable({
+    required this.pool,
+    required this.totalGames,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  State<_LegendStatsTable> createState() => _LegendStatsTableState();
+}
+
+class _LegendStatsTableState extends State<_LegendStatsTable> {
+  LegendSort _sort = LegendSort.pick;
+  bool _descending = true;
+
+  void _sortBy(LegendSort sort) => setState(() {
+    if (sort == _sort) {
+      _descending = !_descending;
+    } else {
+      _sort = sort;
+      _descending = sort.startsDescending;
+    }
+  });
 
   @override
   Widget build(BuildContext context) {
-    final sorted = [...pool]..sort((a, b) => b.games.compareTo(a.games));
+    final sorted = sortLegends(widget.pool, _sort, descending: _descending);
+    final mostGames = widget.pool.fold(0, (m, l) => l.games > m ? l.games : m);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppTheme.md),
-      child: SurfaceCard(
-        padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+    // A dense table: past this, the numbers would shrink unevenly to fit.
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.2,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppTheme.sm),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppTheme.sm),
-              child: Row(
+            SurfaceCard(
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm),
+              child: Column(
                 children: [
-                  Expanded(flex: 2, child: SizedBox()),
-                  Expanded(
-                    child: Text(
-                      'GAMES',
-                      textAlign: TextAlign.end,
-                      style: TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  Row(
+                    children: [
+                      for (final sort in LegendSort.values)
+                        Expanded(
+                          flex: _tableFlex[sort.index],
+                          child: _HeaderCell(
+                            sort: sort,
+                            active: sort == _sort,
+                            descending: _descending,
+                            onTap: () => _sortBy(sort),
+                          ),
+                        ),
+                    ],
                   ),
-                  Expanded(
-                    child: Text(
-                      'PICK',
-                      textAlign: TextAlign.end,
-                      style: TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  const Divider(color: AppTheme.surface2, height: 1),
+                  for (final l in sorted)
+                    _LegendStatsRow(
+                      legend: l,
+                      pickRate: widget.totalGames == 0
+                          ? 0.0
+                          : l.games / widget.totalGames,
+                      shareOfMost: mostGames == 0 ? 0.0 : l.games / mostGames,
+                      selected: l.legend == widget.selected,
+                      onTap: () => widget.onSelect(l),
                     ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'WIN',
-                      textAlign: TextAlign.end,
-                      style: TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      'RP/GAME',
-                      textAlign: TextAlign.end,
-                      style: TextStyle(
-                        color: AppTheme.muted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
-            const Divider(color: AppTheme.surface2, height: 1),
-            for (final l in sorted)
-              _LegendStatsRow(legend: l, totalGames: totalGames),
+            const SizedBox(height: AppTheme.sm),
+            const Text(
+              'Tap a heading to sort. RP/G is RP per game and Net is total RP; '
+              'kills and damage are per-game averages.',
+              style: AppTheme.captionSmall,
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+extension on LegendSort {
+  String get heading => switch (this) {
+    LegendSort.legend => 'LEGEND',
+    LegendSort.pick => 'PICK',
+    LegendSort.win => 'WIN',
+    LegendSort.rpPerGame => 'RP/G',
+    LegendSort.netRp => 'NET',
+    LegendSort.kills => 'KILLS',
+    LegendSort.damage => 'DMG',
+  };
+}
+
+class _HeaderCell extends StatelessWidget {
+  final LegendSort sort;
+  final bool active;
+  final bool descending;
+  final VoidCallback onTap;
+  const _HeaderCell({
+    required this.sort,
+    required this.active,
+    required this.descending,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppTheme.accent : AppTheme.muted;
+    final start = sort == LegendSort.legend;
+    return Semantics(
+      button: true,
+      label: 'Sort by ${sort.heading.toLowerCase()}',
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.only(
+            top: AppTheme.sm,
+            bottom: AppTheme.sm,
+            left: AppTheme.xs,
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: start ? Alignment.centerLeft : Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (active)
+                  Icon(
+                    descending ? Icons.arrow_downward : Icons.arrow_upward,
+                    size: 10,
+                    color: color,
+                  ),
+                Text(
+                  sort.heading,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1037,63 +1161,127 @@ class _LegendStatsTable extends StatelessWidget {
 
 class _LegendStatsRow extends StatelessWidget {
   final LegendBreakdown legend;
-  final int totalGames;
+  final double pickRate;
 
-  const _LegendStatsRow({required this.legend, required this.totalGames});
+  /// This legend's games as a share of the most played legend's, for the bar.
+  final double shareOfMost;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LegendStatsRow({
+    required this.legend,
+    required this.pickRate,
+    required this.shareOfMost,
+    required this.selected,
+    required this.onTap,
+  });
+
+  static const _value = TextStyle(color: AppTheme.textPrimary, fontSize: 12);
+
+  Widget _number(
+    LegendSort sort,
+    String text, {
+    Color? color,
+    bool bold = false,
+  }) {
+    return Expanded(
+      flex: _tableFlex[sort.index],
+      child: Padding(
+        padding: const EdgeInsets.only(left: AppTheme.xs),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: Text(
+            text,
+            style: _value.copyWith(
+              color: color,
+              fontWeight: bold ? FontWeight.w600 : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pickRate = totalGames == 0 ? 0.0 : legend.games / totalGames;
-    final positive = legend.avgRpPerGame >= 0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              legend.legend,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+    return Material(
+      color: selected ? AppTheme.accent.withAlpha(25) : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
+          child: Row(
+            children: [
+              Expanded(
+                flex: _tableFlex[LegendSort.legend.index],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      legend.legend,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      plural(legend.games, 'game'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.captionSmall,
+                    ),
+                  ],
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              '${legend.games}',
-              textAlign: TextAlign.end,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              formatPercent(pickRate),
-              textAlign: TextAlign.end,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              formatPercent(legend.winRate),
-              textAlign: TextAlign.end,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              formatSigned(legend.avgRpPerGame),
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                color: AppTheme.signColor(positive),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+              Expanded(
+                flex: _tableFlex[LegendSort.pick.index],
+                child: Padding(
+                  padding: const EdgeInsets.only(left: AppTheme.xs),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(formatPercent(pickRate), style: _value),
+                      ),
+                      const SizedBox(height: 3),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: shareOfMost,
+                          minHeight: 3,
+                          color: AppTheme.accent,
+                          backgroundColor: AppTheme.surface2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+              _number(
+                LegendSort.win,
+                formatPercent(legend.winRate, decimals: 0),
+              ),
+              _number(
+                LegendSort.rpPerGame,
+                formatSigned(legend.avgRpPerGame),
+                color: AppTheme.signColor(legend.avgRpPerGame >= 0),
+                bold: true,
+              ),
+              _number(
+                LegendSort.netRp,
+                formatSignedInt(legend.totalRp),
+                color: AppTheme.signColor(legend.totalRp >= 0),
+              ),
+              _number(LegendSort.kills, formatAvgKills(legend.avgKills)),
+              _number(LegendSort.damage, formatAvgDamage(legend.avgDamage)),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
