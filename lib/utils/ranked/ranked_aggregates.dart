@@ -477,23 +477,25 @@ List<MapLegendInsight> mapLegendInsights(List<LegendMapCell> cells) {
   for (final c in cells) {
     byMap.putIfAbsent(c.mapName, () => []).add(c);
   }
-  final insights = [
-    for (final e in byMap.entries)
-      MapLegendInsight(
-        mapName: e.key,
-        games: e.value.fold(0, (a, c) => a + c.games),
-        totalRp: e.value.fold(0, (a, c) => a + c.totalRp),
-        best: (e.value.where((c) => c.games >= kMinGamesForInsight).toList()
-              ..sort((a, b) {
-                final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
-                return byRp != 0 ? byRp : b.games.compareTo(a.games);
-              }))
-            .firstOrNull,
-      ),
-  ]..sort((a, b) {
-      final g = b.games.compareTo(a.games);
-      return g != 0 ? g : a.mapName.compareTo(b.mapName);
-    });
+  final insights =
+      [
+        for (final e in byMap.entries)
+          MapLegendInsight(
+            mapName: e.key,
+            games: e.value.fold(0, (a, c) => a + c.games),
+            totalRp: e.value.fold(0, (a, c) => a + c.totalRp),
+            best:
+                (e.value.where((c) => c.games >= kMinGamesForInsight).toList()
+                      ..sort((a, b) {
+                        final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
+                        return byRp != 0 ? byRp : b.games.compareTo(a.games);
+                      }))
+                    .firstOrNull,
+          ),
+      ]..sort((a, b) {
+        final g = b.games.compareTo(a.games);
+        return g != 0 ? g : a.mapName.compareTo(b.mapName);
+      });
   return insights;
 }
 
@@ -867,6 +869,9 @@ class PersonalRecords {
   final int bestWinStreak;
   final DateTime? bestStreakStart;
 
+  /// The games of the best streak, oldest first: [bestWinStreak] of them.
+  final List<RankedMatch> bestStreakMatches;
+
   const PersonalRecords({
     this.bestRpGame,
     this.bestKillsGame,
@@ -874,6 +879,7 @@ class PersonalRecords {
     required this.currentWinStreak,
     required this.bestWinStreak,
     this.bestStreakStart,
+    this.bestStreakMatches = const [],
   });
 }
 
@@ -919,18 +925,23 @@ PersonalRecords personalRecords(List<RankedMatch> all) {
     ..sort((a, b) => a.startTime.compareTo(b.startTime));
   var current = 0, best = 0;
   DateTime? runStart, bestStart;
+  var run = <RankedMatch>[];
+  var bestRun = <RankedMatch>[];
   for (final m in chrono) {
     final rp = m.effectiveRpChange;
     if (rp > 0) {
       runStart ??= m.startTime;
+      run.add(m);
       current += 1;
       if (current > best) {
         best = current;
         bestStart = runStart;
+        bestRun = List.of(run);
       }
     } else if (rp < 0) {
       current = 0;
       runStart = null;
+      run = [];
     }
   }
 
@@ -941,6 +952,7 @@ PersonalRecords personalRecords(List<RankedMatch> all) {
     currentWinStreak: current,
     bestWinStreak: best,
     bestStreakStart: bestStart,
+    bestStreakMatches: bestRun,
   );
 }
 

@@ -2,35 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../constants/map_constants.dart';
+import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
 import '../../providers/ranked_provider.dart';
 import '../../utils/formatting/format.dart'
-    show formatNumber, formatShortDateTime, formatSignedInt;
+    show
+        formatDuration,
+        formatNumber,
+        formatNumberOrNone,
+        formatSessionSpan,
+        formatShortDateTime,
+        formatSigned,
+        formatSignedInt,
+        plural;
 import '../../utils/ranked/ranked_aggregates.dart';
-import '../../utils/ranked/ranked_period.dart' show RankedSplitBucket;
 import '../../utils/theme.dart';
 import '../../widgets/surface_card.dart';
-import 'ranked_compare_tab.dart';
 import '../../widgets/nav_entry_card.dart';
+import '../../widgets/share_card.dart';
+import 'widgets/ranked_share_cards.dart';
 
-
-/// Entry point for the Records & Compare screen: standout single-game and
-/// win-streak stats. Hides itself when there are no ranked matches to draw
-/// records from. Session-over-session trends live on Performance Trends
-/// instead (see RankedTimeBreakdownScreen) — this page is about peaks, not
-/// ongoing patterns.
+/// Entry point for the Records & Share screen: standout single-game and
+/// win-streak stats, and the cards that can be shared. Hides itself when there
+/// are no ranked matches to draw records from. Session-over-session trends live
+/// on Performance Trends instead (see RankedTimeBreakdownScreen); this page is
+/// about peaks, not ongoing patterns.
 class RankedPersonalRecordsEntry extends StatelessWidget {
-  final String uid;
+  final PlayerStats stats;
   final List<RankedMatch> matches;
-  final List<RankedSplitBucket> splits;
+  final List<RankedSession> sessions;
 
   /// False for a past week or split, whose last streak ended then.
   final bool live;
   const RankedPersonalRecordsEntry({
     super.key,
-    required this.uid,
+    required this.stats,
     required this.matches,
-    required this.splits,
+    required this.sessions,
     this.live = true,
   });
 
@@ -40,42 +48,43 @@ class RankedPersonalRecordsEntry extends StatelessWidget {
 
     return NavEntryCard(
       icon: Icons.emoji_events_outlined,
-      title: 'Records & Compare',
+      title: 'Records & Share',
       onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => RankedPersonalRecordsScreen(
-              uid: uid,
-              matches: matches,
-              splits: splits,
-              live: live,
-            ),
+        MaterialPageRoute(
+          builder: (_) => RankedPersonalRecordsScreen(
+            stats: stats,
+            matches: matches,
+            sessions: sessions,
+            live: live,
           ),
         ),
+      ),
     );
   }
 }
 
 class RankedPersonalRecordsScreen extends StatelessWidget {
-  final String uid;
+  final PlayerStats stats;
   final List<RankedMatch> matches;
-  final List<RankedSplitBucket> splits;
+  final List<RankedSession> sessions;
 
   /// See [RankedPersonalRecordsEntry.live].
   final bool live;
   const RankedPersonalRecordsScreen({
     super.key,
-    required this.uid,
+    required this.stats,
     required this.matches,
-    required this.splits,
+    required this.sessions,
     this.live = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final records = personalRecords(matches);
+    final summary = summarize(rankedOnly(matches));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Records & Compare')),
+      appBar: AppBar(title: const Text('Records & Share')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppTheme.md),
@@ -84,33 +93,29 @@ class RankedPersonalRecordsScreen extends StatelessWidget {
               bestRpGame: records.bestRpGame,
               bestKillsGame: records.bestKillsGame,
               bestDamageGame: records.bestDamageGame,
+              playerName: stats.name,
+              averages: (
+                rp: summary.avgRpPerGame,
+                kills: summary.avgKills,
+                damage: summary.avgDamage,
+              ),
+            ),
+            const SizedBox(height: AppTheme.md),
+            _SessionRecordCard(
+              session: ([
+                ...sessions,
+              ]..sort((a, b) => b.netRp.compareTo(a.netRp))).firstOrNull,
+              playerName: stats.name,
             ),
             const SizedBox(height: AppTheme.md),
             _StreakCard(
               currentStreak: records.currentWinStreak,
               bestStreak: records.bestWinStreak,
               bestStreakStart: records.bestStreakStart,
+              streakMatches: records.bestStreakMatches,
               live: live,
+              playerName: stats.name,
             ),
-            const SizedBox(height: AppTheme.lg),
-            const Divider(color: AppTheme.surface2, height: 1),
-            const SizedBox(height: AppTheme.lg),
-            const Row(
-              children: [
-                Icon(Icons.compare_arrows, size: 18, color: AppTheme.accent),
-                SizedBox(width: AppTheme.sm),
-                Text(
-                  'Comparison',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppTheme.md),
-            RankedCompareTab(uid: uid, splits: splits, matches: matches),
           ],
         ),
       ),
@@ -133,8 +138,8 @@ class RankedPersonalBestEntry extends StatelessWidget {
       icon: Icons.emoji_events_outlined,
       title: 'Personal Best',
       onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => RankedPersonalBestScreen(uid: uid)),
-        ),
+        MaterialPageRoute(builder: (_) => RankedPersonalBestScreen(uid: uid)),
+      ),
     );
   }
 }
@@ -176,16 +181,34 @@ class RankedPersonalBestScreen extends ConsumerWidget {
 /// The three standout-game cards (RP, kills, damage), shared by the split
 /// scope's [RankedPersonalRecordsScreen] and the Lifetime scope's
 /// [RankedPersonalBestScreen].
+///
+/// [playerName] is offered on the shared card; null (the Lifetime screen, which
+/// has no player at hand) shares it without a name.
 List<Widget> _recordCards({
   required RankedMatch? bestRpGame,
   required RankedMatch? bestKillsGame,
   required RankedMatch? bestDamageGame,
+  String? playerName,
+  ({double rp, double? kills, double? damage})? averages,
 }) {
   return [
     _RecordCard(
       icon: Icons.bolt,
       label: 'Most RP Gained',
       match: bestRpGame,
+      playerName: playerName,
+      shareDrops: 'RP',
+      shareValue: bestRpGame == null
+          ? null
+          : formatSignedInt(bestRpGame.effectiveRpChange),
+      shareUnit: 'RP',
+      comparison: bestRpGame == null || averages == null
+          ? null
+          : _vsAverage(
+              bestRpGame.effectiveRpChange,
+              averages.rp,
+              '${formatSigned(averages.rp)} RP per game',
+            ),
       value: bestRpGame == null
           ? null
           : formatSignedInt(bestRpGame.effectiveRpChange),
@@ -195,6 +218,19 @@ List<Widget> _recordCards({
       icon: Icons.sports_kabaddi,
       label: 'Most Kills',
       match: bestKillsGame,
+      playerName: playerName,
+      shareDrops: 'Kills',
+      shareValue: bestKillsGame?.kills == null
+          ? null
+          : formatNumber(bestKillsGame!.kills!),
+      shareUnit: 'kills',
+      comparison: bestKillsGame?.kills == null || averages?.kills == null
+          ? null
+          : _vsAverage(
+              bestKillsGame!.kills!,
+              averages!.kills,
+              '${averages.kills!.toStringAsFixed(1)} kills per game',
+            ),
       // Guards the *stat*, not the match. kills is nullable ("upstream
       // reported no tracker"), so a match can exist with nothing to show here.
       // Both sources already exclude those games, but checking only the match
@@ -208,12 +244,36 @@ List<Widget> _recordCards({
       icon: Icons.local_fire_department,
       label: 'Most Damage',
       match: bestDamageGame,
+      playerName: playerName,
+      shareDrops: 'Damage',
+      shareValue: bestDamageGame?.damage == null
+          ? null
+          : formatNumber(bestDamageGame!.damage!),
+      shareUnit: 'damage',
+      comparison: bestDamageGame?.damage == null || averages?.damage == null
+          ? null
+          : _vsAverage(
+              bestDamageGame!.damage!,
+              averages!.damage,
+              '${formatNumber(averages.damage!.round())} damage per game',
+            ),
       // Same nullable-stat guard as Most Kills above.
       value: bestDamageGame?.damage == null
           ? null
           : '${formatNumber(bestDamageGame!.damage!)} damage',
     ),
   ];
+}
+
+/// How [value] compares with the player's [average] for the period: a multiple
+/// when both are positive, otherwise the average itself, written as
+/// [averageText] ("3.1 kills per game"). Null when there is no average.
+String? _vsAverage(num value, double? average, String averageText) {
+  if (average == null) return null;
+  if (average > 0 && value > 0) {
+    return '${(value / average).toStringAsFixed(1)}× your average';
+  }
+  return 'Your average: $averageText';
 }
 
 /// One standout-game card: value on top, the match it came from underneath.
@@ -224,12 +284,28 @@ class _RecordCard extends StatelessWidget {
   final String label;
   final RankedMatch? match;
   final String? value;
+  final String? playerName;
+
+  /// The figure the record is about, left out of the shared card's stats since
+  /// the card already leads with it.
+  final String? shareDrops;
+
+  /// The figure and unit on the shared card, and its chip in context. The figure
+  /// is split from the unit so the card can set them in different sizes.
+  final String? shareValue;
+  final String? shareUnit;
+  final String? comparison;
 
   const _RecordCard({
     required this.icon,
     required this.label,
     required this.match,
     required this.value,
+    this.playerName,
+    this.shareDrops,
+    this.shareValue,
+    this.shareUnit,
+    this.comparison,
   });
 
   @override
@@ -245,10 +321,7 @@ class _RecordCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: AppTheme.captionSmall,
-                ),
+                Text(label, style: AppTheme.captionSmall),
                 const SizedBox(height: 2),
                 Text(
                   value ?? 'No data yet',
@@ -271,6 +344,156 @@ class _RecordCard extends StatelessWidget {
               ],
             ),
           ),
+          if (m != null && value != null)
+            _ShareButton(
+              title: label,
+              playerName: playerName,
+              card: (name) => RecordShareCard(
+                record: label,
+                value: shareValue ?? value!,
+                unit: shareUnit,
+                detail: formatShortDateTime(m.endTime),
+                comparison: comparison,
+                legend: m.legend,
+                playerName: name,
+                stats: [
+                  (Icons.person_outline, 'Legend', m.legend),
+                  (Icons.map_outlined, 'Map', battleRoyaleMapName(m.mapKey)),
+                  if (shareDrops != 'RP')
+                    (Icons.bolt, 'RP', formatSignedInt(m.effectiveRpChange)),
+                  if (shareDrops != 'Kills')
+                    (
+                      Icons.sports_kabaddi,
+                      'Kills',
+                      formatNumberOrNone(m.kills),
+                    ),
+                  if (shareDrops != 'Damage')
+                    (
+                      Icons.local_fire_department,
+                      'Damage',
+                      formatNumberOrNone(m.damage),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The share button at the right of a record card. Opens a preview of the card
+/// built by [card], given the name to show (null when it is hidden or there is
+/// none to offer).
+class _ShareButton extends StatelessWidget {
+  final String title;
+  final String? playerName;
+  final Widget Function(String? name) card;
+  const _ShareButton({
+    required this.title,
+    required this.playerName,
+    required this.card,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.ios_share, size: 20),
+      color: AppTheme.muted,
+      tooltip: 'Share $title',
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ShareCardScreen(
+            title: title,
+            offerNameToggle: playerName != null,
+            cardBuilder: (showName) => card(showName ? playerName : null),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The play session that gained the most RP: the figure in large type, and the
+/// games, kills, damage and time behind it. Shows a placeholder with no session.
+class _SessionRecordCard extends StatelessWidget {
+  final RankedSession? session;
+  final String? playerName;
+  const _SessionRecordCard({required this.session, this.playerName});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = session;
+    final value = s == null ? null : '${formatSignedInt(s.netRp)} RP';
+    final kills = s == null || s.killsGames == 0 ? null : s.totalKills;
+    final damage = s == null || s.damageGames == 0 ? null : s.totalDamage;
+    return SurfaceCard(
+      padding: const EdgeInsets.all(AppTheme.md),
+      child: Row(
+        children: [
+          const Icon(Icons.timeline, size: 20, color: AppTheme.accent),
+          const SizedBox(width: AppTheme.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Best Session', style: AppTheme.captionSmall),
+                const SizedBox(height: 2),
+                Text(
+                  value ?? 'No data yet',
+                  style: TextStyle(
+                    color: s == null ? AppTheme.muted : AppTheme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (s != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${plural(s.games, 'game')} · '
+                    '${formatNumberOrNone(kills)} kills · '
+                    '${formatNumberOrNone(damage)} dmg',
+                    style: AppTheme.caption,
+                  ),
+                  Text(
+                    '${formatSessionSpan(s.start, s.end)} · '
+                    '${formatDuration(s.duration.inSeconds)}',
+                    style: AppTheme.caption,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (s != null)
+            _ShareButton(
+              title: 'Best Session',
+              playerName: playerName,
+              card: (name) => RecordShareCard(
+                record: 'Best Session',
+                value: formatSignedInt(s.netRp),
+                unit: 'RP',
+                valueColor: AppTheme.signColor(s.netRp >= 0),
+                detail: formatSessionSpan(s.start, s.end),
+                legend: s.bestLegend,
+                playerName: name,
+                stats: [
+                  (Icons.sports_esports_outlined, 'Games', '${s.games}'),
+                  (Icons.sports_kabaddi, 'Kills', formatNumberOrNone(kills)),
+                  (
+                    Icons.local_fire_department,
+                    'Damage',
+                    formatNumberOrNone(damage),
+                  ),
+                  (
+                    Icons.schedule,
+                    'Time played',
+                    formatDuration(s.duration.inSeconds),
+                  ),
+                  if (s.bestLegend != null)
+                    (Icons.person_outline, 'Top legend', s.bestLegend!),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -287,12 +510,18 @@ class _StreakCard extends StatelessWidget {
 
   /// False for a past week or split: worded in the past tense.
   final bool live;
+  final String? playerName;
+
+  /// The games of the best streak, for the shared card.
+  final List<RankedMatch> streakMatches;
 
   const _StreakCard({
     required this.currentStreak,
     required this.bestStreak,
     required this.bestStreakStart,
     required this.live,
+    this.playerName,
+    this.streakMatches = const [],
   });
 
   @override
@@ -320,10 +549,7 @@ class _StreakCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Best Win Streak',
-                  style: AppTheme.captionSmall,
-                ),
+                const Text('Best Win Streak', style: AppTheme.captionSmall),
                 const SizedBox(height: 2),
                 Wrap(
                   spacing: 6,
@@ -378,6 +604,13 @@ class _StreakCard extends StatelessWidget {
               ],
             ),
           ),
+          if (bestStreak > 0 && streakMatches.isNotEmpty)
+            _ShareButton(
+              title: 'Best Win Streak',
+              playerName: playerName,
+              card: (name) =>
+                  StreakShareCard(matches: streakMatches, playerName: name),
+            ),
         ],
       ),
     );

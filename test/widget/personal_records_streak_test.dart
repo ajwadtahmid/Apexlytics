@@ -1,4 +1,7 @@
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
+import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
+import 'package:apexlytics/utils/theme.dart';
+import 'package:apexlytics/widgets/share_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,9 +24,9 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           home: RankedPersonalRecordsScreen(
-            uid: '1',
+            stats: buildStats(name: 'Reptar'),
             matches: matches,
-            splits: const [],
+            sessions: sessionize(matches),
             live: live,
           ),
         ),
@@ -32,11 +35,164 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('the screen is called Records & Compare', (tester) async {
+  testWidgets('the screen is Records & Share, with no separate share section '
+      'and no comparison', (tester) async {
     await pump(tester, live: true);
 
-    expect(find.text('Records & Compare'), findsOneWidget);
-    expect(find.text('Comparison'), findsOneWidget);
+    expect(find.text('Records & Share'), findsOneWidget);
+    expect(find.text('Share my profile'), findsNothing);
+    expect(find.text('Share'), findsNothing);
+    expect(find.text('Comparison'), findsNothing);
+    expect(find.text('Legends'), findsNothing);
+  });
+
+  group('the records and their share buttons', () {
+    // A session of four games with kills and damage reported.
+    final played = [
+      for (var i = 0; i < 4; i++)
+        buildMatch(
+          start: 1782090000 + (3 - i) * 1000,
+          rp: i == 1 ? 40 : 10,
+          kills: i + 1,
+          damage: (i + 1) * 300,
+        ),
+    ];
+
+    /// A figure's tile on the open share card (its label, in capitals).
+    Finder tile(String label) =>
+        find.descendant(of: find.byType(ShareTile), matching: find.text(label));
+
+    Future<void> pumpPlayed(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: RankedPersonalRecordsScreen(
+              stats: buildStats(name: 'Reptar'),
+              matches: played,
+              sessions: sessionize(played),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('each record has one', (tester) async {
+      await pumpPlayed(tester);
+
+      for (final record in [
+        'Most RP Gained',
+        'Most Kills',
+        'Most Damage',
+        'Best Session',
+        'Best Win Streak',
+      ]) {
+        expect(find.byTooltip('Share $record'), findsOneWidget, reason: record);
+      }
+    });
+
+    testWidgets(
+      'the best session shows RP first, then games, kills and damage',
+      (tester) async {
+        await pumpPlayed(tester);
+
+        expect(find.text('+70 RP'), findsOneWidget);
+        expect(find.text('4 games · 10 kills · 3,000 dmg'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a share button opens that record as a card', (tester) async {
+      await pumpPlayed(tester);
+
+      await tester.tap(find.byTooltip('Share Most Kills'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Most Kills'), findsWidgets);
+      expect(find.text('4'), findsWidgets);
+      expect(find.text('kills'), findsWidgets);
+      // The name can be shown or hidden, and the UID is never in it.
+      expect(find.text('Show my name'), findsOneWidget);
+      expect(find.textContaining('uid123'), findsNothing);
+    });
+
+    testWidgets('a game record card leads with its figure and does not repeat '
+        'it, and puts it next to the period average', (tester) async {
+      await pumpPlayed(tester);
+
+      await tester.tap(find.byTooltip('Share Most Kills'));
+      await tester.pumpAndSettle();
+
+      // The figure is orange, bold and big.
+      final figure = tester.widget<Text>(find.text('4').last);
+      expect(figure.style!.color, AppTheme.accent);
+      expect(figure.style!.fontSize, greaterThanOrEqualTo(40));
+      expect(figure.style!.fontWeight, FontWeight.bold);
+      expect(find.text('kills'), findsOneWidget); // its unit
+      // The tiles carry the other numbers, not kills again.
+      expect(tile('KILLS'), findsNothing);
+      expect(tile('RP'), findsOneWidget);
+      expect(tile('DAMAGE'), findsOneWidget);
+      // 4 kills against an average of 2.5.
+      expect(find.text('1.6× your average'), findsOneWidget);
+    });
+
+    testWidgets('the RP and damage cards drop their own figure and show their '
+        'own average', (tester) async {
+      await pumpPlayed(tester);
+
+      await tester.tap(find.byTooltip('Share Most RP Gained'));
+      await tester.pumpAndSettle();
+      expect(tile('RP'), findsNothing);
+      expect(tile('KILLS'), findsOneWidget);
+      expect(tile('DAMAGE'), findsOneWidget);
+      // +40 against an average of +17.5 a game.
+      expect(find.text('2.3× your average'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Share Most Damage'));
+      await tester.pumpAndSettle();
+      expect(tile('DAMAGE'), findsNothing);
+      expect(tile('RP'), findsOneWidget);
+      // 1,200 damage against an average of 750.
+      expect(find.text('1.6× your average'), findsOneWidget);
+    });
+
+    testWidgets('the session and streak records open as cards too', (
+      tester,
+    ) async {
+      await pumpPlayed(tester);
+
+      await tester.tap(find.byTooltip('Share Best Session'));
+      await tester.pumpAndSettle();
+      expect(find.text('Best Session'), findsWidgets);
+      expect(find.text('TIME PLAYED'), findsOneWidget);
+      // When it ran, with the times: "Oct 9 (11:12 AM – 3:34 PM)".
+      expect(
+        find.textContaining(
+          // Within a day: Oct 9 (11:12 AM – 3:34 PM); across midnight: ... to ...
+          RegExp(r'[AP]M( – .* [AP]M\)| to \w{3} \d+ .* [AP]M)'),
+        ),
+        findsWidgets,
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Share Best Win Streak'));
+      await tester.pumpAndSettle();
+      expect(find.text('games'), findsWidgets);
+    });
+
+    testWidgets('a record with no data has no share button', (tester) async {
+      await pump(tester, live: true); // these games reported no kills or damage
+
+      expect(find.byTooltip('Share Most RP Gained'), findsOneWidget);
+      expect(find.byTooltip('Share Most Kills'), findsNothing);
+      expect(find.byTooltip('Share Most Damage'), findsNothing);
+    });
   });
 
   testWidgets('a live scope tells the player they are on the streak now', (

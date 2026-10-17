@@ -563,6 +563,22 @@ void main() {
       expect(r.bestStreakStart, ranked[1].startTime); // C, 3rd oldest
     });
 
+    test('the best streak keeps its games, oldest first', () {
+      final r = personalRecords(ranked);
+
+      // C then E, the two wins in a row after the loss at B.
+      expect(r.bestStreakMatches.map((m) => m.id), [
+        ranked[1].id,
+        ranked[0].id,
+      ]);
+      expect(r.bestStreakMatches, hasLength(r.bestWinStreak));
+      expect(r.bestStreakMatches.first.startTime, r.bestStreakStart);
+    });
+
+    test('with no wins there is no streak to keep', () {
+      expect(personalRecords(const []).bestStreakMatches, isEmpty);
+    });
+
     test('a reset game (implausible RP) does not break a win streak', () {
       final withReset = rankedOnly([
         match(

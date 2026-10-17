@@ -235,4 +235,26 @@ void main() {
       expect(formatNumberOrNone(null), kNoReading);
     });
   });
+
+  group('formatSessionSpan', () {
+    test('puts the times in brackets after the date within one day', () {
+      expect(
+        formatSessionSpan(
+          DateTime(2026, 10, 9, 11, 12),
+          DateTime(2026, 10, 9, 15, 34),
+        ),
+        'Oct 9 (11:12 AM – 3:34 PM)',
+      );
+    });
+
+    test('gives each end its own date when it crosses midnight', () {
+      expect(
+        formatSessionSpan(
+          DateTime(2026, 10, 9, 23, 59),
+          DateTime(2026, 10, 10, 3, 3),
+        ),
+        'Oct 9 11:59 PM to Oct 10 3:03 AM',
+      );
+    });
+  });
 }

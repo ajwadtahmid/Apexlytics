@@ -159,4 +159,20 @@ void main() {
       expect(find.text('Olympus · 8 games'), findsOneWidget);
     });
   });
+
+  testWidgets('the Compare entry opens the comparison page', (tester) async {
+    await pump(
+      tester,
+      RankedCompareEntry(uid: '1', splits: const [], matches: matches),
+    );
+
+    await tester.tap(find.text('Compare'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Compare'), findsOneWidget); // the page title
+    expect(find.text('Splits'), findsOneWidget);
+    await tester.tap(find.text('Legends'));
+    await tester.pumpAndSettle();
+    expect(find.text('Axle · 6 games'), findsOneWidget);
+  });
 }

@@ -4,6 +4,7 @@ import 'season_utils.dart' show SplitContext;
 final _rpFormat = NumberFormat('#,###');
 final _shortDate = DateFormat('MMM d');
 final _shortDateTime = DateFormat('MMM d, h:mm a');
+final _clock = DateFormat('h:mm a');
 
 /// Formats an integer with comma-separated thousands (e.g., 1000 → '1,000').
 String formatNumber(int number) => _rpFormat.format(number);
@@ -14,6 +15,18 @@ String formatShortDate(DateTime t) => _shortDate.format(t.toLocal());
 
 /// [formatShortDate] with the time: `Mar 4, 9:30 PM`.
 String formatShortDateTime(DateTime t) => _shortDateTime.format(t.toLocal());
+
+/// When a session ran, in the device's time zone. Within one day the date leads
+/// and the times follow in brackets: `Oct 9 (11:12 AM – 3:34 PM)`. Across
+/// midnight each end carries its own date: `Oct 9 11:59 PM to Oct 10 3:03 AM`.
+String formatSessionSpan(DateTime start, DateTime end) {
+  final s = start.toLocal(), e = end.toLocal();
+  if (s.year == e.year && s.month == e.month && s.day == e.day) {
+    return '${_shortDate.format(s)} (${_clock.format(s)} – ${_clock.format(e)})';
+  }
+  return '${_shortDate.format(s)} ${_clock.format(s)} to '
+      '${_shortDate.format(e)} ${_clock.format(e)}';
+}
 
 /// Formats a delta-style number with an explicit '+' for non-negative values
 /// (e.g. RP/game, a comparison delta) — negatives already carry their own '-'.

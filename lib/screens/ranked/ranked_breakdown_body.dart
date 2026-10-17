@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/prefs_keys.dart';
 import '../../constants/legend_constants.dart' show canonicalLegendName;
 import '../../constants/map_constants.dart' show canonicalMapKey;
+import '../../constants/rank_constants.dart' show kApexPredatorRank;
 import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
@@ -18,6 +19,8 @@ import '../../widgets/graph_card.dart' show showSnapshotBackupSheet;
 import 'ranked_all_trackers_screen.dart';
 import 'ranked_available_now_screen.dart';
 import 'ranked_legend_map_matrix_screen.dart';
+import 'ranked_compare_tab.dart';
+import 'ranked_share_screens.dart';
 import 'ranked_personal_records_screen.dart';
 import 'ranked_pick_rate_screen.dart';
 import 'ranked_sessions_list_screen.dart';
@@ -75,19 +78,16 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
   @override
   void initState() {
     super.initState();
-    _refreshTimer = Timer.periodic(
-      _kViewRefreshInterval,
-      (_) {
-        // With a refresh interval set, My Stats' own timer already runs this
-        // sync (see StatsScreen._sync); both firing back to back started two
-        // `/games` requests for the same profile.
-        if (ref.read(playerSettingsProvider).statsRefreshMinutes > 0) return;
-        // Skip while the sync would only replay its stored outcome.
-        if (rankedSyncDue(ref.read(sharedPreferencesProvider), widget.uid)) {
-          ref.invalidate(rankedSyncProvider(widget.uid));
-        }
-      },
-    );
+    _refreshTimer = Timer.periodic(_kViewRefreshInterval, (_) {
+      // With a refresh interval set, My Stats' own timer already runs this
+      // sync (see StatsScreen._sync); both firing back to back started two
+      // `/games` requests for the same profile.
+      if (ref.read(playerSettingsProvider).statsRefreshMinutes > 0) return;
+      // Skip while the sync would only replay its stored outcome.
+      if (rankedSyncDue(ref.read(sharedPreferencesProvider), widget.uid)) {
+        ref.invalidate(rankedSyncProvider(widget.uid));
+      }
+    });
     final prefs = ref.read(sharedPreferencesProvider);
     _showCoachMark =
         !(prefs.getBool(PrefsKeys.rankedInfoCoachMarkShown) ?? false);
@@ -697,11 +697,10 @@ class _OverviewTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  child: RankedPersonalRecordsEntry(
+                  child: RankedCompareEntry(
                     uid: uid,
-                    matches: matches,
                     splits: data.view.splits,
-                    live: data.rpScope.live,
+                    matches: matches,
                   ),
                 ),
                 const SizedBox(width: AppTheme.sm),
@@ -709,6 +708,34 @@ class _OverviewTab extends StatelessWidget {
                   child: RankedSessionsEntry(
                     sessions: data.sessions,
                     onRefresh: onRefresh,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppTheme.md),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: RankedRecapEntry(
+                    matches: matches,
+                    scope: recapScopeLabel(data.view),
+                    playerName: stats.name,
+                    isPredator:
+                        isCurrentSplit &&
+                        data.rpScope.live &&
+                        stats.rank == kApexPredatorRank,
+                  ),
+                ),
+                const SizedBox(width: AppTheme.sm),
+                Expanded(
+                  child: RankedPersonalRecordsEntry(
+                    stats: stats,
+                    matches: matches,
+                    sessions: data.sessions,
+                    live: data.rpScope.live,
                   ),
                 ),
               ],

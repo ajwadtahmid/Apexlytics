@@ -17,6 +17,7 @@ import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
 import '../../widgets/error_card.dart';
 import '../../widgets/legend_icon.dart';
+import '../../widgets/nav_entry_card.dart';
 import '../../widgets/segmented_capsule.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_legend_map_matrix_screen.dart';
@@ -25,9 +26,63 @@ import 'widgets/ranked_day_of_week_chart.dart';
 import 'widgets/ranked_entity_compare.dart';
 import 'widgets/ranked_time_of_day_chart.dart';
 
-/// Split-vs-split comparison. Embedded inline (not in its own scrollable) at
-/// the bottom of the Records & Compare screen, below the standout-game cards
-/// and streak — the caller supplies the surrounding `ListView`.
+/// A tappable row that opens the comparison page.
+class RankedCompareEntry extends StatelessWidget {
+  final String uid;
+  final List<RankedSplitBucket> splits;
+  final List<RankedMatch> matches;
+  const RankedCompareEntry({
+    super.key,
+    required this.uid,
+    required this.splits,
+    required this.matches,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return NavEntryCard(
+      icon: Icons.compare_arrows,
+      title: 'Compare',
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              RankedCompareScreen(uid: uid, splits: splits, matches: matches),
+        ),
+      ),
+    );
+  }
+}
+
+/// The comparison page: splits, legends or maps side by side.
+class RankedCompareScreen extends StatelessWidget {
+  final String uid;
+  final List<RankedSplitBucket> splits;
+  final List<RankedMatch> matches;
+  const RankedCompareScreen({
+    super.key,
+    required this.uid,
+    required this.splits,
+    required this.matches,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Compare')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(AppTheme.md),
+          children: [
+            RankedCompareTab(uid: uid, splits: splits, matches: matches),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Split-vs-split comparison. Embedded inline (not in its own scrollable) on
+/// the Compare page; the caller supplies the surrounding `ListView`.
 ///
 /// Only real, named splits are selectable — not Lifetime (comparing "every
 /// split combined" against one split isn't a split-vs-split comparison) and

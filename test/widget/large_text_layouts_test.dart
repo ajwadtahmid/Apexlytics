@@ -8,6 +8,10 @@ import 'package:apexlytics/screens/home/server_status_page.dart';
 import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_compare_tab.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
+import 'package:apexlytics/screens/ranked/ranked_share_screens.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_share_cards.dart';
+import 'package:apexlytics/utils/ranked/split_recap.dart';
+import 'package:apexlytics/widgets/share_card.dart';
 import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_history_list.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_entity_compare.dart';
@@ -126,15 +130,31 @@ void main() {
     expectNoOverflow();
   });
 
-  testWidgets('the Records & Compare streak card', (tester) async {
+  testWidgets('the Records & Share page', (tester) async {
     await pump(
       tester,
       SizedBox(
         height: 800,
         child: RankedPersonalRecordsScreen(
-          uid: '1',
-          matches: matches,
-          splits: const [],
+          stats: buildStats(),
+          matches: [
+            for (var i = 0; i < 4; i++)
+              buildMatch(
+                legend: 'Mad Maggie',
+                start: 1782090000 + i * 1500,
+                kills: 3,
+                damage: 1200,
+              ),
+          ],
+          sessions: sessionize([
+            for (var i = 0; i < 4; i++)
+              buildMatch(
+                legend: 'Mad Maggie',
+                start: 1782090000 + i * 1500,
+                kills: 3,
+                damage: 1200,
+              ),
+          ]),
         ),
       ),
     );
@@ -264,6 +284,65 @@ void main() {
     await pump(
       tester,
       const RankedCompareTab(uid: '1', splits: [], matches: []),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the Recap and Records & Share entries side by side', (
+    tester,
+  ) async {
+    final games = [
+      for (var i = 0; i < 4; i++) buildMatch(start: 1782090000 + i * 1500),
+    ];
+    await pump(
+      tester,
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: RankedRecapEntry(
+                matches: games,
+                scope: 'S30 Split 2',
+                playerName: 'Reptar',
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: RankedPersonalRecordsEntry(
+                stats: buildStats(),
+                matches: games,
+                sessions: const [],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the share screen and its card', (tester) async {
+    await pump(
+      tester,
+      SizedBox(
+        height: 900,
+        child: ShareCardScreen(
+          title: 'Recap',
+          cardBuilder: (show) => RecapShareCard(
+            recap: splitRecap([
+              for (var i = 0; i < 4; i++)
+                buildMatch(
+                  legend: 'Mad Maggie',
+                  start: 1782090000 + i * 1500,
+                  cumulativeRp: 1020 + i * 20,
+                ),
+            ]),
+            scope: 'S30 Split 2 Week 12',
+            playerName: show ? 'AReallyLongPlayerNameHere' : null,
+          ),
+        ),
+      ),
     );
     expectNoOverflow();
   });
