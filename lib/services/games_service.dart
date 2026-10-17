@@ -52,8 +52,11 @@ class GamesPending extends GamesResult {
   bool get isBriefThrottle => reason == 'claim_rate';
 }
 
-/// Whether upstream is currently recording match history for a UID.
-typedef GamesEligibility = ({bool eligible, int pollCount});
+/// Whether upstream is currently recording match history for a UID. A null
+/// [pollCount] means the server can't say, not that it has seen nothing: it only
+/// answers for a UID this device has itself polled, and a phone on a new
+/// address looks like a stranger.
+typedef GamesEligibility = ({bool eligible, int? pollCount});
 
 /// Live `/games` hourly budget snapshot (see `/games/capacity` server-side).
 /// [windowResetsAt] is when the oldest claimed slot frees up, not a fixed
@@ -156,7 +159,7 @@ class GamesService {
     final body = response.data is Map ? response.data as Map : const {};
     return (
       eligible: body['eligible'] == true,
-      pollCount: (body['pollCount'] as num?)?.toInt() ?? 0,
+      pollCount: (body['pollCount'] as num?)?.toInt(),
     );
   }
 

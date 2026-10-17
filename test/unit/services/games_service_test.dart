@@ -283,6 +283,26 @@ void main() {
       ).called(1);
     });
 
+    test(
+      'a poll count the server leaves out stays unknown, not zero',
+      () async {
+        when(
+          () => mockApi.getWithStatus(
+            ApiConstants.gamesEligibilityPath,
+            params: any(named: 'params'),
+            failover: false,
+          ),
+        ).thenAnswer(
+          (_) async =>
+              (status: 200, data: {'eligible': false, 'pollCount': null}),
+        );
+
+        final result = await service.getEligibility('uid123');
+
+        expect(result.pollCount, isNull);
+      },
+    );
+
     test('capacity is asked of the primary only', () async {
       when(
         () => mockApi.getWithStatus(

@@ -336,6 +336,25 @@ void main() {
     },
   );
 
+  testWidgets('recording, with the server unable to say, shows neutral wording', (
+    tester,
+  ) async {
+    final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+    await tester.pumpWidget(
+      app(
+        prefs: prefs,
+        outcome: RankedSyncOutcome.cooldown,
+        eligibility: (eligible: false, pollCount: null),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining("can't confirm"), findsOneWidget);
+    expect(find.textContaining("hasn't seen"), findsNothing);
+    expect(find.textContaining('Tracking has paused'), findsNothing);
+  });
+
   testWidgets(
     '"View available stats" is offered when snapshots exist, even with no '
     'match history',

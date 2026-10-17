@@ -243,11 +243,18 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           fullScreen: true,
           icon: Icons.wifi_tethering_off,
           title: 'Not being tracked yet',
-          message: eligibility.pollCount == 0
-              ? 'The server hasn\'t seen this profile yet. Keep Apexlytics '
-                    'open - tracking starts within a few minutes.'
-              : 'Tracking has paused. Keep Apexlytics open while you play so '
-                    'matches keep being recorded.',
+          message: switch (eligibility.pollCount) {
+            null =>
+              'The server can\'t confirm this profile is being tracked yet. '
+                  'Keep Apexlytics open - tracking starts within a few '
+                  'minutes.',
+            0 =>
+              'The server hasn\'t seen this profile yet. Keep Apexlytics '
+                  'open - tracking starts within a few minutes.',
+            _ =>
+              'Tracking has paused. Keep Apexlytics open while you play so '
+                  'matches keep being recorded.',
+          },
           extra: steps,
           onRetry: _refresh,
           onLearnMore: onLearnMore,
