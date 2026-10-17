@@ -10,6 +10,9 @@ import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_compare_tab.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_pick_rate_screen.dart';
+import 'package:apexlytics/screens/ranked/ranked_session_detail_screen.dart';
+import 'package:apexlytics/screens/ranked/ranked_sessions_screen.dart';
+import 'package:apexlytics/screens/ranked/widgets/sessions_overview.dart';
 import 'package:apexlytics/screens/ranked/ranked_share_screens.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_share_cards.dart';
 import 'package:apexlytics/utils/ranked/split_recap.dart';
@@ -363,6 +366,63 @@ void main() {
         home: RankedPickRateScreen(
           summary: summarize(all),
           legends: legendBreakdowns(all),
+        ),
+      ),
+    );
+    await tester.pump();
+    expectNoOverflow();
+  });
+
+  testWidgets('the Sessions overview and a session tile', (tester) async {
+    final played = sessionize([
+      for (var s = 0; s < 3; s++)
+        for (var g = 0; g < 4; g++)
+          buildMatch(
+            rp: g.isEven ? 25 : -12,
+            start: 1782000000 + s * 6 * 3600 + g * 1500,
+          ),
+    ]);
+    await pump(
+      tester,
+      Column(
+        children: [
+          SessionsOverview(sessions: played, onOpen: (_) {}),
+          SessionRecapTile(
+            session: played.first,
+            badge: SessionBadge.best,
+            onTap: () {},
+          ),
+        ],
+      ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the session detail page', (tester) async {
+    final played = sessionize([
+      for (var g = 0; g < 6; g++)
+        buildMatch(
+          legend: g.isEven ? 'Mad Maggie' : 'Newcastle',
+          rp: g.isEven ? 25 : -12,
+          kills: g,
+          damage: 300 * g,
+          start: 1782000000 + g * 2400,
+        ),
+    ]).single;
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, app) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2.0)),
+          child: app!,
+        ),
+        home: RankedSessionDetailScreen(
+          session: played,
+          onRefresh: () async {},
         ),
       ),
     );

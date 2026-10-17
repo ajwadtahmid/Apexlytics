@@ -989,4 +989,89 @@ void main() {
       expect(find.textContaining('break'), findsOneWidget);
     });
   });
+
+  group('a list embedded in a page', () {
+    final games = [
+      game(dayOffset: 0, slot: 3),
+      game(dayOffset: 0, slot: 2),
+      game(dayOffset: 0, slot: 1),
+    ];
+
+    Future<void> pumpList(
+      WidgetTester tester, {
+      Widget? leading,
+      bool hideSessionHeaders = false,
+    }) async {
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(
+                matches: games,
+                onRefresh: () async {},
+                leading: leading,
+                hideSessionHeaders: hideSessionHeaders,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('shows a leading widget above the first row', (tester) async {
+      await pumpList(tester, leading: const Text('A page summary'));
+
+      final summary = tester.getTopLeft(find.text('A page summary')).dy;
+      final firstRow = tester.getTopLeft(find.text('Axle').first).dy;
+      expect(summary, lessThan(firstRow));
+    });
+
+    testWidgets('the leading widget scrolls away with the list', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MatchHistoryList(
+                matches: games,
+                onRefresh: () async {},
+                leading: const SizedBox(height: 400, child: Text('Summary')),
+              ),
+            ),
+          ),
+        ),
+      );
+      final before = tester.getTopLeft(find.text('Summary')).dy;
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -150));
+      await tester.pump();
+
+      expect(tester.getTopLeft(find.text('Summary')).dy, lessThan(before - 50));
+    });
+
+    testWidgets('keeps the session title unless told to hide it', (
+      tester,
+    ) async {
+      await pumpList(tester);
+
+      expect(find.byIcon(Icons.expand_more), findsOneWidget);
+      expect(find.text('Axle'), findsNWidgets(3));
+    });
+
+    testWidgets('can hide the session title and stats, keeping every game', (
+      tester,
+    ) async {
+      await pumpList(tester, hideSessionHeaders: true);
+
+      expect(find.byIcon(Icons.expand_more), findsNothing);
+      expect(find.text('Axle'), findsNWidgets(3));
+    });
+  });
 }

@@ -81,6 +81,13 @@ class MatchHistoryList extends ConsumerStatefulWidget {
   /// once. Off for lists that hold only part of a scope.
   final bool selectable;
 
+  /// Scrolls with the list, above its first row (e.g. a page's summary).
+  final Widget? leading;
+
+  /// Leaves out each session's pinned title and stats row, for a page that
+  /// already says what the session is. Only for session grouping.
+  final bool hideSessionHeaders;
+
   const MatchHistoryList({
     super.key,
     required this.matches,
@@ -94,6 +101,8 @@ class MatchHistoryList extends ConsumerStatefulWidget {
     this.sessionPool,
     this.showBreaks = true,
     this.selectable = false,
+    this.leading,
+    this.hideSessionHeaders = false,
   });
 
   @override
@@ -319,6 +328,11 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
+                      if (widget.leading != null)
+                        SliverPadding(
+                          padding: const EdgeInsets.all(AppTheme.md),
+                          sliver: SliverToBoxAdapter(child: widget.leading),
+                        ),
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(
                           AppTheme.md,
@@ -331,6 +345,7 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
                             for (final section in sections)
                               _SectionSliver(
                                 section: section,
+                                hideSessionHeader: widget.hideSessionHeaders,
                                 collapseScope: widget.collapseScope,
                                 ordered: _ordered,
                                 onOpen: _openDetail,
@@ -354,6 +369,9 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
 /// A header and its rows; watches only its own session's collapsed state.
 class _SectionSliver extends ConsumerWidget {
   final _Section section;
+
+  /// Whether to leave out a session's title and stats row.
+  final bool hideSessionHeader;
   final String collapseScope;
   final List<RankedMatch> ordered;
   final Future<void> Function(List<RankedMatch> ordered, RankedMatch m) onOpen;
@@ -364,6 +382,7 @@ class _SectionSliver extends ConsumerWidget {
 
   const _SectionSliver({
     required this.section,
+    required this.hideSessionHeader,
     required this.collapseScope,
     required this.ordered,
     required this.onOpen,
@@ -378,6 +397,7 @@ class _SectionSliver extends ConsumerWidget {
         ? historySessionKey(collapseScope, header.key)
         : null;
     final isCollapsed =
+        !hideSessionHeader &&
         sessionKey != null &&
         ref.watch(
           collapsedHistorySessionsProvider.select(
@@ -407,11 +427,12 @@ class _SectionSliver extends ConsumerWidget {
             },
           ),
         // Opaque so rows scrolling underneath don't show through the pin.
-        PinnedHeaderSliver(
-          child: ColoredBox(color: AppTheme.bg, child: headerWidget),
-        ),
+        if (!hideSessionHeader || header is! SessionHeaderItem)
+          PinnedHeaderSliver(
+            child: ColoredBox(color: AppTheme.bg, child: headerWidget),
+          ),
         // The labelled stats scroll with the session rather than pinning.
-        if (header is SessionHeaderItem)
+        if (header is SessionHeaderItem && !hideSessionHeader)
           SliverToBoxAdapter(
             child: _SessionStats(item: header, collapsed: isCollapsed),
           ),
