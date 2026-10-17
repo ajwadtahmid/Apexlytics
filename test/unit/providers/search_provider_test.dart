@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/providers/search_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/utils/error_messages.dart' show AppException;
@@ -90,38 +91,38 @@ void main() {
       },
     );
 
-    test('adding past the cap is refused, keeping every saved favorite', () async {
-      final notifier = container.read(searchStateProvider.notifier);
-      for (var i = 0; i < SearchNotifier.maxFavorites; i++) {
-        await notifier.toggleFavorite(
-          PlayerRef(query: 'Player$i', platform: 'PC', uid: '$i'),
+    test(
+      'adding past the cap is refused, keeping every saved favorite',
+      () async {
+        final notifier = container.read(searchStateProvider.notifier);
+        for (var i = 0; i < SearchNotifier.maxFavorites; i++) {
+          await notifier.toggleFavorite(
+            PlayerRef(query: 'Player$i', platform: 'PC', uid: '$i'),
+          );
+        }
+
+        await expectLater(
+          notifier.toggleFavorite(
+            const PlayerRef(query: 'OneTooMany', platform: 'PC', uid: '999'),
+          ),
+          throwsA(isA<AppException>()),
         );
-      }
 
-      await expectLater(
-        notifier.toggleFavorite(
+        final favorites = container.read(searchStateProvider).favorites;
+        expect(favorites, hasLength(SearchNotifier.maxFavorites));
+        expect(favorites.any((f) => f.uid == '0'), isTrue);
+        expect(favorites.any((f) => f.uid == '999'), isFalse);
+
+        // Removing is still allowed at the cap, which frees a slot.
+        await notifier.toggleFavorite(
+          const PlayerRef(query: 'Player0', platform: 'PC', uid: '0'),
+        );
+        await notifier.toggleFavorite(
           const PlayerRef(query: 'OneTooMany', platform: 'PC', uid: '999'),
-        ),
-        throwsA(isA<AppException>()),
-      );
-
-      final favorites = container.read(searchStateProvider).favorites;
-      expect(favorites, hasLength(SearchNotifier.maxFavorites));
-      expect(favorites.any((f) => f.uid == '0'), isTrue);
-      expect(favorites.any((f) => f.uid == '999'), isFalse);
-
-      // Removing is still allowed at the cap, which frees a slot.
-      await notifier.toggleFavorite(
-        const PlayerRef(query: 'Player0', platform: 'PC', uid: '0'),
-      );
-      await notifier.toggleFavorite(
-        const PlayerRef(query: 'OneTooMany', platform: 'PC', uid: '999'),
-      );
-      expect(
-        container.read(searchStateProvider).favorites.first.uid,
-        '999',
-      );
-    });
+        );
+        expect(container.read(searchStateProvider).favorites.first.uid, '999');
+      },
+    );
 
     test('deduplicates by UID when both entries have UIDs', () async {
       const player1 = PlayerRef(query: 'OldName', platform: 'PC', uid: '123');
@@ -170,6 +171,83 @@ void main() {
 
       final state = container.read(searchStateProvider);
       expect(state.favorites, isEmpty);
+    });
+  });
+
+  group('recent searches', () {
+    late ProviderContainer container;
+
+    setUp(() {
+      container = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(container.dispose);
+    });
+
+    PlayerRef player(int n) =>
+        PlayerRef(query: 'Player$n', platform: 'PC', uid: '$n');
+
+    test('lists the newest lookup first', () async {
+      final notifier = container.read(searchStateProvider.notifier);
+      await notifier.recordRecent(player(1));
+      await notifier.recordRecent(player(2));
+
+      expect(container.read(searchStateProvider).recents, [
+        player(2),
+        player(1),
+      ]);
+    });
+
+    test('looking up the same player again moves them to the top', () async {
+      final notifier = container.read(searchStateProvider.notifier);
+      await notifier.recordRecent(player(1));
+      await notifier.recordRecent(player(2));
+      await notifier.recordRecent(
+        const PlayerRef(query: 'Renamed', platform: 'PC', uid: '1'),
+      );
+
+      final recents = container.read(searchStateProvider).recents;
+      expect(recents, hasLength(2));
+      expect(recents.first.query, 'Renamed');
+    });
+
+    test('keeps only the last five', () async {
+      final notifier = container.read(searchStateProvider.notifier);
+      for (var i = 1; i <= 8; i++) {
+        await notifier.recordRecent(player(i));
+      }
+
+      final recents = container.read(searchStateProvider).recents;
+      expect(recents, hasLength(SearchNotifier.maxRecents));
+      expect(recents.first, player(8));
+      expect(recents.last, player(4));
+    });
+
+    test('survive a restart, and clear on request', () async {
+      await container
+          .read(searchStateProvider.notifier)
+          .recordRecent(player(1));
+
+      final reopened = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(reopened.dispose);
+      expect(reopened.read(searchStateProvider).recents, [player(1)]);
+
+      await reopened.read(searchStateProvider.notifier).clearRecents();
+      expect(reopened.read(searchStateProvider).recents, isEmpty);
+      expect(prefs.containsKey(PrefsKeys.recentSearches), isFalse);
+    });
+
+    test('are separate from favourites', () async {
+      final notifier = container.read(searchStateProvider.notifier);
+      await notifier.recordRecent(player(1));
+      await notifier.toggleFavorite(player(1));
+      await notifier.clearFavorites();
+
+      final state = container.read(searchStateProvider);
+      expect(state.favorites, isEmpty);
+      expect(state.recents, [player(1)]);
     });
   });
 }

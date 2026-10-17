@@ -552,9 +552,10 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
     PrefsKeys.playerUid,
     PrefsKeys.playerPlatform,
     PrefsKeys.searchFavorites,
+    PrefsKeys.recentSearches,
   };
 
-  /// Removes saved profiles and favourite players, leaving preferences,
+  /// Removes saved profiles, favourite players and recent searches, leaving preferences,
   /// notification settings, RP history and match history intact.
   ///
   /// Callers must also reset `searchStateProvider`, which holds the favourites

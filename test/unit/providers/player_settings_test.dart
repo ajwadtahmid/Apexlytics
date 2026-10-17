@@ -487,6 +487,7 @@ void main() {
           PrefsKeys.activeProfileIndex: 0,
           PrefsKeys.playerUid: uid,
           PrefsKeys.searchFavorites: '[]',
+          PrefsKeys.recentSearches: '[]',
           PrefsKeys.statsRefreshMinutes: 5,
           PrefsKeys.keepScreenOn: true,
           PrefsKeys.notifyRankedMapRotation: true,

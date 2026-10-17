@@ -62,22 +62,39 @@ class PlayerRef {
   int get hashCode => Object.hash(query, platform, uid);
 }
 
+/// Whether [a] and [b] are the same player: by UID when both have one,
+/// otherwise by platform and case-insensitive name.
+bool isSamePlayer(PlayerRef a, PlayerRef b) {
+  if (a.hasUid && b.hasUid) return a.uid == b.uid;
+  return a.platform == b.platform &&
+      a.query.toLowerCase() == b.query.toLowerCase();
+}
+
 class SearchState {
   final List<PlayerRef> favorites;
 
-  const SearchState({this.favorites = const []});
+  /// Players looked up recently, newest first.
+  final List<PlayerRef> recents;
 
-  SearchState copyWith({List<PlayerRef>? favorites}) {
-    return SearchState(favorites: favorites ?? this.favorites);
+  const SearchState({this.favorites = const [], this.recents = const []});
+
+  SearchState copyWith({List<PlayerRef>? favorites, List<PlayerRef>? recents}) {
+    return SearchState(
+      favorites: favorites ?? this.favorites,
+      recents: recents ?? this.recents,
+    );
   }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SearchState && listEquals(other.favorites, favorites);
+      other is SearchState &&
+          listEquals(other.favorites, favorites) &&
+          listEquals(other.recents, recents);
 
   @override
-  int get hashCode => Object.hashAll(favorites);
+  int get hashCode =>
+      Object.hash(Object.hashAll(favorites), Object.hashAll(recents));
 }
 
 class SearchNotifier extends Notifier<SearchState> {
@@ -85,11 +102,17 @@ class SearchNotifier extends Notifier<SearchState> {
   /// [toggleFavorite]) rather than silently evicting the oldest one.
   static const int maxFavorites = 20;
 
+  /// How many recent lookups are kept.
+  static const int maxRecents = 5;
+
   SharedPreferences get _prefs => ref.read(sharedPreferencesProvider);
 
   @override
   SearchState build() {
-    return SearchState(favorites: _load(_prefs, PrefsKeys.searchFavorites));
+    return SearchState(
+      favorites: _load(_prefs, PrefsKeys.searchFavorites),
+      recents: _load(_prefs, PrefsKeys.recentSearches),
+    );
   }
 
   static List<PlayerRef> _load(SharedPreferences prefs, String key) {
@@ -113,6 +136,24 @@ class SearchNotifier extends Notifier<SearchState> {
       key,
       jsonEncode(list.map((playerRef) => playerRef.toJson()).toList()),
     );
+  }
+
+  /// Puts [playerRef] first in the recent lookups, dropping an earlier entry
+  /// for the same player and anything past [maxRecents].
+  Future<void> recordRecent(PlayerRef playerRef) async {
+    if (playerRef.query.isEmpty) return;
+    final recents = [
+      playerRef,
+      ...state.recents.where((r) => !isSamePlayer(r, playerRef)),
+    ].take(maxRecents).toList();
+    if (listEquals(recents, state.recents)) return;
+    await _save(PrefsKeys.recentSearches, recents);
+    state = state.copyWith(recents: recents);
+  }
+
+  Future<void> clearRecents() async {
+    await _prefs.remove(PrefsKeys.recentSearches);
+    state = state.copyWith(recents: []);
   }
 
   Future<void> clearFavorites() async {

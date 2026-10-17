@@ -5,6 +5,7 @@ import '../../models/player_stats.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/player_provider.dart';
 import '../../providers/search_provider.dart';
+import '../../utils/error_messages.dart' show AppException;
 import '../../utils/formatting/format.dart' show formatNumber;
 import '../../utils/formatting/rank_utils.dart' show rankAssetPath, rankLabel;
 import '../../utils/formatting/search_utils.dart';
@@ -65,11 +66,29 @@ class FavoritesPane extends ConsumerWidget {
     }
   }
 
+  Future<void> _addFavorite(
+    BuildContext context,
+    WidgetRef ref,
+    PlayerRef player,
+  ) async {
+    try {
+      await ref.read(searchStateProvider.notifier).toggleFavorite(player);
+    } on AppException catch (e) {
+      if (context.mounted) context.showMessage(e.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final favorites = ref.watch(searchStateProvider).favorites;
+    final state = ref.watch(searchStateProvider);
+    final favorites = state.favorites;
+    // A favourite is already one tap away above, so it isn't listed twice.
+    final recents = [
+      for (final r in state.recents)
+        if (!favorites.any((f) => isSamePlayer(f, r))) r,
+    ];
 
-    if (favorites.isEmpty) {
+    if (favorites.isEmpty && recents.isEmpty) {
       return const Center(
         child: Text(
           'Search for a player above to get started',
@@ -84,12 +103,100 @@ class FavoritesPane extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
-          _FavoritesHeader(onClear: () => _confirmClear(context, ref)),
-          ...favorites.map(
-            (r) => _FavoriteTile(playerRef: r, onTap: () => onPick(r)),
+          if (favorites.isNotEmpty) ...[
+            _FavoritesHeader(onClear: () => _confirmClear(context, ref)),
+            ...favorites.map(
+              (r) => _FavoriteTile(playerRef: r, onTap: () => onPick(r)),
+            ),
+          ],
+          if (recents.isNotEmpty) ...[
+            _RecentsHeader(
+              onClear: () =>
+                  ref.read(searchStateProvider.notifier).clearRecents(),
+            ),
+            ...recents.map(
+              (r) => _RecentTile(
+                playerRef: r,
+                onTap: () => onPick(r),
+                onFavorite: () => _addFavorite(context, ref, r),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentsHeader extends StatelessWidget {
+  final VoidCallback onClear;
+  const _RecentsHeader({required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        top: AppTheme.sm,
+        bottom: AppTheme.sm,
+        left: AppTheme.xs,
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.history, size: 14, color: AppTheme.muted),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              'Recent',
+              style: TextStyle(
+                color: AppTheme.muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onClear,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm),
+            ),
+            child: const Text(
+              'Clear',
+              style: TextStyle(color: AppTheme.muted, fontSize: 11),
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RecentTile extends StatelessWidget {
+  final PlayerRef playerRef;
+  final VoidCallback onTap;
+  final VoidCallback onFavorite;
+  const _RecentTile({
+    required this.playerRef,
+    required this.onTap,
+    required this.onFavorite,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.history, size: 18, color: AppTheme.muted),
+      title: Text(playerRef.query),
+      subtitle: Text(
+        ApiConstants.labelFor(playerRef.platform),
+        style: AppTheme.caption,
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.star_border, color: AppTheme.accent),
+        tooltip: 'Add to favorites',
+        onPressed: onFavorite,
+      ),
+      onTap: onTap,
     );
   }
 }
@@ -119,7 +226,10 @@ class _FavoritesHeader extends StatelessWidget {
           GestureDetector(
             onTap: onClear,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppTheme.xs),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: AppTheme.xs,
+              ),
               decoration: BoxDecoration(
                 color: AppTheme.red.withAlpha(25),
                 borderRadius: BorderRadius.circular(AppTheme.radiusSm),
@@ -179,10 +289,7 @@ class _FavoriteTile extends ConsumerWidget {
 
       if (cachedStats == null) {
         title = playerRef.query;
-        subtitle = Text(
-          platformLabel,
-          style: AppTheme.caption,
-        );
+        subtitle = Text(platformLabel, style: AppTheme.caption);
       } else {
         title = cachedStats.name;
         final label = rankLabel(cachedStats);
@@ -217,10 +324,7 @@ class _FavoriteTile extends ConsumerWidget {
       } else if (stats == null) {
         leadingColor = AppTheme.muted;
         title = playerRef.query;
-        subtitle = Text(
-          platformLabel,
-          style: AppTheme.caption,
-        );
+        subtitle = Text(platformLabel, style: AppTheme.caption);
       } else {
         leadingColor = playerPresenceColor(stats);
         title = stats.name;
@@ -264,10 +368,7 @@ class _RankSubtitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          platformLabel,
-          style: AppTheme.caption,
-        ),
+        Text(platformLabel, style: AppTheme.caption),
         const SizedBox(width: AppTheme.xs),
         const Text('·', style: AppTheme.caption),
         const SizedBox(width: AppTheme.xs),

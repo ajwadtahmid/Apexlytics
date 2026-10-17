@@ -38,6 +38,8 @@ class PlayerResultPage extends ConsumerStatefulWidget {
 class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
   bool _refreshing = false;
   ProviderSubscription? _uidSyncSub;
+  ProviderSubscription? _recentSub;
+  bool _recorded = false;
 
   @override
   void initState() {
@@ -46,6 +48,31 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
     // into the stored favourite so the grey tile shows the right name.
     // fireImmediately: true ensures this also runs on the current cached value,
     // not just future provider updates.
+    _recentSub = ref.listenManual(
+      searchPlayerProvider((
+        query: widget.query,
+        platform: widget.platform,
+        searchByUid: widget.searchByUid,
+      )),
+      (_, next) {
+        // Only a lookup that found someone, so a typo never lands in the list.
+        if (_recorded) return;
+        if (next case AsyncData<ApiResult<PlayerStats>>(:final value)) {
+          if (value.data.uid.isEmpty) return;
+          _recorded = true;
+          ref
+              .read(searchStateProvider.notifier)
+              .recordRecent(
+                PlayerRef(
+                  query: value.data.name,
+                  platform: widget.platform,
+                  uid: value.data.uid,
+                ),
+              );
+        }
+      },
+      fireImmediately: true,
+    );
     if (widget.searchByUid) {
       _uidSyncSub = ref.listenManual(
         searchPlayerProvider((
@@ -69,6 +96,7 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
   @override
   void dispose() {
     _uidSyncSub?.close();
+    _recentSub?.close();
     super.dispose();
   }
 

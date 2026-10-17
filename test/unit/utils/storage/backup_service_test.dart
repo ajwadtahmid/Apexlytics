@@ -52,6 +52,8 @@ void main() {
       PrefsKeys.onboardingVersion: false,
       PrefsKeys.uidSearchWarningShown: false,
       PrefsKeys.rankedInfoCoachMarkShown: false,
+      // A convenience list of lookups, not data worth carrying over.
+      PrefsKeys.recentSearches: false,
       // Legacy migration-only key; build() derives the per-mode keys from it.
       PrefsKeys.mapNotifyMinutes: false,
     };

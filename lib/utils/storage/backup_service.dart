@@ -27,6 +27,8 @@ const int _kBackupVersion = 3;
 
 const _excludedKeys = {
   PrefsKeys.uidSearchWarningShown,
+  // A convenience list of lookups, not user data worth carrying over.
+  PrefsKeys.recentSearches,
   // Device-local first-run state: a restored backup on a fresh install should
   // still show the orientation tour once, and shouldn't suppress it elsewhere.
   PrefsKeys.onboardingVersion,

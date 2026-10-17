@@ -32,6 +32,9 @@ class PrefsKeys {
 
   static const defaultTab = 'default_tab';
   static const searchFavorites = 'search_favorites';
+
+  /// The last few players looked up, newest first. Device-only: not backed up.
+  static const recentSearches = 'recent_searches';
   static const uidSearchWarningShown = 'uid_search_warning_shown';
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
