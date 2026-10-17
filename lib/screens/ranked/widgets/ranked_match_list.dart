@@ -42,6 +42,7 @@ class _RankedMatchListState extends State<RankedMatchList> {
       matches: _visible,
       onRefresh: widget.onRefresh,
       emptyLabel: 'No games in this filter',
+      selectable: true,
       grouping: _grouping,
       // The whole period, not the filtered view: a legend's average shouldn't
       // shrink because the list is filtered to one map.

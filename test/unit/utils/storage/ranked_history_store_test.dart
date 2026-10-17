@@ -1849,6 +1849,44 @@ void main() {
       expect(cells.single.games, 2);
     });
 
+    test('setExcludedFor changes only the named games, in one go', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final games = [for (var i = 0; i < 4; i++) match('1', 100 + i * 1000)];
+      await store.upsertAll('1', games);
+
+      final changed = await store.setExcludedFor([
+        games[0].id,
+        games[1].id,
+        'not-a-real-id',
+      ], true);
+
+      expect(changed, 2);
+      final byId = {for (final m in await store.getAll('1')) m.id: m};
+      expect(byId[games[0].id]!.excluded, isTrue);
+      expect(byId[games[1].id]!.excluded, isTrue);
+      expect(byId[games[2].id]!.excluded, isFalse);
+
+      expect(await store.setExcludedFor([games[0].id], false), 1);
+      expect(
+        (await store.getAll('1')).firstWhere((m) => m.id == games[0].id).excluded,
+        isFalse,
+      );
+      expect(await store.setExcludedFor(const [], true), 0);
+    });
+
+    test('setExcludedFor copes with more ids than one statement allows', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      final games = [for (var i = 0; i < 620; i++) match('1', 100 + i * 1000)];
+      await store.upsertAll('1', games);
+
+      final changed = await store.setExcludedFor(games.map((m) => m.id), true);
+
+      expect(changed, 620);
+      expect((await store.getAll('1')).every((m) => m.excluded), isTrue);
+    });
+
     test('empty scope returns the empty summary', () async {
       final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
       addTearDown(store.close);

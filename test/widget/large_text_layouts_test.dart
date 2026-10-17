@@ -7,6 +7,8 @@ import 'package:apexlytics/providers/proxy_health_provider.dart';
 import 'package:apexlytics/screens/home/server_status_page.dart';
 import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
+import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
+import 'package:apexlytics/screens/ranked/widgets/match_history_list.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_best_legend_per_map.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_highlight_cards.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_rp_chart.dart';
@@ -185,6 +187,47 @@ void main() {
       tester,
       RankedBestLegendPerMap(cells: cells, currentMapName: 'Storm Point'),
     );
+    expectNoOverflow();
+  });
+
+  testWidgets('the History selection bar', (tester) async {
+    final games = [buildMatch(), buildMatch(start: 1782091000)];
+    await pump(
+      tester,
+      SizedBox(
+        height: 700,
+        child: MatchHistoryList(
+          matches: games,
+          onRefresh: () async {},
+          selectable: true,
+        ),
+      ),
+    );
+    await tester.longPress(find.text('Axle').first);
+    await tester.pump();
+
+    expect(find.text('1 selected'), findsOneWidget);
+    expectNoOverflow();
+  });
+
+  testWidgets('the History filter sheet', (tester) async {
+    await pump(
+      tester,
+      Builder(
+        builder: (context) => TextButton(
+          onPressed: () => showHistoryFilterSheet(
+            context,
+            filter: const HistoryFilter(),
+            pool: [buildMatch()],
+            onChanged: (_) {},
+          ),
+          child: const Text('open'),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
     expectNoOverflow();
   });
 }

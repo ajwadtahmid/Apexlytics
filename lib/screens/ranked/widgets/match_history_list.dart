@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/history_collapse_provider.dart';
+import '../../../providers/ranked_provider.dart';
+import '../../../utils/notifications.dart';
 import '../../../utils/formatting/format.dart'
     show
         formatDuration,
@@ -75,6 +77,10 @@ class MatchHistoryList extends ConsumerStatefulWidget {
   /// Whether to show break rows; false when the list can't see the whole history.
   final bool showBreaks;
 
+  /// Lets a long press start picking several games to exclude or include at
+  /// once. Off for lists that hold only part of a scope.
+  final bool selectable;
+
   const MatchHistoryList({
     super.key,
     required this.matches,
@@ -87,6 +93,7 @@ class MatchHistoryList extends ConsumerStatefulWidget {
     this.collapseScope = 'history',
     this.sessionPool,
     this.showBreaks = true,
+    this.selectable = false,
   });
 
   @override
@@ -118,6 +125,10 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
   int _pageLimit = kHistoryPageSize;
   final _scrollController = ScrollController();
 
+  /// Ids picked for a bulk action. Empty means no selection is under way.
+  final Set<String> _selected = {};
+  bool _applying = false;
+
   // Flattened list, rebuilt only when matches, page limit or grouping change.
   List<RankedMatch>? _builtFrom;
   List<RankedMatch>? _builtPool;
@@ -144,6 +155,10 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
     if (widget.grouping != old.grouping ||
         (changed && !historyGrewAtFront(old.matches, widget.matches))) {
       _pageLimit = kHistoryPageSize;
+    }
+    if (_selected.isNotEmpty) {
+      final present = {for (final m in widget.matches) m.id};
+      _selected.removeWhere((id) => !present.contains(id));
     }
   }
 
@@ -187,6 +202,30 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
       }
     }
     return sections;
+  }
+
+  void _toggleSelected(RankedMatch m) => setState(() {
+    if (!_selected.remove(m.id)) _selected.add(m.id);
+  });
+
+  Future<void> _applyExclusion(bool excluded) async {
+    if (_applying || _selected.isEmpty) return;
+    setState(() => _applying = true);
+    try {
+      final count = await ref
+          .read(rankedHistoryStoreProvider)
+          .setExcludedFor(_selected, excluded);
+      invalidateMatchDerivedProviders(ref);
+      if (!mounted) return;
+      setState(_selected.clear);
+      context.showMessage(
+        '${excluded ? 'Excluded' : 'Included'} ${plural(count, 'game')}',
+      );
+    } catch (_) {
+      if (mounted) context.showMessage("Couldn't update those games.");
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
   }
 
   Future<void> _openDetail(List<RankedMatch> ordered, RankedMatch m) async {
@@ -244,7 +283,19 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
 
     return Column(
       children: [
-        ?widget.header,
+        if (_selected.isNotEmpty)
+          _SelectionBar(
+            count: _selected.length,
+            busy: _applying,
+            onClose: () => setState(_selected.clear),
+            onSelectAll: () => setState(
+              () => _selected.addAll(widget.matches.map((m) => m.id)),
+            ),
+            onExclude: () => _applyExclusion(true),
+            onInclude: () => _applyExclusion(false),
+          )
+        else
+          ?widget.header,
         Expanded(
           child: RefreshIndicator(
             color: AppTheme.accent,
@@ -283,6 +334,10 @@ class _MatchHistoryListState extends ConsumerState<MatchHistoryList> {
                                 collapseScope: widget.collapseScope,
                                 ordered: _ordered,
                                 onOpen: _openDetail,
+                                selected: _selected,
+                                onToggleSelected: widget.selectable
+                                    ? _toggleSelected
+                                    : null,
                               ),
                           ],
                         ),
@@ -303,11 +358,17 @@ class _SectionSliver extends ConsumerWidget {
   final List<RankedMatch> ordered;
   final Future<void> Function(List<RankedMatch> ordered, RankedMatch m) onOpen;
 
+  /// Ids picked so far, and the toggle for one; null when picking is off.
+  final Set<String> selected;
+  final void Function(RankedMatch m)? onToggleSelected;
+
   const _SectionSliver({
     required this.section,
     required this.collapseScope,
     required this.ordered,
     required this.onOpen,
+    required this.selected,
+    required this.onToggleSelected,
   });
 
   @override
@@ -364,7 +425,15 @@ class _SectionSliver extends ConsumerWidget {
               ),
               final MatchItem m => _MatchRow(
                 match: m.match,
-                onTap: () => onOpen(ordered, m.match),
+                selecting: selected.isNotEmpty,
+                selected: selected.contains(m.match.id),
+                // While picking, a tap picks; otherwise it opens the detail.
+                onTap: () => selected.isNotEmpty && onToggleSelected != null
+                    ? onToggleSelected!(m.match)
+                    : onOpen(ordered, m.match),
+                onLongPress: onToggleSelected == null
+                    ? null
+                    : () => onToggleSelected!(m.match),
               ),
               _ => const SizedBox.shrink(),
             },
@@ -593,10 +662,7 @@ class _SessionStats extends StatelessWidget {
       children: [
         Text.rich(value, maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 1),
-        Text(
-          label,
-          style: AppTheme.captionSmall,
-        ),
+        Text(label, style: AppTheme.captionSmall),
       ],
     ),
   );
@@ -690,7 +756,16 @@ class _SessionBreak extends StatelessWidget {
 class _MatchRow extends StatelessWidget {
   final RankedMatch match;
   final VoidCallback onTap;
-  const _MatchRow({required this.match, required this.onTap});
+  final VoidCallback? onLongPress;
+  final bool selecting;
+  final bool selected;
+  const _MatchRow({
+    required this.match,
+    required this.onTap,
+    this.onLongPress,
+    this.selecting = false,
+    this.selected = false,
+  });
 
   static Widget _tagged(List<MatchTagNote> notes, Widget child) {
     if (notes.isEmpty) return child;
@@ -721,76 +796,151 @@ class _MatchRow extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      child: Opacity(
-        opacity: match.countsTowardStats ? 1 : 0.45,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                child: SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: LegendAssetImage(
-                    imageKey: legendImageKey(match.legend),
-                    displayName: match.legend,
-                    fallbackFontSize: 16,
+      child: Ink(
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.accent.withAlpha(30) : null,
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        ),
+        child: Opacity(
+          opacity: match.countsTowardStats ? 1 : 0.45,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                if (selecting) ...[
+                  Icon(
+                    selected
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    size: 20,
+                    color: selected ? AppTheme.accent : AppTheme.muted,
+                  ),
+                  const SizedBox(width: AppTheme.sm),
+                ],
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  child: SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: LegendAssetImage(
+                      imageKey: legendImageKey(match.legend),
+                      displayName: match.legend,
+                      fallbackFontSize: 16,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      match.legend,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '${battleRoyaleMapName(match.mapKey)} · ${timeAgo(match.endTime)}',
-                      style: AppTheme.caption,
-                    ),
-                  ],
-                ),
-              ),
-              // Long-press explains the flags; the row's tap still opens the
-              // sheet, which spells them out too.
-              _tagged(
-                notes,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    tagRow,
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (match.isEdited) ...[
-                          const EditedTag(),
-                          const SizedBox(width: 6),
-                        ],
-                        Text(
-                          // An em dash marks a stat upstream never reported,
-                          // which is not the same as a scoreless game.
-                          '${match.kills ?? kNoReading} K · '
-                          '${formatNumberOrNone(match.damage)} dmg',
-                          style: AppTheme.captionSmall,
+                const SizedBox(width: AppTheme.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        match.legend,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      Text(
+                        '${battleRoyaleMapName(match.mapKey)} · ${timeAgo(match.endTime)}',
+                        style: AppTheme.caption,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                // Long-press explains the flags; the row's tap still opens the
+                // sheet, which spells them out too.
+                _tagged(
+                  notes,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      tagRow,
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (match.isEdited) ...[
+                            const EditedTag(),
+                            const SizedBox(width: 6),
+                          ],
+                          Text(
+                            // An em dash marks a stat upstream never reported,
+                            // which is not the same as a scoreless game.
+                            '${match.kills ?? kNoReading} K · '
+                            '${formatNumberOrNone(match.damage)} dmg',
+                            style: AppTheme.captionSmall,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Selection bar ───────────────────────────────────────────────────────────
+
+/// Replaces the filter bar while games are being picked.
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final bool busy;
+  final VoidCallback onClose;
+  final VoidCallback onSelectAll;
+  final VoidCallback onExclude;
+  final VoidCallback onInclude;
+  const _SelectionBar({
+    required this.count,
+    required this.busy,
+    required this.onClose,
+    required this.onSelectAll,
+    required this.onExclude,
+    required this.onInclude,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget action(String label, VoidCallback onTap, {Color? color}) =>
+        TextButton(
+          onPressed: busy ? null : onTap,
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.xs),
+          ),
+          child: Text(label, style: TextStyle(color: color, fontSize: 13)),
+        );
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppTheme.surface2)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.xs),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.close, size: 20),
+            tooltip: 'Cancel selection',
+            onPressed: busy ? null : onClose,
+          ),
+          Expanded(
+            child: Text(
+              '$count selected',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          action('All', onSelectAll),
+          action('Exclude', onExclude, color: AppTheme.red),
+          action('Include', onInclude, color: AppTheme.green),
+        ],
       ),
     );
   }

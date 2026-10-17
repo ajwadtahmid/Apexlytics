@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/utils/theme.dart';
-import 'package:apexlytics/utils/ranked/ranked_aggregates.dart' show kSessionGap;
+import 'package:apexlytics/utils/ranked/ranked_aggregates.dart'
+    show kSessionGap;
 import 'package:apexlytics/screens/ranked/ranked_entity_history_screen.dart';
 import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_tags.dart';
@@ -220,6 +221,86 @@ void main() {
       expect(byLegend.apply([proper, lower, wraith]), [proper, lower]);
     });
 
+    test('a date range keeps whole local days, both ends included', () {
+      final today = DateTime.now();
+      DateTime day(int back) =>
+          DateTime(today.year, today.month, today.day - back);
+      final games = [
+        game(dayOffset: 0, slot: 1),
+        game(dayOffset: 1, slot: 1),
+        game(dayOffset: 2, slot: 1),
+        game(dayOffset: 5, slot: 1),
+      ];
+      final f = HistoryFilter(
+        dates: DateTimeRange(start: day(2), end: day(1)),
+      );
+
+      expect(f.apply(games), [games[1], games[2]]);
+      expect(f.activeCount, 1);
+    });
+
+    test('an RP range keeps ranked games inside it and drops casual ones', () {
+      final games = [
+        game(dayOffset: 0, slot: 5, rp: 50),
+        game(dayOffset: 0, slot: 4, rp: 20),
+        game(dayOffset: 0, slot: 3, rp: -10),
+        game(dayOffset: 0, slot: 2, rp: 0), // casual
+      ];
+      const all = HistoryFilter(mode: HistoryMode.all);
+
+      expect(all.copyWith(minRp: 20).apply(games), [games[0], games[1]]);
+      expect(all.copyWith(maxRp: 0).apply(games), [games[2]]);
+      expect(all.copyWith(minRp: -10, maxRp: 20).apply(games), [
+        games[1],
+        games[2],
+      ]);
+      expect(all.copyWith(minRp: 20).activeCount, 2);
+    });
+
+    test('clearRp drops both bounds before applying new ones', () {
+      final f = const HistoryFilter().copyWith(minRp: 10, maxRp: 40);
+      expect(f.copyWith(clearRp: true).hasRpRange, isFalse);
+      final moved = f.copyWith(clearRp: true, minRp: 30);
+      expect(moved.minRp, 30);
+      expect(moved.maxRp, isNull);
+    });
+
+    testWidgets('the sheet shows the RP range and a date preset', (
+      tester,
+    ) async {
+      var filter = const HistoryFilter();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showHistoryFilterSheet(
+                  context,
+                  filter: filter,
+                  pool: [game(dayOffset: 0, slot: 1)],
+                  onChanged: (f) => filter = f,
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DATE'), findsOneWidget);
+      expect(find.text('RP CHANGE (RANKED GAMES)'), findsOneWidget);
+      expect(find.text('Any'), findsWidgets);
+
+      await tester.tap(find.text('Last 7 days'));
+      await tester.pumpAndSettle();
+
+      expect(filter.dates, isNotNull);
+      expect(filter.dates!.end.difference(filter.dates!.start).inDays, 6);
+      expect(filter.activeCount, 1);
+    });
+
     testWidgets('the sheet offers one chip per map, not one per spelling', (
       tester,
     ) async {
@@ -254,6 +335,8 @@ void main() {
       expect(find.text('Axle'), findsOneWidget);
 
       // Choosing it finds both games.
+      await tester.ensureVisible(find.text('Olympus'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Olympus'));
       await tester.pump();
       expect(filter.apply(pool), hasLength(2));
@@ -311,9 +394,7 @@ void main() {
     });
 
     test('a hand-excluded match reads as left out of every stat', () {
-      final notes = matchTagNotes(
-        game(dayOffset: 0, slot: 1, excluded: true),
-      );
+      final notes = matchTagNotes(game(dayOffset: 0, slot: 1, excluded: true));
       expect(notes.single.label, 'Excluded');
       expect(notes.single.text, contains('every stat'));
     });
@@ -336,26 +417,30 @@ void main() {
     List<SessionHeaderItem> headers(List<HistoryItem> items) =>
         items.whereType<SessionHeaderItem>().toList();
 
-    test('a session that crosses midnight is one entry with a divider inside', () {
-      final day = DateTime(2025, 3, 10);
-      final games = newestFirst([
-        for (var i = 0; i < 10; i++) at(day.add(Duration(hours: 22, minutes: i * 12))),
-        at(DateTime(2025, 3, 11, 0, 5)),
-      ]);
-      final items = buildSessionItems(games);
+    test(
+      'a session that crosses midnight is one entry with a divider inside',
+      () {
+        final day = DateTime(2025, 3, 10);
+        final games = newestFirst([
+          for (var i = 0; i < 10; i++)
+            at(day.add(Duration(hours: 22, minutes: i * 12))),
+          at(DateTime(2025, 3, 11, 0, 5)),
+        ]);
+        final items = buildSessionItems(games);
 
-      expect(headers(items), hasLength(1));
-      expect(headers(items).single.games, 11);
-      final dividers = items.whereType<DayDividerItem>().toList();
-      expect(dividers, hasLength(1));
-      expect(dividers.single.later, DateTime(2025, 3, 11));
-      expect(dividers.single.earlier, day);
-      // Between the last game of the 10th and the first of the 11th.
-      final i = items.indexOf(dividers.single);
-      expect((items[i - 1] as MatchItem).match.startTime.toLocal().day, 11);
-      expect((items[i + 1] as MatchItem).match.startTime.toLocal().day, 10);
-      expect(headers(items).single.start.toLocal().day, 10);
-    });
+        expect(headers(items), hasLength(1));
+        expect(headers(items).single.games, 11);
+        final dividers = items.whereType<DayDividerItem>().toList();
+        expect(dividers, hasLength(1));
+        expect(dividers.single.later, DateTime(2025, 3, 11));
+        expect(dividers.single.earlier, day);
+        // Between the last game of the 10th and the first of the 11th.
+        final i = items.indexOf(dividers.single);
+        expect((items[i - 1] as MatchItem).match.startTime.toLocal().day, 11);
+        expect((items[i + 1] as MatchItem).match.startTime.toLocal().day, 10);
+        expect(headers(items).single.start.toLocal().day, 10);
+      },
+    );
 
     test('a gap over the session limit splits, one at the limit does not', () {
       final first = at(DateTime(2025, 3, 10, 10));
@@ -364,7 +449,10 @@ void main() {
         first.endTime.toLocal().add(kSessionGap + const Duration(seconds: 1)),
       );
 
-      expect(headers(buildSessionItems(newestFirst([first, atLimit]))), hasLength(1));
+      expect(
+        headers(buildSessionItems(newestFirst([first, atLimit]))),
+        hasLength(1),
+      );
 
       final items = buildSessionItems(newestFirst([first, pastLimit]));
       expect(headers(items), hasLength(2));
@@ -383,7 +471,9 @@ void main() {
       expect(headers(items), hasLength(3));
       expect(items.whereType<DayDividerItem>(), isEmpty);
       expect(items.whereType<SessionBreakItem>(), hasLength(2));
-      final i = items.indexWhere((x) => x is SessionHeaderItem && x.start.toLocal().day == 10);
+      final i = items.indexWhere(
+        (x) => x is SessionHeaderItem && x.start.toLocal().day == 10,
+      );
       expect(items[i - 1], isA<SessionBreakItem>());
     });
 
@@ -434,7 +524,10 @@ void main() {
         at(DateTime(2025, 3, 10, 14)),
       ]);
 
-      expect(buildSessionItems(games).whereType<SessionBreakItem>(), hasLength(1));
+      expect(
+        buildSessionItems(games).whereType<SessionBreakItem>(),
+        hasLength(1),
+      );
       final without = buildSessionItems(games, includeBreaks: false);
       expect(without.whereType<SessionBreakItem>(), isEmpty);
       // Only the break row goes: both sessions are still there.
@@ -457,8 +550,12 @@ void main() {
       final mid = at(DateTime(2025, 3, 10, 10, 20));
       final newer = at(DateTime(2025, 3, 10, 10, 40));
 
-      final before = headers(buildSessionItems(newestFirst([older, mid]))).single;
-      final after = headers(buildSessionItems(newestFirst([older, mid, newer]))).single;
+      final before = headers(
+        buildSessionItems(newestFirst([older, mid])),
+      ).single;
+      final after = headers(
+        buildSessionItems(newestFirst([older, mid, newer])),
+      ).single;
       expect(after.key, before.key);
     });
 
@@ -518,14 +615,18 @@ void main() {
     });
 
     test('a cut on a session boundary adds nothing', () {
-      expect(buildSessionItems(history, limit: 8).whereType<MatchItem>().length, 8);
+      expect(
+        buildSessionItems(history, limit: 8).whereType<MatchItem>().length,
+        8,
+      );
     });
   });
 
   group('MatchHistoryList', () {
     // The pinned title shows the span, e.g. "Oct 9 12:10 PM – 12:50 PM".
-    final firstSessionTitle =
-        find.textContaining(' – ', findRichText: true).first;
+    final firstSessionTitle = find
+        .textContaining(' – ', findRichText: true)
+        .first;
 
     // Eleven days of games, so the pinned headers have something to pin to.
     final matches = [
@@ -577,21 +678,24 @@ void main() {
       expect(find.text('Axle').evaluate().length, rowsBefore);
     });
 
-    testWidgets('each session shows its numbers as labelled columns, in full words '
-        'rather than a dotted line of abbreviations', (tester) async {
-      await pump(tester, null);
+    testWidgets(
+      'each session shows its numbers as labelled columns, in full words '
+      'rather than a dotted line of abbreviations',
+      (tester) async {
+        await pump(tester, null);
 
-      for (final label in ['Record', 'Avg RP', 'Kills', 'Damage']) {
-        expect(find.text(label), findsWidgets, reason: label);
-      }
-      // Today: three games, all wins (rich text, so searched as such).
-      expect(find.textContaining('3W', findRichText: true), findsWidgets);
-      expect(find.textContaining('3 games'), findsWidgets);
-      // The old header's "NET" label and average-damage figure are gone (the
-      // match rows below still show their own "dmg").
-      expect(find.text('NET'), findsNothing);
-      expect(find.textContaining('avg dmg'), findsNothing);
-    });
+        for (final label in ['Record', 'Avg RP', 'Kills', 'Damage']) {
+          expect(find.text(label), findsWidgets, reason: label);
+        }
+        // Today: three games, all wins (rich text, so searched as such).
+        expect(find.textContaining('3W', findRichText: true), findsWidgets);
+        expect(find.textContaining('3 games'), findsWidgets);
+        // The old header's "NET" label and average-damage figure are gone (the
+        // match rows below still show their own "dmg").
+        expect(find.text('NET'), findsNothing);
+        expect(find.textContaining('avg dmg'), findsNothing);
+      },
+    );
 
     testWidgets('collapsing a session keeps its record but drops the other '
         'columns', (tester) async {
@@ -613,7 +717,9 @@ void main() {
       expect(find.textContaining('3W', findRichText: true), findsWidgets);
     });
 
-    testWidgets('an auto-excluded match shows the Excluded tag', (tester) async {
+    testWidgets('an auto-excluded match shows the Excluded tag', (
+      tester,
+    ) async {
       final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
       await tester.pumpWidget(
         ProviderScope(
@@ -628,22 +734,25 @@ void main() {
       expect(find.byType(ExcludedTag), findsOneWidget);
     });
 
-    testWidgets('a match row groups thousands in its RP badge, like every other '
-        'RP figure', (tester) async {
-      final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: Scaffold(
-              body: MatchHistoryList(matches: reset, onRefresh: () async {}),
+    testWidgets(
+      'a match row groups thousands in its RP badge, like every other '
+      'RP figure',
+      (tester) async {
+        final reset = [game(dayOffset: 0, slot: 1, rp: -1500)];
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: Scaffold(
+                body: MatchHistoryList(matches: reset, onRefresh: () async {}),
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('-1,500 RP'), findsWidgets);
-      expect(find.text('-1500 RP'), findsNothing);
-    });
+        expect(find.text('-1,500 RP'), findsWidgets);
+        expect(find.text('-1500 RP'), findsNothing);
+      },
+    );
 
     testWidgets('the detail sheet explains an auto-excluded match', (
       tester,
@@ -715,9 +824,7 @@ void main() {
               w is Text &&
               (w.data ?? '')
                   .replaceAll('\u202f', ' ')
-                  .startsWith(
-                    'Mar 10, 2025 11:30 PM – Mar 11, 2025 12:20 AM',
-                  ),
+                  .startsWith('Mar 10, 2025 11:30 PM – Mar 11, 2025 12:20 AM'),
         ),
         findsOneWidget,
       );

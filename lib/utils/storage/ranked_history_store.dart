@@ -795,6 +795,32 @@ class RankedHistoryStore {
     return count > 0;
   }
 
+  /// Sets [RankedMatch.excluded] on every match in [ids] in one transaction,
+  /// so a failure leaves none of them changed. Ids that match no row are
+  /// skipped. Returns how many rows were found.
+  Future<int> setExcludedFor(Iterable<String> ids, bool excluded) async {
+    final all = ids.toSet().toList();
+    if (all.isEmpty) return 0;
+    final db = await _open();
+    return db.transaction((txn) async {
+      var found = 0;
+      // SQLite caps the number of bound variables in one statement.
+      for (var i = 0; i < all.length; i += 500) {
+        final chunk = all.sublist(
+          i,
+          i + 500 > all.length ? all.length : i + 500,
+        );
+        found += await txn.update(
+          table,
+          {'excluded': excluded ? 1 : 0},
+          where: 'id IN (${List.filled(chunk.length, '?').join(', ')})',
+          whereArgs: chunk,
+        );
+      }
+      return found;
+    });
+  }
+
   /// Match count per season id for [uid] (unclassified NULL rows omitted),
   /// including non-ranked games. Test-only — [rankedSeasonCounts] below is
   /// what actually drives the split picker in production; it additionally
