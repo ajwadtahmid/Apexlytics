@@ -194,104 +194,111 @@ class _CompactLegend extends StatelessWidget {
       ),
       child: SizedBox(
         height: cardHeight,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: portraitWidth,
-              child: LegendAssetImage(
-                imageKey: legendImageKey(breakdown.legend),
-                displayName: breakdown.legend,
-                fallbackFontSize: 20,
+        // The pill column is capped at a share of the card's width, so it sits
+        // flush right at normal sizes and only shrinks when text is large.
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: portraitWidth,
+                child: LegendAssetImage(
+                  imageKey: legendImageKey(breakdown.legend),
+                  displayName: breakdown.legend,
+                  fallbackFontSize: 20,
+                ),
               ),
-            ),
-            const SizedBox(width: AppTheme.sm),
-            Expanded(
-              // Same top and bottom inset as the pill column, so the name sits
-              // on the pill's line and the stats at the card's lower edge.
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // As tall as the pill, so the two centre on one line.
-                    SizedBox(
-                      height: pillHeight,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          breakdown.legend,
-                          style: const TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                // Same top and bottom inset as the pill column, so the name sits
+                // on the pill's line and the stats at the card's lower edge.
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // As tall as the pill, so the two centre on one line.
+                      SizedBox(
+                        height: pillHeight,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            breakdown.legend,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        children: [
-                          _HighlightStat(
-                            label: 'Total RP',
-                            value: formatSignedInt(breakdown.totalRp),
-                            color: AppTheme.signColor(breakdown.totalRp >= 0),
-                            compact: true,
-                          ),
-                          _HighlightStat(
-                            label: 'Avg Kills',
-                            value: formatAvgKills(breakdown.avgKills),
-                            compact: true,
-                          ),
-                          _HighlightStat(
-                            label: 'Avg Dmg',
-                            value: formatAvgDamage(breakdown.avgDamage),
-                            compact: true,
-                          ),
-                          _HighlightStat(
-                            label: 'Games',
-                            value: '${breakdown.games}',
-                            compact: true,
-                          ),
-                        ],
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          children: [
+                            _HighlightStat(
+                              label: 'Total RP',
+                              value: formatSignedInt(breakdown.totalRp),
+                              color: AppTheme.signColor(breakdown.totalRp >= 0),
+                              compact: true,
+                            ),
+                            _HighlightStat(
+                              label: 'Avg Kills',
+                              value: formatAvgKills(breakdown.avgKills),
+                              compact: true,
+                            ),
+                            _HighlightStat(
+                              label: 'Avg Dmg',
+                              value: formatAvgDamage(breakdown.avgDamage),
+                              compact: true,
+                            ),
+                            _HighlightStat(
+                              label: 'Games',
+                              value: '${breakdown.games}',
+                              compact: true,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: AppTheme.sm),
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  0,
-                  AppTheme.sm,
-                  AppTheme.sm + 2,
-                  AppTheme.sm,
+              const SizedBox(width: AppTheme.sm),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * 0.4,
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // The ranking metric, so the pill and the order agree.
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: RpPill.perGame(avgRp: breakdown.avgRpPerGame),
-                    ),
-                    const Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: AppTheme.muted,
-                    ),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    0,
+                    AppTheme.sm,
+                    AppTheme.sm + 2,
+                    AppTheme.sm,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // The ranking metric, so the pill and the order agree.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: RpPill.perGame(avgRp: breakdown.avgRpPerGame),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: AppTheme.muted,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
