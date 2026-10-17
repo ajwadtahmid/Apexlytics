@@ -1,5 +1,7 @@
-import 'package:apexlytics/screens/ranked/widgets/ranked_slot_compare_chart.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_slot_chart.dart';
+import 'package:apexlytics/screens/ranked/widgets/compare_row.dart';
 import 'package:apexlytics/utils/ranked/slot_compare.dart';
+import 'package:apexlytics/utils/theme.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,12 +29,8 @@ void main() {
   final a = [_s(12, 4, -8), _s(21, 6, 30)];
   final b = [_s(21, 5, 5), _s(23, 8, 40)];
 
-  Widget hours() => RankedSlotCompareChart.hours(
-    nameA: 'Split 1',
-    nameB: 'Split 2',
-    a: a,
-    b: b,
-  );
+  Widget hours() =>
+      RankedSlotChart.hours(nameA: 'Split 1', nameB: 'Split 2', a: a, b: b);
 
   testWidgets('the axis covers the hours played, noon to 11 PM here, and '
       'the two splits line up', (tester) async {
@@ -53,7 +51,7 @@ void main() {
   testWidgets('a late night runs across midnight on one axis', (tester) async {
     await pump(
       tester,
-      RankedSlotCompareChart.hours(
+      RankedSlotChart.hours(
         nameA: 'Split 1',
         nameB: 'Split 2',
         a: [_s(22, 4, 10), _s(23, 4, 10)],
@@ -102,7 +100,7 @@ void main() {
   testWidgets('days run Monday to Sunday on one axis', (tester) async {
     await pump(
       tester,
-      RankedSlotCompareChart.days(
+      RankedSlotChart.days(
         nameA: 'Split 1',
         nameB: 'Split 2',
         a: [_s(6, 5, 20), _s(7, 4, -4)],
@@ -119,7 +117,7 @@ void main() {
   testWidgets('shows nothing when neither split has any games', (tester) async {
     await pump(
       tester,
-      RankedSlotCompareChart.days(
+      RankedSlotChart.days(
         nameA: 'Split 1',
         nameB: 'Split 2',
         a: const [],
@@ -129,4 +127,88 @@ void main() {
 
     expect(find.byType(BarChart), findsNothing);
   });
+
+  group('one period', () {
+    // Noon, 9 PM and 11 PM: a gain, a loss and a gain.
+    final played = [_s(12, 6, 30), _s(21, 5, -20), _s(23, 4, 8)];
+
+    Widget hoursOnly() => RankedSlotChart.hours(a: played);
+
+    testWidgets('has one bar a column, green for a gain and red for a loss', (
+      tester,
+    ) async {
+      await pump(tester, hoursOnly());
+
+      final groups = data(tester).barGroups;
+      expect(groups, hasLength(12)); // noon to 11 PM
+      expect(groups.every((g) => g.barRods.length == 1), isTrue);
+      expect(groups[0].barRods.single.color, AppTheme.green);
+      expect(groups[9].barRods.single.color, AppTheme.red);
+      expect(groups[11].barRods.single.color, AppTheme.green);
+    });
+
+    testWidgets('shows the hours played and no key or best and worst lines', (
+      tester,
+    ) async {
+      await pump(tester, hoursOnly());
+
+      expect(find.text('12 PM'), findsOneWidget);
+      expect(find.text('12 AM'), findsNothing);
+      expect(find.textContaining('Best hour'), findsNothing);
+      expect(find.textContaining('Weakest hour'), findsNothing);
+      expect(find.byType(CompareKey), findsNothing);
+    });
+
+    testWidgets('the switch shows RP per game, and loss hours go below zero', (
+      tester,
+    ) async {
+      await pump(tester, hoursOnly());
+
+      await tester.tap(find.text('RP / game'));
+      await tester.pump();
+
+      final groups = data(tester).barGroups;
+      expect(groups[0].barRods.single.toY, 5); // 30 over 6
+      expect(groups[9].barRods.single.toY, -4); // -20 over 5
+      expect(data(tester).minY, lessThan(-4));
+    });
+
+    testWidgets(
+      'fades an hour with too few games in the RP view, and says so',
+      (tester) async {
+        await pump(
+          tester,
+          RankedSlotChart.hours(a: [..._played(), _s(15, 2, 40)]),
+        );
+        expect(find.textContaining('Faded bars'), findsNothing);
+
+        await tester.tap(find.text('RP / game'));
+        await tester.pump();
+
+        final groups = data(tester).barGroups;
+        expect(
+          groups[3].barRods.single.color!.a,
+          lessThan(0.5),
+        ); // 3 PM: 2 games
+        expect(groups[0].barRods.single.color!.a, 1); // noon: 6 games
+        expect(find.text('Faded bars have under 3 games.'), findsOneWidget);
+      },
+    );
+
+    testWidgets('days show Monday to Sunday', (tester) async {
+      await pump(tester, RankedSlotChart.days(a: [_s(2, 5, 20), _s(6, 4, -8)]));
+
+      expect(data(tester).barGroups, hasLength(7));
+      expect(find.text('Mon'), findsOneWidget);
+      expect(find.text('Sun'), findsOneWidget);
+    });
+
+    testWidgets('one hour of play is not a chart', (tester) async {
+      await pump(tester, RankedSlotChart.hours(a: [_s(12, 6, 30)]));
+
+      expect(find.byType(BarChart), findsNothing);
+    });
+  });
 }
+
+List<Slot> _played() => [_s(12, 6, 30), _s(21, 5, -20), _s(23, 4, 8)];

@@ -547,6 +547,14 @@ class RankedSession {
   final int killsGames;
   final int damageGames;
 
+  /// Games that gained RP and games that lost it, so [wins] over
+  /// [wins] + [losses] is the win rate; a game that moved nothing is neither.
+  /// [totalLengthSecs] is the time the games themselves ran. All 0 when the
+  /// session wasn't built from matches.
+  final int wins;
+  final int losses;
+  final int totalLengthSecs;
+
   /// The matches in this session, newest first — drives the session drill-down.
   final List<RankedMatch> matches;
 
@@ -559,6 +567,9 @@ class RankedSession {
     required this.totalDamage,
     required this.killsGames,
     required this.damageGames,
+    this.wins = 0,
+    this.losses = 0,
+    this.totalLengthSecs = 0,
     required this.matches,
   });
 
@@ -621,8 +632,12 @@ List<RankedSession> sessionize(List<RankedMatch> ranked) {
   void flush() {
     bucket = bucket.reversed.toList(); // chronological
     var rp = 0, kills = 0, damage = 0, killsGames = 0, damageGames = 0;
+    var wins = 0, losses = 0, lengthSecs = 0;
     for (final m in bucket) {
       rp += m.effectiveRpChange;
+      if (m.effectiveRpChange > 0) wins++;
+      if (m.effectiveRpChange < 0) losses++;
+      lengthSecs += m.lengthSecs;
       final k = m.kills, d = m.damage;
       if (k != null) {
         kills += k;
@@ -648,6 +663,9 @@ List<RankedSession> sessionize(List<RankedMatch> ranked) {
         totalDamage: damage,
         killsGames: killsGames,
         damageGames: damageGames,
+        wins: wins,
+        losses: losses,
+        totalLengthSecs: lengthSecs,
         // bucket is chronological; expose newest-first for the drill-down list.
         matches: bucket.reversed.toList(),
       ),

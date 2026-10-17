@@ -36,6 +36,10 @@ class PrefsKeys {
   /// The last few players looked up, newest first. Device-only: not backed up.
   static const recentSearches = 'recent_searches';
   static const uidSearchWarningShown = 'uid_search_warning_shown';
+
+  /// How many sessions the Performance Trends page looks at (0 for all of
+  /// them). Device-only: not backed up.
+  static const trendSessionsShown = 'trend_sessions_shown';
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the

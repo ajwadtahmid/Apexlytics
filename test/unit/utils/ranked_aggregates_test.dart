@@ -418,6 +418,39 @@ void main() {
     expect(sessions[1].netRp, 80);
   });
 
+  test('sessionize counts wins and losses, and the time the games ran', () {
+    // +20 over 10 minutes, -15 over 20 minutes, no change over 5 minutes, and
+    // a game left out, which moved nothing.
+    final sessions = sessionize([
+      buildMatch(rp: 20, start: t0, length: 600),
+      buildMatch(rp: -15, start: t0 + 1000, length: 1200),
+      buildMatch(rp: 0, start: t0 + 2500, length: 300),
+      buildMatch(rp: 40, start: t0 + 3000, length: 100, excluded: true),
+    ]);
+
+    final s = sessions.single;
+    expect(s.wins, 1);
+    expect(s.losses, 1); // the draw and the excluded game are neither
+    expect(s.totalLengthSecs, 600 + 1200 + 300 + 100);
+    expect(s.games, 4);
+  });
+
+  test('a session built by hand has no wins, losses or game time', () {
+    final s = RankedSession(
+      start: DateTime(2026, 9, 1),
+      end: DateTime(2026, 9, 1, 1),
+      games: 3,
+      netRp: 10,
+      totalKills: 0,
+      totalDamage: 0,
+      killsGames: 0,
+      damageGames: 0,
+      matches: const [],
+    );
+
+    expect((s.wins, s.losses, s.totalLengthSecs), (0, 0, 0));
+  });
+
   test(
     "sessionize's end is the latest endTime, not the start-sorted last match's",
     () {

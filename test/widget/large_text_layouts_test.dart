@@ -5,12 +5,14 @@ import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/models/server_status.dart';
 import 'package:apexlytics/providers/proxy_health_provider.dart';
+import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/home/server_status_page.dart';
 import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_compare_tab.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_pick_rate_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_session_detail_screen.dart';
+import 'package:apexlytics/screens/ranked/ranked_time_breakdown_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_sessions_screen.dart';
 import 'package:apexlytics/screens/ranked/widgets/sessions_overview.dart';
 import 'package:apexlytics/screens/ranked/ranked_share_screens.dart';
@@ -23,7 +25,7 @@ import 'package:apexlytics/screens/ranked/widgets/ranked_entity_compare.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_best_legend_per_map.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_highlight_cards.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_rp_chart.dart';
-import 'package:apexlytics/screens/ranked/widgets/ranked_slot_compare_chart.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_slot_chart.dart';
 import 'package:apexlytics/screens/ranked/widgets/split_changes_card.dart';
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
@@ -32,6 +34,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers.dart';
 
@@ -294,13 +297,13 @@ void main() {
       tester,
       Column(
         children: [
-          RankedSlotCompareChart.hours(
+          RankedSlotChart.hours(
             nameA: 'Season 28 Split 1',
             nameB: 'Season 28 Split 2',
             a: a,
             b: b,
           ),
-          RankedSlotCompareChart.days(
+          RankedSlotChart.days(
             nameA: 'Season 28 Split 1',
             nameB: 'Season 28 Split 2',
             a: const [(slot: 2, games: 5, netRp: 40)],
@@ -423,6 +426,48 @@ void main() {
         home: RankedSessionDetailScreen(
           session: played,
           onRefresh: () async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expectNoOverflow();
+  });
+
+  testWidgets('the Performance Trends page', (tester) async {
+    final played = sessionize([
+      for (var s = 0; s < 12; s++)
+        for (var g = 0; g < 3; g++)
+          buildMatch(
+            rp: s < 6 ? -15 : 25,
+            start: 1782000000 + s * 6 * 3600 + g * 1500,
+          ),
+    ]);
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        child: MaterialApp(
+          builder: (context, app) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2.0)),
+            child: app!,
+          ),
+          home: RankedTimeBreakdownScreen(
+            hourBuckets: const [
+              HourBucket(hourLocal: 19, games: 14, netRp: 120),
+              HourBucket(hourLocal: 9, games: 12, netRp: -48),
+            ],
+            weekdayBuckets: const [
+              WeekdayBucket(weekday: 6, games: 14, netRp: 120),
+              WeekdayBucket(weekday: 1, games: 12, netRp: -48),
+            ],
+            sessions: played,
+          ),
         ),
       ),
     );

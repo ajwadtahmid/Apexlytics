@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../../utils/formatting/format.dart' show formatSigned, plural;
+import '../../../utils/ranked/ranked_aggregates.dart' show kMinGamesForInsight;
 import '../../../utils/ranked/slot_compare.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/segmented_capsule.dart';
@@ -14,19 +15,25 @@ String _hourLabel(int hour) {
 
 const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-/// Two periods' play by hour of day or day of week as paired bars on one axis,
-/// every hour or day in its own column so the two line up. A switch changes
-/// the bars between games played and RP per game; under them, where the best
-/// and weakest hour or day went.
-class RankedSlotCompareChart extends StatefulWidget {
+/// Play by hour of day or day of week as bars, every hour or day in its own
+/// column. A switch changes the bars between games played and RP per game.
+///
+/// With one period ([a] only), a bar is green where RP was gained and red where
+/// it was lost. With a second ([b], and the two names), the bars are paired on
+/// one axis so the periods line up, and under them goes where the best and
+/// weakest hour or day moved.
+///
+/// In the RP per game view, a bar for an hour or day with under
+/// [kMinGamesForInsight] games is faded, since a few games say little.
+class RankedSlotChart extends StatefulWidget {
   final String title;
 
   /// "hour" or "day", for the summary lines.
   final String what;
-  final String nameA;
-  final String nameB;
+  final String? nameA;
+  final String? nameB;
   final List<Slot> a;
-  final List<Slot> b;
+  final List<Slot>? b;
 
   /// The slots to chart, in order, one column each.
   final List<int> axis;
@@ -36,32 +43,34 @@ class RankedSlotCompareChart extends StatefulWidget {
   final bool Function(int index) labelled;
   final double barWidth;
 
-  const RankedSlotCompareChart({
+  const RankedSlotChart({
     super.key,
     required this.title,
     required this.what,
-    required this.nameA,
-    required this.nameB,
+    this.nameA,
+    this.nameB,
     required this.a,
-    required this.b,
+    this.b,
     required this.axis,
     required this.label,
     required this.labelled,
     required this.barWidth,
-  });
+  }) : assert(b == null || (nameA != null && nameB != null));
 
-  /// Only the hours either period played, so a player who is never on at night
-  /// doesn't get a blank stretch.
-  factory RankedSlotCompareChart.hours({
+  /// Only the hours played, so a player who is never on at night doesn't get a
+  /// blank stretch.
+  factory RankedSlotChart.hours({
     Key? key,
-    required String nameA,
-    required String nameB,
+    String? nameA,
+    String? nameB,
     required List<Slot> a,
-    required List<Slot> b,
+    List<Slot>? b,
   }) {
-    final axis = hourAxis([...a, ...b].map((s) => s.slot));
+    final axis = hourAxis([...a, ...?b].map((s) => s.slot));
     final n = axis.length;
-    return RankedSlotCompareChart(
+    // Wider bars when there are fewer columns to fit.
+    final room = 280 / n - 3;
+    return RankedSlotChart(
       key: key,
       title: 'Performance by Hour',
       what: 'hour',
@@ -72,18 +81,19 @@ class RankedSlotCompareChart extends StatefulWidget {
       axis: axis,
       label: _hourLabel,
       labelled: (i) => i % (n > 12 ? 3 : (n > 6 ? 2 : 1)) == 0,
-      // Wider bars when there are fewer columns to fit.
-      barWidth: ((280 / n - 3) / 2).clamp(4, 11).toDouble(),
+      barWidth: (b == null ? room : room / 2)
+          .clamp(4, b == null ? 14 : 11)
+          .toDouble(),
     );
   }
 
-  factory RankedSlotCompareChart.days({
+  factory RankedSlotChart.days({
     Key? key,
-    required String nameA,
-    required String nameB,
+    String? nameA,
+    String? nameB,
     required List<Slot> a,
-    required List<Slot> b,
-  }) => RankedSlotCompareChart(
+    List<Slot>? b,
+  }) => RankedSlotChart(
     key: key,
     title: 'Performance by Day',
     what: 'day',
@@ -94,40 +104,61 @@ class RankedSlotCompareChart extends StatefulWidget {
     axis: const [1, 2, 3, 4, 5, 6, 7],
     label: (d) => _weekdays[d - 1],
     labelled: (_) => true,
-    barWidth: 11,
+    barWidth: b == null ? 22 : 11,
   );
 
   @override
-  State<RankedSlotCompareChart> createState() => _RankedSlotCompareChartState();
+  State<RankedSlotChart> createState() => _RankedSlotChartState();
 }
 
-class _RankedSlotCompareChartState extends State<RankedSlotCompareChart> {
+class _RankedSlotChartState extends State<RankedSlotChart> {
   bool _perGame = false;
 
   @override
   Widget build(BuildContext context) {
     final w = widget;
-    if (w.a.isEmpty && w.b.isEmpty) return const SizedBox.shrink();
+    final other = w.b;
+    final paired = other != null;
+    // One hour or day of play is no chart.
+    if (paired ? w.a.isEmpty && other.isEmpty : w.a.length < 2) {
+      return const SizedBox.shrink();
+    }
 
     final byA = {for (final s in w.a) s.slot: s};
-    final byB = {for (final s in w.b) s.slot: s};
+    final byB = {for (final s in other ?? const <Slot>[]) s.slot: s};
     final slots = w.axis;
 
     double value(Slot? s) => s == null || s.games == 0
         ? 0
         : (_perGame ? s.netRp / s.games : s.games.toDouble());
     final values = [
-      for (final i in slots) ...[value(byA[i]), value(byB[i])],
+      for (final i in slots) ...[value(byA[i]), if (paired) value(byB[i])],
     ];
     final top = values.reduce((x, y) => x > y ? x : y);
     final bottom = values.reduce((x, y) => x < y ? x : y);
     final maxY = top <= 0 ? 1.0 : top * 1.25;
     final minY = _perGame && bottom < 0 ? bottom * 1.25 : 0.0;
 
-    final verdicts = [
-      for (final best in [true, false])
-        slotVerdict(what: w.what, label: w.label, a: w.a, b: w.b, best: best),
-    ].whereType<String>().toList();
+    // Few games say little, so those bars are faded in the RP per game view.
+    bool thin(Slot? s) => s != null && s.games < kMinGamesForInsight;
+    final anyThin = _perGame && [...w.a, ...?other].any(thin);
+    Color shade(Color c, Slot? s) =>
+        _perGame && thin(s) ? c.withValues(alpha: 0.4) : c;
+    Color side(Slot? s) =>
+        s != null && s.netRp < 0 ? AppTheme.red : AppTheme.green;
+
+    final verdicts = !paired
+        ? const <String>[]
+        : [
+            for (final best in [true, false])
+              slotVerdict(
+                what: w.what,
+                label: w.label,
+                a: w.a,
+                b: other,
+                best: best,
+              ),
+          ].whereType<String>().toList();
 
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
@@ -144,18 +175,20 @@ class _RankedSlotCompareChartState extends State<RankedSlotCompareChart> {
             ),
           ),
           const SizedBox(height: AppTheme.md),
-          Row(
-            children: [
-              Flexible(
-                child: CompareKey(color: kCompareColorA, name: w.nameA),
-              ),
-              const SizedBox(width: AppTheme.md),
-              Flexible(
-                child: CompareKey(color: kCompareColorB, name: w.nameB),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppTheme.md),
+          if (paired) ...[
+            Row(
+              children: [
+                Flexible(
+                  child: CompareKey(color: kCompareColorA, name: w.nameA!),
+                ),
+                const SizedBox(width: AppTheme.md),
+                Flexible(
+                  child: CompareKey(color: kCompareColorB, name: w.nameB!),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppTheme.md),
+          ],
           SizedBox(
             height: 150,
             child: BarChart(
@@ -170,14 +203,18 @@ class _RankedSlotCompareChartState extends State<RankedSlotCompareChart> {
                     getTooltipColor: (_) => AppTheme.surface2,
                     getTooltipItem: (group, _, rod, _) {
                       final slot = slots[group.x];
-                      String line(String name, Slot? s) => s == null
-                          ? '$name: no games'
-                          : '$name: ${plural(s.games, 'game')} · '
-                                '${formatSigned(s.netRp / s.games)} RP/game';
+                      String line(String? name, Slot? s) {
+                        final who = name == null ? '' : '$name: ';
+                        return s == null
+                            ? '${who}no games'
+                            : '$who${plural(s.games, 'game')} · '
+                                  '${formatSigned(s.netRp / s.games)} RP/game';
+                      }
+
                       return BarTooltipItem(
                         '${w.label(slot)}\n'
-                        '${line(w.nameA, byA[slot])}\n'
-                        '${line(w.nameB, byB[slot])}',
+                        '${line(w.nameA, byA[slot])}'
+                        '${paired ? '\n${line(w.nameB, byB[slot])}' : ''}',
                         const TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 11,
@@ -231,22 +268,33 @@ class _RankedSlotCompareChartState extends State<RankedSlotCompareChart> {
                       barRods: [
                         BarChartRodData(
                           toY: value(byA[slot]),
-                          color: kCompareColorA,
+                          color: shade(
+                            paired ? kCompareColorA : side(byA[slot]),
+                            byA[slot],
+                          ),
                           width: w.barWidth,
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        BarChartRodData(
-                          toY: value(byB[slot]),
-                          color: kCompareColorB,
-                          width: w.barWidth,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+                        if (paired)
+                          BarChartRodData(
+                            toY: value(byB[slot]),
+                            color: shade(kCompareColorB, byB[slot]),
+                            width: w.barWidth,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                       ],
                     ),
                 ],
               ),
             ),
           ),
+          if (anyThin) ...[
+            const SizedBox(height: AppTheme.sm),
+            const Text(
+              'Faded bars have under $kMinGamesForInsight games.',
+              style: AppTheme.captionSmall,
+            ),
+          ],
           if (verdicts.isNotEmpty) ...[
             const SizedBox(height: AppTheme.md),
             for (final v in verdicts)

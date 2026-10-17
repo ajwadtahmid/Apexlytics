@@ -54,6 +54,8 @@ void main() {
       PrefsKeys.rankedInfoCoachMarkShown: false,
       // A convenience list of lookups, not data worth carrying over.
       PrefsKeys.recentSearches: false,
+      // A view choice for this device, set again in a moment if it is lost.
+      PrefsKeys.trendSessionsShown: false,
       // Legacy migration-only key; build() derives the per-mode keys from it.
       PrefsKeys.mapNotifyMinutes: false,
     };

@@ -21,7 +21,7 @@ import '../../widgets/segmented_capsule.dart';
 import '../../widgets/surface_card.dart';
 import 'widgets/compare_row.dart';
 import 'widgets/ranked_entity_compare.dart';
-import 'widgets/ranked_slot_compare_chart.dart';
+import 'widgets/ranked_slot_chart.dart';
 import 'widgets/split_changes_card.dart';
 
 /// A tappable row that opens the comparison page.
@@ -386,14 +386,14 @@ class _CompareBody extends ConsumerWidget {
           mapsB: b.maps,
         ),
         const SizedBox(height: AppTheme.md),
-        RankedSlotCompareChart.hours(
+        RankedSlotChart.hours(
           nameA: bucketA.displayName,
           nameB: bucketB.displayName,
           a: hourSlots(a.timeOfDay),
           b: hourSlots(b.timeOfDay),
         ),
         const SizedBox(height: AppTheme.md),
-        RankedSlotCompareChart.days(
+        RankedSlotChart.days(
           nameA: bucketA.displayName,
           nameB: bucketB.displayName,
           a: weekdaySlots(a.dayOfWeek),
