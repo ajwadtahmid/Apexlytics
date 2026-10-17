@@ -7,6 +7,7 @@ import 'package:apexlytics/providers/proxy_health_provider.dart';
 import 'package:apexlytics/screens/home/server_status_page.dart';
 import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_best_legend_per_map.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_highlight_cards.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_rp_chart.dart';
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
@@ -171,6 +172,18 @@ void main() {
         mapMatchesFor: (_) async => const [],
         onRefresh: () async {},
       ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the best legend per map rows', (tester) async {
+    final cells = legendMapBreakdowns([
+      for (var i = 0; i < 5; i++)
+        buildMatch(legend: 'Mad Maggie', map: 'storm_point_rotation', rp: 40),
+    ]);
+    await pump(
+      tester,
+      RankedBestLegendPerMap(cells: cells, currentMapName: 'Storm Point'),
     );
     expectNoOverflow();
   });

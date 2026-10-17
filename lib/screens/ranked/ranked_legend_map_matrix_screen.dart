@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/ranked_match.dart';
+import '../../providers/map_provider.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatting/format.dart' show formatSigned;
 import '../../widgets/nav_entry_card.dart';
+import 'widgets/ranked_best_legend_per_map.dart';
 
 /// Self-contained entry point for the Legend × Map matrix: a single tappable
 /// row that pushes the full-screen breakdown. The only thing a caller needs to
@@ -18,10 +21,10 @@ class RankedLegendMapMatrixEntry extends StatelessWidget {
       icon: Icons.grid_view_rounded,
       title: 'Legend × Map',
       onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => RankedLegendMapMatrixScreen(matches: matches),
-          ),
+        MaterialPageRoute(
+          builder: (_) => RankedLegendMapMatrixScreen(matches: matches),
         ),
+      ),
     );
   }
 }
@@ -29,16 +32,28 @@ class RankedLegendMapMatrixEntry extends StatelessWidget {
 /// Full-screen grid of games/avg RP per (legend, map) pair for this scope.
 /// Rows and columns are only the legends/maps that were actually played —
 /// see [legendMapBreakdowns] for the exact inclusion rule.
-class RankedLegendMapMatrixScreen extends StatelessWidget {
+class RankedLegendMapMatrixScreen extends ConsumerWidget {
   final List<RankedMatch> matches;
   const RankedLegendMapMatrixScreen({super.key, required this.matches});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cells = legendMapBreakdowns(matches);
+    // Without the live rotation (loading or offline) nothing is marked.
+    final current = ref
+        .watch(mapRotationProvider)
+        .asData
+        ?.value
+        .data
+        .rankedCurrent
+        .map;
     return Scaffold(
       appBar: AppBar(title: const Text('Legend × Map')),
       body: SafeArea(
-        child: RankedLegendMapMatrixView(cells: legendMapBreakdowns(matches)),
+        child: RankedLegendMapMatrixView(
+          cells: cells,
+          header: RankedBestLegendPerMap(cells: cells, currentMapName: current),
+        ),
       ),
     );
   }
@@ -49,17 +64,27 @@ class RankedLegendMapMatrixScreen extends StatelessWidget {
 /// a split that may not be the one currently loaded).
 class RankedLegendMapMatrixView extends StatelessWidget {
   final List<LegendMapCell> cells;
-  const RankedLegendMapMatrixView({super.key, required this.cells});
+
+  /// Shown above the grid, inside the same scroll view.
+  final Widget? header;
+  const RankedLegendMapMatrixView({
+    super.key,
+    required this.cells,
+    this.header,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return cells.isEmpty ? const _EmptyState() : _Matrix(cells: cells);
+    return cells.isEmpty
+        ? const _EmptyState()
+        : _Matrix(cells: cells, header: header);
   }
 }
 
 class _Matrix extends StatelessWidget {
   final List<LegendMapCell> cells;
-  const _Matrix({required this.cells});
+  final Widget? header;
+  const _Matrix({required this.cells, this.header});
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +116,7 @@ class _Matrix extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          ?header,
           const Padding(
             padding: EdgeInsets.only(bottom: AppTheme.md),
             child: Text(
@@ -137,7 +163,10 @@ class _HeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppTheme.xs, vertical: AppTheme.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.xs,
+        vertical: AppTheme.sm,
+      ),
       child: Text(
         label,
         textAlign: TextAlign.center,
@@ -158,7 +187,10 @@ class _LegendCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppTheme.sm, horizontal: AppTheme.xs),
+      padding: const EdgeInsets.symmetric(
+        vertical: AppTheme.sm,
+        horizontal: AppTheme.xs,
+      ),
       child: Text(
         legend,
         style: const TextStyle(
@@ -180,19 +212,20 @@ class _ValueCell extends StatelessWidget {
     final c = cell;
     if (c == null) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppTheme.sm, horizontal: AppTheme.xs),
-        child: Center(
-          child: Text(
-            '–',
-            style: AppTheme.caption,
-          ),
+        padding: EdgeInsets.symmetric(
+          vertical: AppTheme.sm,
+          horizontal: AppTheme.xs,
         ),
+        child: Center(child: Text('–', style: AppTheme.caption)),
       );
     }
     final positive = c.avgRpPerGame >= 0;
     final color = AppTheme.signColor(positive);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppTheme.xs, horizontal: AppTheme.xs),
+      padding: const EdgeInsets.symmetric(
+        vertical: AppTheme.xs,
+        horizontal: AppTheme.xs,
+      ),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(

@@ -447,6 +447,56 @@ List<LegendMapCell> legendMapBreakdowns(List<RankedMatch> matches) {
   ];
 }
 
+/// One map's record and the legend that does best on it.
+class MapLegendInsight {
+  final String mapName;
+  final int games;
+  final int totalRp;
+
+  /// The legend with the highest RP per game on this map among those with at
+  /// least [kMinGamesForInsight] games there; null when none has played enough.
+  final LegendMapCell? best;
+
+  const MapLegendInsight({
+    required this.mapName,
+    required this.games,
+    required this.totalRp,
+    required this.best,
+  });
+
+  double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
+
+  /// Whether the map's own record has enough games behind it to be shown.
+  bool get hasRecord => games >= kMinGamesForInsight;
+}
+
+/// For each map in [cells], the player's record there and their best legend,
+/// most-played map first. Ties on RP per game go to the legend with more games.
+List<MapLegendInsight> mapLegendInsights(List<LegendMapCell> cells) {
+  final byMap = <String, List<LegendMapCell>>{};
+  for (final c in cells) {
+    byMap.putIfAbsent(c.mapName, () => []).add(c);
+  }
+  final insights = [
+    for (final e in byMap.entries)
+      MapLegendInsight(
+        mapName: e.key,
+        games: e.value.fold(0, (a, c) => a + c.games),
+        totalRp: e.value.fold(0, (a, c) => a + c.totalRp),
+        best: (e.value.where((c) => c.games >= kMinGamesForInsight).toList()
+              ..sort((a, b) {
+                final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
+                return byRp != 0 ? byRp : b.games.compareTo(a.games);
+              }))
+            .firstOrNull,
+      ),
+  ]..sort((a, b) {
+      final g = b.games.compareTo(a.games);
+      return g != 0 ? g : a.mapName.compareTo(b.mapName);
+    });
+  return insights;
+}
+
 // ── Session detection ───────────────────────────────────────────────────────
 
 class RankedSession {
