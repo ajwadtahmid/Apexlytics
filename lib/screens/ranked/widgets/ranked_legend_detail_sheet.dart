@@ -47,6 +47,32 @@ Future<void> showLegendDetailSheet(
   );
 }
 
+/// Opens a legend's [games] (newest first) as a history page, with a toggle to
+/// group them by map.
+void openLegendHistory(
+  BuildContext context,
+  LegendBreakdown breakdown,
+  List<RankedMatch> games,
+  Future<void> Function() onRefresh, {
+  List<RankedMatch>? sessionPool,
+}) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => RankedEntityHistoryScreen(
+        title: breakdown.legend,
+        subtitle:
+            '${plural(breakdown.games, 'ranked game')} · '
+            '${formatSigned(breakdown.avgRpPerGame)} RP/game',
+        matches: games,
+        onRefresh: onRefresh,
+        groupLabel: 'map',
+        grouping: MatchGrouping.byMap,
+        sessionPool: sessionPool,
+      ),
+    ),
+  );
+}
+
 /// Detail sheet for a legend: the full stat set the Legends tab shows per
 /// row, plus a "View all history" button that resolves this legend's matches
 /// and pushes the same [RankedEntityHistoryScreen] drill-down the Legends tab
@@ -91,20 +117,12 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
     final games = [...(await _loaded).matches]
       ..sort((a, b) => b.endTime.compareTo(a.endTime));
     if (!context.mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RankedEntityHistoryScreen(
-          title: breakdown.legend,
-          subtitle:
-              '${plural(breakdown.games, 'ranked game')} · '
-              '${formatSigned(breakdown.avgRpPerGame)} RP/game',
-          matches: games,
-          onRefresh: onRefresh,
-          groupLabel: 'map',
-          grouping: MatchGrouping.byMap,
-          sessionPool: widget.sessionPool,
-        ),
-      ),
+    openLegendHistory(
+      context,
+      breakdown,
+      games,
+      onRefresh,
+      sessionPool: widget.sessionPool,
     );
   }
 

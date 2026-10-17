@@ -1,11 +1,17 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../models/ranked_match.dart';
+import '../../utils/ranked/label_placement.dart';
+import '../../utils/ranked/pick_rate_quadrants.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/legend_asset_image.dart';
 import '../../widgets/surface_card.dart';
 import '../../utils/formatting/format.dart' show plural, formatSigned, formatPercent;
 import '../../widgets/nav_entry_card.dart';
+import 'widgets/ranked_legend_detail_sheet.dart' show openLegendHistory;
 
 /// Self-contained entry point for the Pick Rate chart: a single tappable row
 /// that pushes the full-screen scatter plot. The only thing a caller needs to
@@ -13,10 +19,19 @@ import '../../widgets/nav_entry_card.dart';
 class RankedPickRateEntry extends StatelessWidget {
   final RankedSummary summary;
   final List<LegendBreakdown> legends;
+
+  /// What opening a legend's history needs; without them the legend card on the
+  /// screen is not tappable.
+  final Future<List<RankedMatch>> Function(String legend)? matchesFor;
+  final Future<void> Function()? onRefresh;
+  final List<RankedMatch>? sessionPool;
   const RankedPickRateEntry({
     super.key,
     required this.summary,
     required this.legends,
+    this.matchesFor,
+    this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -26,29 +41,25 @@ class RankedPickRateEntry extends StatelessWidget {
       title: 'Pick Rate',
       onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) =>
-                RankedPickRateScreen(summary: summary, legends: legends),
+            builder: (_) => RankedPickRateScreen(
+              summary: summary,
+              legends: legends,
+              matchesFor: matchesFor,
+              onRefresh: onRefresh,
+              sessionPool: sessionPool,
+            ),
           ),
         ),
     );
   }
 }
 
-enum _Quadrant { core, trap, hiddenGem, bench }
-
-extension on _Quadrant {
-  String get label => switch (this) {
-    _Quadrant.core => 'Core',
-    _Quadrant.trap => 'Comfort trap',
-    _Quadrant.hiddenGem => 'Hidden gem',
-    _Quadrant.bench => 'Bench',
-  };
-
+extension on PickRateQuadrant {
   Color get color => switch (this) {
-    _Quadrant.core => AppTheme.green,
-    _Quadrant.trap => AppTheme.orange,
-    _Quadrant.hiddenGem => AppTheme.blue,
-    _Quadrant.bench => AppTheme.muted,
+    PickRateQuadrant.core => AppTheme.green,
+    PickRateQuadrant.trap => AppTheme.orange,
+    PickRateQuadrant.hiddenGem => AppTheme.blue,
+    PickRateQuadrant.bench => AppTheme.muted,
   };
 }
 
@@ -66,28 +77,6 @@ double equalSharePickRate({
   required int poolSize,
 }) => poolGames / (totalGames * poolSize);
 
-/// High pick rate (at/above [equalSharePickRate]) crossed with RP at/above
-/// [rpBaseline]. An even-share pick-rate
-/// baseline means legends played roughly equally sit together near the line
-/// instead of being torn apart by rank order the way a sample median would —
-/// a median always cuts the pool in half regardless of how close together the
-/// actual values are. [rpBaseline] is 0 by default; a toggle lets it become
-/// the player's own scope average instead, so a uniformly bad split doesn't
-/// paint every legend as a comfort trap.
-_Quadrant _quadrantOf(
-  double pickRate,
-  double avgRp,
-  double equalShareRate,
-  double rpBaseline,
-) {
-  final highPick = pickRate >= equalShareRate;
-  final positive = avgRp >= rpBaseline;
-  if (highPick && positive) return _Quadrant.core;
-  if (highPick && !positive) return _Quadrant.trap;
-  if (!highPick && positive) return _Quadrant.hiddenGem;
-  return _Quadrant.bench;
-}
-
 /// Full-screen scatter plot: pick rate (× of games in scope) against average
 /// RP/game, one dot per legend, colored by which of the four
 /// pick-rate/RP-sign quadrants it falls in. Tapping a dot fills in the detail
@@ -96,10 +85,18 @@ _Quadrant _quadrantOf(
 class RankedPickRateScreen extends StatefulWidget {
   final RankedSummary summary;
   final List<LegendBreakdown> legends;
+
+  /// See [RankedPickRateEntry].
+  final Future<List<RankedMatch>> Function(String legend)? matchesFor;
+  final Future<void> Function()? onRefresh;
+  final List<RankedMatch>? sessionPool;
   const RankedPickRateScreen({
     super.key,
     required this.summary,
     required this.legends,
+    this.matchesFor,
+    this.onRefresh,
+    this.sessionPool,
   });
 
   @override
@@ -152,6 +149,19 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
     );
   }
 
+  Future<void> _openHistory(LegendBreakdown legend) async {
+    final games = [...await widget.matchesFor!(legend.legend)]
+      ..sort((a, b) => b.endTime.compareTo(a.endTime));
+    if (!mounted) return;
+    openLegendHistory(
+      context,
+      legend,
+      games,
+      widget.onRefresh ?? () async {},
+      sessionPool: widget.sessionPool,
+    );
+  }
+
   void _showCustomizeSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
@@ -183,7 +193,10 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
     final maxAbsRp = pool
         .map((l) => l.avgRpPerGame.abs())
         .fold(10.0, (a, b) => a > b ? a : b);
-    final yBound = maxAbsRp * 1.2;
+    // Bounds are whole steps, so the axis ends on a labelled tick instead of
+    // a stray number crowding the last one.
+    final yStep = niceAxisStep(maxAbsRp * 2.2, ticks: 8);
+    final yBound = (maxAbsRp * 1.1 / yStep).ceil() * yStep;
     // Pick rate rarely approaches 100% once a player rotates between more than
     // one legend, so a fixed 0–100 domain leaves most of the chart empty.
     // Scale to the widest pick rate actually in the pool instead, same as the
@@ -191,7 +204,8 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
     final maxPickRatePct = pickRateOf.values
         .map((r) => r * 100)
         .fold(10.0, (a, b) => a > b ? a : b);
-    final xBound = maxPickRatePct * 1.2;
+    final xStep = niceAxisStep(maxPickRatePct * 1.1, ticks: 6);
+    final xBound = (maxPickRatePct * 1.1 / xStep).ceil() * xStep;
 
     final spots = [
       for (final l in pool)
@@ -200,7 +214,7 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
           l.avgRpPerGame,
           dotPainter: FlDotCirclePainter(
             radius: 7,
-            color: _quadrantOf(
+            color: quadrantOf(
               pickRateOf[l.legend]!,
               l.avgRpPerGame,
               equalShareRate,
@@ -210,67 +224,133 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
         ),
     ];
 
+    final takeaways = pickRateTakeaways(
+      pool: pool,
+      totalGames: total,
+      equalShareRate: equalShareRate,
+      rpBaseline: rpBaseline,
+    );
+    // Most-played first, so they get the best spots for their labels.
+    final byGames = [for (final i in List.generate(pool.length, (i) => i)) i]
+      ..sort((a, b) => pool[b].games.compareTo(pool[a].games));
+    final textScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: 1.3);
+    final labelStyle = Theme.of(context).textTheme.bodySmall!;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTheme.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (takeaways.isNotEmpty) ...[
+            _Takeaways(
+              items: takeaways,
+              onSelect: (l) => setState(() => _selected = l),
+            ),
+            const SizedBox(height: AppTheme.md),
+          ],
+          const Text('Avg RP per game', style: AppTheme.captionSmall),
+          const SizedBox(height: AppTheme.xs),
           SizedBox(
             height: 260,
-            child: ScatterChart(
-              ScatterChartData(
-                minX: 0,
-                maxX: xBound,
-                minY: -yBound,
-                maxY: yBound,
-                gridData: const FlGridData(show: false),
-                borderData: FlBorderData(show: false),
-                scatterSpots: spots,
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CustomPaint(
+                  painter: _GuidesPainter(
+                    xBound: xBound,
+                    yBound: yBound,
+                    splitX: equalShareRate * 100,
+                    splitY: rpBaseline,
                   ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 32,
-                      getTitlesWidget: (value, _) => Text(
-                        value.toStringAsFixed(0),
-                        style: const TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 9,
+                ),
+                ScatterChart(
+                  ScatterChartData(
+                    minX: 0,
+                    maxX: xBound,
+                    minY: -yBound,
+                    maxY: yBound,
+                    gridData: const FlGridData(show: false),
+                    borderData: FlBorderData(show: false),
+                    scatterSpots: spots,
+                    titlesData: FlTitlesData(
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: yStep,
+                          reservedSize: _Plot.left,
+                          getTitlesWidget: (value, _) => Text(
+                            value.toStringAsFixed(0),
+                            style: const TextStyle(
+                              color: AppTheme.muted,
+                              fontSize: 9,
+                            ),
+                          ),
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: xStep,
+                          reservedSize: _Plot.bottom,
+                          getTitlesWidget: (value, _) => Text(
+                            '${value.toStringAsFixed(0)}%',
+                            style: const TextStyle(
+                              color: AppTheme.muted,
+                              fontSize: 9,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 22,
-                      getTitlesWidget: (value, _) => Text(
-                        '${value.toStringAsFixed(0)}%',
-                        style: const TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 9,
-                        ),
-                      ),
+                    scatterTouchData: ScatterTouchData(
+                      handleBuiltInTouches: false,
+                      touchCallback: (event, response) {
+                        if (event is! FlTapUpEvent) return;
+                        final index = response?.touchedSpot?.spotIndex;
+                        if (index == null) return;
+                        setState(() => _selected = pool[index]);
+                      },
                     ),
                   ),
                 ),
-                scatterTouchData: ScatterTouchData(
-                  handleBuiltInTouches: false,
-                  touchCallback: (event, response) {
-                    if (event is! FlTapUpEvent) return;
-                    final index = response?.touchedSpot?.spotIndex;
-                    if (index == null) return;
-                    setState(() => _selected = pool[index]);
-                  },
+                IgnorePointer(
+                  child: CustomPaint(
+                    painter: _LabelsPainter(
+                      names: [for (final l in pool) l.legend],
+                      points: [
+                        for (final l in pool)
+                          Offset(pickRateOf[l.legend]! * 100, l.avgRpPerGame),
+                      ],
+                      order: byGames,
+                      selected: _selected?.legend,
+                      xBound: xBound,
+                      yBound: yBound,
+                      textScaler: textScaler,
+                      style: labelStyle,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
+          ),
+          const Center(
+            child: Text('Share of your games', style: AppTheme.captionSmall),
+          ),
+          const SizedBox(height: AppTheme.sm),
+          Text(
+            'Dashed lines: an even share of games '
+            '(${formatPercent(equalShareRate, decimals: 0)}) and '
+            '${_useOwnAverageBaseline ? 'your average of '
+                      '${formatSigned(rpBaseline)} RP per game' : '0 RP per game'}.',
+            style: AppTheme.captionSmall,
           ),
           const SizedBox(height: AppTheme.md),
           const _QuadrantKey(),
@@ -278,7 +358,247 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
           _SelectedDetail(
             legend: _selected,
             pickRate: _selected == null ? null : pickRateOf[_selected!.legend],
+            onOpen: widget.matchesFor == null ? null : _openHistory,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A round axis step (1, 2 or 5 times a power of ten) that gives about [ticks]
+/// marks over [range].
+@visibleForTesting
+double niceAxisStep(double range, {required int ticks}) {
+  final raw = range / ticks;
+  final magnitude = math.pow(10, (math.log(raw) / math.ln10).floor());
+  for (final m in const [1, 2, 5]) {
+    if (m * magnitude >= raw) return (m * magnitude).toDouble();
+  }
+  return (10 * magnitude).toDouble();
+}
+
+/// Where the chart's plot area sits inside its box, and how data maps onto it:
+/// the box less the room the axis numbers take on the left and bottom. The
+/// guides and labels are painted on their own layers, so they need the same
+/// mapping the chart itself uses.
+class _Plot {
+  static const left = 32.0;
+  static const bottom = 22.0;
+
+  final Rect rect;
+  final double xBound;
+  final double yBound;
+
+  _Plot(Size size, this.xBound, this.yBound)
+    : rect = Rect.fromLTRB(left, 0, size.width, size.height - bottom);
+
+  /// Pixel position of pick rate [x] (percent) and RP per game [y].
+  Offset at(double x, double y) => Offset(
+    rect.left + x / xBound * rect.width,
+    rect.bottom - (y + yBound) / (2 * yBound) * rect.height,
+  );
+}
+
+/// Behind the dots: the four quadrants faintly tinted, split by dashed lines at
+/// the even share of games ([splitX], percent) and the RP baseline ([splitY]).
+class _GuidesPainter extends CustomPainter {
+  final double xBound;
+  final double yBound;
+  final double splitX;
+  final double splitY;
+
+  const _GuidesPainter({
+    required this.xBound,
+    required this.yBound,
+    required this.splitX,
+    required this.splitY,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final plot = _Plot(size, xBound, yBound);
+    final r = plot.rect;
+    final x = plot.at(splitX, 0).dx.clamp(r.left, r.right);
+    final y = plot.at(0, splitY).dy.clamp(r.top, r.bottom);
+
+    void tint(Rect area, PickRateQuadrant q) =>
+        canvas.drawRect(area, Paint()..color = q.color.withValues(alpha: 0.07));
+    tint(Rect.fromLTRB(x, r.top, r.right, y), PickRateQuadrant.core);
+    tint(Rect.fromLTRB(x, y, r.right, r.bottom), PickRateQuadrant.trap);
+    tint(Rect.fromLTRB(r.left, r.top, x, y), PickRateQuadrant.hiddenGem);
+    tint(Rect.fromLTRB(r.left, y, x, r.bottom), PickRateQuadrant.bench);
+
+    final line = Paint()
+      ..color = AppTheme.muted.withValues(alpha: 0.7)
+      ..strokeWidth = 1;
+    _dashed(canvas, Offset(x, r.top), Offset(x, r.bottom), line);
+    _dashed(canvas, Offset(r.left, y), Offset(r.right, y), line);
+  }
+
+  static void _dashed(Canvas canvas, Offset a, Offset b, Paint paint) {
+    const dash = 4.0;
+    const gap = 4.0;
+    final length = (b - a).distance;
+    final step = (b - a) / length;
+    for (var d = 0.0; d < length; d += dash + gap) {
+      final end = d + dash > length ? length : d + dash;
+      canvas.drawLine(a + step * d, a + step * end, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GuidesPainter old) =>
+      old.xBound != xBound ||
+      old.yBound != yBound ||
+      old.splitX != splitX ||
+      old.splitY != splitY;
+}
+
+/// Over the dots: each legend's name beside its dot, on a side that doesn't
+/// run into another dot or label. [points] are pick rate (percent) and RP per
+/// game; [order] is the legends most worth labelling first.
+class _LabelsPainter extends CustomPainter {
+  final List<String> names;
+  final List<Offset> points;
+  final List<int> order;
+  final String? selected;
+  final double xBound;
+  final double yBound;
+  final TextScaler textScaler;
+
+  /// The screen's text style, so the names use the same font as everything else.
+  final TextStyle style;
+
+  const _LabelsPainter({
+    required this.names,
+    required this.points,
+    required this.order,
+    required this.selected,
+    required this.xBound,
+    required this.yBound,
+    required this.textScaler,
+    required this.style,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final plot = _Plot(size, xBound, yBound);
+    final texts = [
+      for (final i in order)
+        TextPainter(
+          text: TextSpan(
+            text: names[i],
+            style: style.copyWith(
+              color: names[i] == selected
+                  ? AppTheme.textPrimary
+                  : AppTheme.textPrimary.withValues(alpha: 0.8),
+              fontSize: 10,
+              fontWeight: names[i] == selected
+                  ? FontWeight.w700
+                  : FontWeight.w500,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+          textScaler: textScaler,
+          maxLines: 1,
+        )..layout(),
+    ];
+    final spots = placeLabels(
+      centers: [for (final i in order) plot.at(points[i].dx, points[i].dy)],
+      sizes: [for (final t in texts) t.size],
+      bounds: Offset.zero & size,
+    );
+    for (final (k, rect) in spots.indexed) {
+      if (rect != null) texts[k].paint(canvas, rect.topLeft);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LabelsPainter old) =>
+      old.names != names ||
+      old.points != points ||
+      old.selected != selected ||
+      old.xBound != xBound ||
+      old.yBound != yBound ||
+      old.textScaler != textScaler ||
+      old.style != style;
+}
+
+/// The legends worth a look, in words, above the chart. Tapping one selects it.
+class _Takeaways extends StatelessWidget {
+  final List<PickRateTakeaway> items;
+  final ValueChanged<LegendBreakdown> onSelect;
+  const _Takeaways({required this.items, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return SurfaceCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.md,
+        vertical: AppTheme.sm,
+      ),
+      child: Column(
+        children: [
+          for (final t in items)
+            InkWell(
+              onTap: () => onSelect(t.legend),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppTheme.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: t.quadrant.color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppTheme.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '${t.quadrant.label}  ',
+                                  style: TextStyle(
+                                    color: t.quadrant.color,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: t.legend.legend,
+                                  style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '${formatPercent(t.pickRate, decimals: 0)} of your '
+                            'games at ${formatSigned(t.legend.avgRpPerGame)} '
+                            'RP per game',
+                            style: AppTheme.caption,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -398,10 +718,7 @@ class _OptionRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: AppTheme.caption,
-              ),
+              Text(subtitle, style: AppTheme.caption),
             ],
           ),
         ),
@@ -420,13 +737,13 @@ class _QuadrantKey extends StatelessWidget {
     return Wrap(
       spacing: AppTheme.md,
       runSpacing: 6,
-      children: [for (final q in _Quadrant.values) _KeyChip(q)],
+      children: [for (final q in PickRateQuadrant.values) _KeyChip(q)],
     );
   }
 }
 
 class _KeyChip extends StatelessWidget {
-  final _Quadrant quadrant;
+  final PickRateQuadrant quadrant;
   const _KeyChip(this.quadrant);
 
   @override
@@ -443,10 +760,7 @@ class _KeyChip extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 4),
-        Text(
-          quadrant.label,
-          style: AppTheme.captionSmall,
-        ),
+        Text(quadrant.label, style: AppTheme.captionSmall),
       ],
     );
   }
@@ -455,7 +769,14 @@ class _KeyChip extends StatelessWidget {
 class _SelectedDetail extends StatelessWidget {
   final LegendBreakdown? legend;
   final double? pickRate;
-  const _SelectedDetail({required this.legend, required this.pickRate});
+
+  /// Opens the legend's history; null when there is nowhere to go.
+  final ValueChanged<LegendBreakdown>? onOpen;
+  const _SelectedDetail({
+    required this.legend,
+    required this.pickRate,
+    this.onOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -474,6 +795,7 @@ class _SelectedDetail extends StatelessWidget {
     final rate = pickRate ?? 0;
     final positive = l.avgRpPerGame >= 0;
     return SurfaceCard(
+      onTap: onOpen == null ? null : () => onOpen!(l),
       padding: const EdgeInsets.all(AppTheme.md),
       child: Row(
         children: [
@@ -520,6 +842,10 @@ class _SelectedDetail extends StatelessWidget {
               fontSize: 13,
             ),
           ),
+          if (onOpen != null) ...[
+            const SizedBox(width: AppTheme.xs),
+            const Icon(Icons.chevron_right, color: AppTheme.muted),
+          ],
         ],
       ),
     );

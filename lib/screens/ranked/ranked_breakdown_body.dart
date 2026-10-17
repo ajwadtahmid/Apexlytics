@@ -530,6 +530,9 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
                       child: RankedPickRateEntry(
                         summary: agg.summary,
                         legends: agg.legends,
+                        matchesFor: (legend) =>
+                            store.matchesForLegend(widget.uid, legend),
+                        onRefresh: _refresh,
                       ),
                     ),
                   ],
@@ -678,6 +681,9 @@ class _OverviewTab extends StatelessWidget {
                   child: RankedPickRateEntry(
                     summary: summary,
                     legends: legends,
+                    matchesFor: legendMatchesFor,
+                    onRefresh: onRefresh,
+                    sessionPool: data.view.history,
                   ),
                 ),
                 const SizedBox(width: AppTheme.sm),

@@ -9,6 +9,7 @@ import 'package:apexlytics/screens/home/server_status_page.dart';
 import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_compare_tab.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
+import 'package:apexlytics/screens/ranked/ranked_pick_rate_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_share_screens.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_share_cards.dart';
 import 'package:apexlytics/utils/ranked/split_recap.dart';
@@ -335,6 +336,37 @@ void main() {
         mapsB: mapBreakdowns(after),
       ),
     );
+    expectNoOverflow();
+  });
+
+  testWidgets('the Pick Rate screen', (tester) async {
+    List<RankedMatch> played(String legend, int n, int rp) => [
+      for (var i = 0; i < n; i++)
+        buildMatch(legend: legend, rp: rp, start: 1782090000 + i * 5000),
+    ];
+    final all = [
+      ...played('Mad Maggie', 8, -5),
+      ...played('Newcastle', 4, 20),
+      ...played('Bangalore', 4, -3),
+    ];
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, app) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2.0)),
+          child: app!,
+        ),
+        home: RankedPickRateScreen(
+          summary: summarize(all),
+          legends: legendBreakdowns(all),
+        ),
+      ),
+    );
+    await tester.pump();
     expectNoOverflow();
   });
 
