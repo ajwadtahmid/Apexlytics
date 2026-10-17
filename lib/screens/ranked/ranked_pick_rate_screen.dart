@@ -8,8 +8,10 @@ import '../../utils/ranked/pick_rate_quadrants.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/legend_asset_image.dart';
+import '../../widgets/stat_display.dart';
 import '../../widgets/surface_card.dart';
-import '../../utils/formatting/format.dart' show plural, formatSigned, formatPercent;
+import '../../utils/formatting/format.dart'
+    show plural, formatSigned, formatPercent, formatAvgKills, formatAvgDamage;
 import '../../widgets/nav_entry_card.dart';
 import 'widgets/ranked_legend_detail_sheet.dart' show openLegendHistory;
 
@@ -108,6 +110,19 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
   bool _useOwnAverageBaseline = false;
   bool _tableView = false;
   LegendBreakdown? _selected;
+
+  /// Each looked-up legend's maps, kept so reselecting it doesn't ask again.
+  final Map<String, List<LegendMapCell>> _mapCells = {};
+
+  /// Selects [legend] and, once, loads its games for the best and worst map.
+  Future<void> _select(LegendBreakdown legend) async {
+    setState(() => _selected = legend);
+    final lookup = widget.matchesFor;
+    if (lookup == null || _mapCells.containsKey(legend.legend)) return;
+    final games = await lookup(legend.legend);
+    if (!mounted) return;
+    setState(() => _mapCells[legend.legend] = legendMapBreakdowns(games));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -244,10 +259,7 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (takeaways.isNotEmpty) ...[
-            _Takeaways(
-              items: takeaways,
-              onSelect: (l) => setState(() => _selected = l),
-            ),
+            _Takeaways(items: takeaways, onSelect: _select),
             const SizedBox(height: AppTheme.md),
           ],
           const Text('Avg RP per game', style: AppTheme.captionSmall),
@@ -316,7 +328,7 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
                         if (event is! FlTapUpEvent) return;
                         final index = response?.touchedSpot?.spotIndex;
                         if (index == null) return;
-                        setState(() => _selected = pool[index]);
+                        _select(pool[index]);
                       },
                     ),
                   ),
@@ -358,6 +370,7 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
           _SelectedDetail(
             legend: _selected,
             pickRate: _selected == null ? null : pickRateOf[_selected!.legend],
+            maps: _selected == null ? null : _mapCells[_selected!.legend],
             onOpen: widget.matchesFor == null ? null : _openHistory,
           ),
         ],
@@ -770,11 +783,16 @@ class _SelectedDetail extends StatelessWidget {
   final LegendBreakdown? legend;
   final double? pickRate;
 
+  /// The legend's games by map, once loaded; null until then or when there is
+  /// no way to look them up.
+  final List<LegendMapCell>? maps;
+
   /// Opens the legend's history; null when there is nowhere to go.
   final ValueChanged<LegendBreakdown>? onOpen;
   const _SelectedDetail({
     required this.legend,
     required this.pickRate,
+    this.maps,
     this.onOpen,
   });
 
@@ -794,60 +812,144 @@ class _SelectedDetail extends StatelessWidget {
     }
     final rate = pickRate ?? 0;
     final positive = l.avgRpPerGame >= 0;
+    final (:best, :worst) = legendBestWorstMap(maps ?? const []);
     return SurfaceCard(
       onTap: onOpen == null ? null : () => onOpen!(l),
       padding: const EdgeInsets.all(AppTheme.md),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            child: SizedBox(
-              width: 40,
-              height: 40,
-              child: LegendAssetImage(
-                imageKey: legendImageKey(l.legend),
-                displayName: l.legend,
-                fallbackFontSize: 16,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppTheme.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l.legend,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                child: SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: LegendAssetImage(
+                    imageKey: legendImageKey(l.legend),
+                    displayName: l.legend,
+                    fallbackFontSize: 16,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${formatPercent(rate, decimals: 1)} pick rate · '
-                  '${formatPercent(l.winRate)} win rate · '
-                  '${plural(l.games, 'game')}',
-                  style: AppTheme.caption,
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.legend,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(plural(l.games, 'game'), style: AppTheme.caption),
+                  ],
+                ),
+              ),
+              Text(
+                '${formatSigned(l.avgRpPerGame)} RP/game',
+                style: TextStyle(
+                  color: AppTheme.signColor(positive),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              if (onOpen != null) ...[
+                const SizedBox(width: AppTheme.xs),
+                const Icon(Icons.chevron_right, color: AppTheme.muted),
+              ],
+            ],
+          ),
+          const SizedBox(height: AppTheme.md),
+          Row(
+            children: [
+              for (final (i, stat) in [
+                ('Pick rate', formatPercent(rate, decimals: 1)),
+                ('Win rate', formatPercent(l.winRate)),
+                ('Kills', formatAvgKills(l.avgKills)),
+                ('Damage', formatAvgDamage(l.avgDamage)),
+              ].indexed) ...[
+                if (i > 0) const SizedBox(width: AppTheme.xs),
+                Expanded(
+                  child: StatDisplay(
+                    label: stat.$1,
+                    value: stat.$2,
+                    centered: true,
+                  ),
                 ),
               ],
-            ),
+            ],
           ),
-          Text(
-            '${formatSigned(l.avgRpPerGame)} RP/game',
-            style: TextStyle(
-              color: AppTheme.signColor(positive),
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-          if (onOpen != null) ...[
-            const SizedBox(width: AppTheme.xs),
-            const Icon(Icons.chevron_right, color: AppTheme.muted),
+          if (best != null) ...[
+            const SizedBox(height: AppTheme.md),
+            _MapLines(best: best, worst: worst),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The legend's best map and, when there is a distinct one, its worst: a label,
+/// the map, then how it goes there, in columns that line up between the rows.
+class _MapLines extends StatelessWidget {
+  final LegendMapCell best;
+  final LegendMapCell? worst;
+  const _MapLines({required this.best, required this.worst});
+
+  TableRow _row(String label, LegendMapCell cell) {
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Text(label, style: AppTheme.caption),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 12),
+          child: Text(
+            cell.mapName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Text.rich(
+            TextSpan(
+              style: AppTheme.caption,
+              children: [
+                TextSpan(
+                  text: '${formatSigned(cell.avgRpPerGame)} RP/game',
+                  style: TextStyle(
+                    color: AppTheme.signColor(cell.avgRpPerGame >= 0),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextSpan(text: ' · ${plural(cell.games, 'game')}'),
+              ],
+            ),
+            textAlign: TextAlign.end,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Table(
+      columnWidths: const {
+        0: IntrinsicColumnWidth(),
+        1: FlexColumnWidth(2),
+        2: FlexColumnWidth(3),
+      },
+      children: [_row('Best', best), if (worst != null) _row('Worst', worst!)],
     );
   }
 }

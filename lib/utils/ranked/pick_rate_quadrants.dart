@@ -86,6 +86,33 @@ List<PickRateTakeaway> pickRateTakeaways({
   ];
 }
 
+/// The maps one legend does best and worst on, among those with at least
+/// [kMinGamesForInsight] games. The worst is null unless two or more maps
+/// qualify and it really is below the best. Ties go to the map with more games.
+({LegendMapCell? best, LegendMapCell? worst}) legendBestWorstMap(
+  List<LegendMapCell> cells,
+) {
+  final enough =
+      [
+        for (final c in cells)
+          if (c.games >= kMinGamesForInsight) c,
+      ]..sort((a, b) {
+        final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
+        return byRp != 0 ? byRp : b.games.compareTo(a.games);
+      });
+  if (enough.isEmpty) return (best: null, worst: null);
+  final best = enough.first;
+  // Several maps can share the lowest RP per game; the first of them in the
+  // sorted order is the one with the most games.
+  final lowest = enough.firstWhere(
+    (c) => c.avgRpPerGame == enough.last.avgRpPerGame,
+  );
+  final worst = enough.length >= 2 && lowest.avgRpPerGame < best.avgRpPerGame
+      ? lowest
+      : null;
+  return (best: best, worst: worst);
+}
+
 /// More games, then the name, so the pick doesn't depend on list order.
 bool _moreGames(LegendBreakdown a, LegendBreakdown b) =>
     a.games != b.games ? a.games > b.games : a.legend.compareTo(b.legend) < 0;

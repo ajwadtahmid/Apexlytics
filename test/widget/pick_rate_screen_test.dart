@@ -83,7 +83,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Tap a legend to see details'), findsNothing);
-    expect(find.textContaining('50.0% pick rate'), findsOneWidget);
+    expect(find.text('50.0%'), findsOneWidget);
+    expect(find.text('Pick rate'), findsOneWidget);
   });
 
   testWidgets('says nothing when no legend is a trap or a gem', (tester) async {
@@ -157,10 +158,11 @@ void main() {
       await tester.tap(find.text('50% of your games at -5.0 RP per game'));
       await tester.pump();
 
-      await tester.tap(find.textContaining('50.0% pick rate'));
+      await tester.tap(find.text('Pick rate'));
       await tester.pumpAndSettle();
 
-      expect(asked, ['Alter']);
+      // Once for the card's map lines, again for the history it opens.
+      expect(asked, ['Alter', 'Alter']);
       expect(find.byType(RankedEntityHistoryScreen), findsOneWidget);
       expect(find.text('Alter'), findsWidgets);
     });
@@ -171,7 +173,7 @@ void main() {
       await tester.pump();
 
       expect(find.byIcon(Icons.chevron_right), findsNothing);
-      await tester.tap(find.textContaining('50.0% pick rate'));
+      await tester.tap(find.text('Pick rate'));
       await tester.pumpAndSettle();
       expect(find.byType(RankedEntityHistoryScreen), findsNothing);
     });
@@ -184,6 +186,101 @@ void main() {
       await tester.pump();
 
       expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+    });
+  });
+
+  group('the selected legend\'s card', () {
+    // Alone, Alter is a comfort trap: 4 games on Olympus (+10 each) and 4 on
+    // Kings Canyon (-20 each).
+    final alter = [
+      for (var i = 0; i < 4; i++)
+        buildMatch(
+          legend: 'Alter',
+          rp: 10,
+          kills: 2,
+          damage: 400,
+          map: 'olympus_rotation',
+          start: 1782090000 + i * 5000,
+        ),
+      for (var i = 0; i < 4; i++)
+        buildMatch(
+          legend: 'Alter',
+          rp: -20,
+          kills: 4,
+          damage: 800,
+          map: 'kings_canyon_rotation',
+          start: 1782190000 + i * 5000,
+        ),
+    ];
+
+    Future<List<RankedMatch>> lookup(String legend) async => [
+      for (final m in alter)
+        if (m.legend == legend) m,
+    ];
+
+    Future<void> selectAlter(WidgetTester tester) async {
+      await tester.tap(find.textContaining('of your games at'));
+      await tester.pump();
+    }
+
+    testWidgets('shows pick rate, win rate, kills and damage', (tester) async {
+      await pump(tester, alter);
+      await selectAlter(tester);
+
+      expect(find.text('8 games'), findsOneWidget);
+      expect(find.text('100.0%'), findsOneWidget);
+      expect(find.text('3.0'), findsOneWidget);
+      expect(find.text('600'), findsOneWidget);
+      expect(find.text('Kills'), findsOneWidget);
+      expect(find.text('Damage'), findsOneWidget);
+    });
+
+    testWidgets('shows the best and worst map once they load', (tester) async {
+      await pump(tester, alter, matchesFor: lookup);
+      await selectAlter(tester);
+      await tester.pump();
+
+      expect(find.text('Best'), findsOneWidget);
+      expect(find.text('Olympus'), findsOneWidget);
+      expect(
+        find.textContaining('+10.0 RP/game · 4 games', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.text('Worst'), findsOneWidget);
+      expect(find.text('Kings Canyon'), findsOneWidget);
+      expect(
+        find.textContaining('-20.0 RP/game · 4 games', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('has no map lines where nothing can be looked up', (
+      tester,
+    ) async {
+      await pump(tester, alter);
+      await selectAlter(tester);
+      await tester.pump();
+
+      expect(find.text('Best'), findsNothing);
+      expect(find.text('Worst'), findsNothing);
+    });
+
+    testWidgets('looks a legend up only once', (tester) async {
+      final asked = <String>[];
+      await pump(
+        tester,
+        alter,
+        matchesFor: (legend) {
+          asked.add(legend);
+          return lookup(legend);
+        },
+      );
+      await selectAlter(tester);
+      await tester.pump();
+      await selectAlter(tester);
+      await tester.pump();
+
+      expect(asked, ['Alter']);
     });
   });
 }

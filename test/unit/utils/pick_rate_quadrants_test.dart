@@ -116,4 +116,71 @@ void main() {
       );
     });
   });
+
+  group('legendBestWorstMap', () {
+    LegendMapCell cell(String map, int games, int totalRp) => LegendMapCell(
+      legend: 'Alter',
+      mapName: map,
+      games: games,
+      totalRp: totalRp,
+    );
+
+    test('names the best and the worst of the maps with enough games', () {
+      final r = legendBestWorstMap([
+        cell('Olympus', 4, 40),
+        cell('Kings Canyon', 5, -25),
+        cell('Storm Point', 3, 3),
+      ]);
+
+      expect(r.best?.mapName, 'Olympus');
+      expect(r.worst?.mapName, 'Kings Canyon');
+    });
+
+    test('leaves out a map with fewer than the minimum games', () {
+      final r = legendBestWorstMap([
+        cell('Olympus', 4, 40),
+        cell('Kings Canyon', 2, -100),
+        cell('Storm Point', 3, -3),
+      ]);
+
+      expect(r.worst?.mapName, 'Storm Point');
+    });
+
+    test('has no worst when one map qualifies', () {
+      final r = legendBestWorstMap([
+        cell('Olympus', 4, 40),
+        cell('Kings Canyon', 1, -20),
+      ]);
+
+      expect(r.best?.mapName, 'Olympus');
+      expect(r.worst, isNull);
+    });
+
+    test('has no worst when the maps do equally well', () {
+      final r = legendBestWorstMap([
+        cell('Olympus', 4, 20),
+        cell('Kings Canyon', 6, 30),
+      ]);
+
+      expect(r.best, isNotNull);
+      expect(r.worst, isNull);
+    });
+
+    test('a tie for worst goes to the map with more games', () {
+      final r = legendBestWorstMap([
+        cell('Olympus', 3, 30),
+        cell('Kings Canyon', 3, -15),
+        cell('Storm Point', 6, -30),
+      ]);
+
+      expect(r.worst?.mapName, 'Storm Point');
+    });
+
+    test('has neither when no map has enough games', () {
+      final r = legendBestWorstMap([cell('Olympus', 2, 40)]);
+
+      expect(r.best, isNull);
+      expect(r.worst, isNull);
+    });
+  });
 }
