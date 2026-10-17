@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/models/server_status.dart';
 import 'package:apexlytics/providers/proxy_health_provider.dart';
@@ -18,6 +19,8 @@ import 'package:apexlytics/screens/ranked/widgets/ranked_entity_compare.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_best_legend_per_map.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_highlight_cards.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_rp_chart.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_slot_compare_chart.dart';
+import 'package:apexlytics/screens/ranked/widgets/split_changes_card.dart';
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:apexlytics/widgets/graph_card.dart';
@@ -275,6 +278,61 @@ void main() {
               damage: 300,
             ),
         ],
+      ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the hour and day comparison charts', (tester) async {
+    const a = [(slot: 9, games: 5, netRp: 40), (slot: 21, games: 4, netRp: -8)];
+    const b = [(slot: 21, games: 6, netRp: 30), (slot: 23, games: 3, netRp: 9)];
+    await pump(
+      tester,
+      Column(
+        children: [
+          RankedSlotCompareChart.hours(
+            nameA: 'Season 28 Split 1',
+            nameB: 'Season 28 Split 2',
+            a: a,
+            b: b,
+          ),
+          RankedSlotCompareChart.days(
+            nameA: 'Season 28 Split 1',
+            nameB: 'Season 28 Split 2',
+            a: const [(slot: 2, games: 5, netRp: 40)],
+            b: const [(slot: 6, games: 6, netRp: -30)],
+          ),
+        ],
+      ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the what-changed card', (tester) async {
+    List<RankedMatch> played(String legend, String map, int n, int rp) => [
+      for (var i = 0; i < n; i++)
+        buildMatch(
+          legend: legend,
+          map: map,
+          rp: rp,
+          start: 1782090000 + i * 5000,
+        ),
+    ];
+    final before = [
+      ...played('Mad Maggie', 'olympus_rotation', 6, 20),
+      ...played('Newcastle', 'olympus_rotation', 4, 5),
+    ];
+    final after = [
+      ...played('Mad Maggie', 'olympus_rotation', 2, -10),
+      ...played('Newcastle', 'olympus_rotation', 8, -10),
+    ];
+    await pump(
+      tester,
+      SplitChangesCard(
+        legendsA: legendBreakdowns(before),
+        legendsB: legendBreakdowns(after),
+        mapsA: mapBreakdowns(before),
+        mapsB: mapBreakdowns(after),
       ),
     );
     expectNoOverflow();

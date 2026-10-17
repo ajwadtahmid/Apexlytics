@@ -12,19 +12,17 @@ import '../../utils/formatting/format.dart'
         formatSignedInt,
         kNoReading;
 import '../../utils/error_messages.dart';
-import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
+import '../../utils/ranked/slot_compare.dart';
 import '../../utils/theme.dart';
 import '../../widgets/error_card.dart';
-import '../../widgets/legend_icon.dart';
 import '../../widgets/nav_entry_card.dart';
 import '../../widgets/segmented_capsule.dart';
 import '../../widgets/surface_card.dart';
-import 'ranked_legend_map_matrix_screen.dart';
 import 'widgets/compare_row.dart';
-import 'widgets/ranked_day_of_week_chart.dart';
 import 'widgets/ranked_entity_compare.dart';
-import 'widgets/ranked_time_of_day_chart.dart';
+import 'widgets/ranked_slot_compare_chart.dart';
+import 'widgets/split_changes_card.dart';
 
 /// A tappable row that opens the comparison page.
 class RankedCompareEntry extends StatelessWidget {
@@ -381,39 +379,26 @@ class _CompareBody extends ConsumerWidget {
         const SizedBox(height: AppTheme.md),
         _SummarySection(bucketA: bucketA, bucketB: bucketB, a: a, b: b),
         const SizedBox(height: AppTheme.md),
-        const _SectionHeader('PICK RATE'),
-        _SplitLabel(bucketA.displayName),
-        _PickRateList(legends: a.legends, totalGames: a.summary.games),
-        const SizedBox(height: AppTheme.sm),
-        _SplitLabel(bucketB.displayName),
-        _PickRateList(legends: b.legends, totalGames: b.summary.games),
-        const SizedBox(height: AppTheme.md),
-        const _SectionHeader('LEGEND × MAP'),
-        _SplitLabel(bucketA.displayName),
-        SurfaceCard(
-          padding: const EdgeInsets.all(AppTheme.md),
-          child: RankedLegendMapMatrixView(cells: a.legendMap),
-        ),
-        const SizedBox(height: AppTheme.sm),
-        _SplitLabel(bucketB.displayName),
-        SurfaceCard(
-          padding: const EdgeInsets.all(AppTheme.md),
-          child: RankedLegendMapMatrixView(cells: b.legendMap),
+        SplitChangesCard(
+          legendsA: a.legends,
+          legendsB: b.legends,
+          mapsA: a.maps,
+          mapsB: b.maps,
         ),
         const SizedBox(height: AppTheme.md),
-        const _SectionHeader('PERFORMANCE BY HOUR'),
-        _SplitLabel(bucketA.displayName),
-        RankedTimeOfDayChart(buckets: a.timeOfDay),
-        const SizedBox(height: AppTheme.sm),
-        _SplitLabel(bucketB.displayName),
-        RankedTimeOfDayChart(buckets: b.timeOfDay),
+        RankedSlotCompareChart.hours(
+          nameA: bucketA.displayName,
+          nameB: bucketB.displayName,
+          a: hourSlots(a.timeOfDay),
+          b: hourSlots(b.timeOfDay),
+        ),
         const SizedBox(height: AppTheme.md),
-        const _SectionHeader('PERFORMANCE BY DAY'),
-        _SplitLabel(bucketA.displayName),
-        RankedDayOfWeekChart(buckets: a.dayOfWeek),
-        const SizedBox(height: AppTheme.sm),
-        _SplitLabel(bucketB.displayName),
-        RankedDayOfWeekChart(buckets: b.dayOfWeek),
+        RankedSlotCompareChart.days(
+          nameA: bucketA.displayName,
+          nameB: bucketB.displayName,
+          a: weekdaySlots(a.dayOfWeek),
+          b: weekdaySlots(b.dayOfWeek),
+        ),
       ],
     );
   }
@@ -444,26 +429,6 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppTheme.sm),
       child: Text(text, style: AppTheme.cardTitle),
-    );
-  }
-}
-
-class _SplitLabel extends StatelessWidget {
-  final String text;
-  const _SplitLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppTheme.xs),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: AppTheme.accent,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
     );
   }
 }
@@ -508,63 +473,73 @@ class _SummarySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _SectionHeader('SUMMARY'),
-          CompareRow(
-            'Games',
-            '${a.summary.games}',
-            '${b.summary.games}',
-            delta: (b.summary.games - a.summary.games).toDouble(),
-            integerDelta: true,
-            // Needing more games for a comparable result reads as worse, not
-            // better, so this is the one row where "more" colors red.
-            invert: true,
-          ),
-          CompareRow(
-            'Games/day',
-            gamesPerDayA == null ? kNoReading : gamesPerDayA.toStringAsFixed(1),
-            gamesPerDayB == null ? kNoReading : gamesPerDayB.toStringAsFixed(1),
-            delta: (gamesPerDayA != null && gamesPerDayB != null)
-                ? gamesPerDayB - gamesPerDayA
-                : null,
-            invert: true,
-          ),
-          CompareRow(
-            'Net RP',
-            formatSignedInt(a.summary.netRp),
-            formatSignedInt(b.summary.netRp),
-            delta: (b.summary.netRp - a.summary.netRp).toDouble(),
-            integerDelta: true,
-          ),
-          CompareRow(
-            'RP/day',
-            rpPerDayA == null ? kNoReading : formatSigned(rpPerDayA),
-            rpPerDayB == null ? kNoReading : formatSigned(rpPerDayB),
-            delta: (rpPerDayA != null && rpPerDayB != null)
-                ? rpPerDayB - rpPerDayA
-                : null,
-          ),
-          CompareRow(
-            'Avg RP/game',
-            formatSigned(a.summary.avgRpPerGame),
-            formatSigned(b.summary.avgRpPerGame),
-            delta: b.summary.avgRpPerGame - a.summary.avgRpPerGame,
-          ),
-          CompareRow(
-            'Win rate',
-            formatPercent(a.summary.winRate),
-            formatPercent(b.summary.winRate),
-            delta: (b.summary.winRate - a.summary.winRate) * 100,
-          ),
-          CompareRow(
-            'Avg Kills',
-            formatAvgKills(a.summary.avgKills),
-            formatAvgKills(b.summary.avgKills),
-            delta: _diff(a.summary.avgKills, b.summary.avgKills),
-          ),
-          CompareRow(
-            'Avg Dmg',
-            formatAvgDamage(a.summary.avgDamage),
-            formatAvgDamage(b.summary.avgDamage),
-            delta: _diff(a.summary.avgDamage, b.summary.avgDamage),
+          CompareTable(
+            nameA: bucketA.displayName,
+            nameB: bucketB.displayName,
+            rows: [
+              CompareRow(
+                'Games',
+                '${a.summary.games}',
+                '${b.summary.games}',
+                delta: (b.summary.games - a.summary.games).toDouble(),
+                integerDelta: true,
+                // Needing more games for a comparable result reads as worse,
+                // not better, so this is the one row where "more" colors red.
+                invert: true,
+              ),
+              CompareRow(
+                'Games/day',
+                gamesPerDayA == null
+                    ? kNoReading
+                    : gamesPerDayA.toStringAsFixed(1),
+                gamesPerDayB == null
+                    ? kNoReading
+                    : gamesPerDayB.toStringAsFixed(1),
+                delta: (gamesPerDayA != null && gamesPerDayB != null)
+                    ? gamesPerDayB - gamesPerDayA
+                    : null,
+                invert: true,
+              ),
+              CompareRow(
+                'Net RP',
+                formatSignedInt(a.summary.netRp),
+                formatSignedInt(b.summary.netRp),
+                delta: (b.summary.netRp - a.summary.netRp).toDouble(),
+                integerDelta: true,
+              ),
+              CompareRow(
+                'RP/day',
+                rpPerDayA == null ? kNoReading : formatSigned(rpPerDayA),
+                rpPerDayB == null ? kNoReading : formatSigned(rpPerDayB),
+                delta: (rpPerDayA != null && rpPerDayB != null)
+                    ? rpPerDayB - rpPerDayA
+                    : null,
+              ),
+              CompareRow(
+                'Avg RP/game',
+                formatSigned(a.summary.avgRpPerGame),
+                formatSigned(b.summary.avgRpPerGame),
+                delta: b.summary.avgRpPerGame - a.summary.avgRpPerGame,
+              ),
+              CompareRow(
+                'Win rate',
+                formatPercent(a.summary.winRate),
+                formatPercent(b.summary.winRate),
+                delta: (b.summary.winRate - a.summary.winRate) * 100,
+              ),
+              CompareRow(
+                'Avg Kills',
+                formatAvgKills(a.summary.avgKills),
+                formatAvgKills(b.summary.avgKills),
+                delta: _diff(a.summary.avgKills, b.summary.avgKills),
+              ),
+              CompareRow(
+                'Avg Dmg',
+                formatAvgDamage(a.summary.avgDamage),
+                formatAvgDamage(b.summary.avgDamage),
+                delta: _diff(a.summary.avgDamage, b.summary.avgDamage),
+              ),
+            ],
           ),
         ],
       ),
@@ -574,67 +549,3 @@ class _SummarySection extends StatelessWidget {
 
 /// [b] minus [a], or null when either side has no reading to compare.
 double? _diff(double? a, double? b) => a == null || b == null ? null : b - a;
-
-class _PickRateList extends StatelessWidget {
-  final List<LegendBreakdown> legends;
-  final int totalGames;
-  static const _kMaxShown = 6;
-
-  const _PickRateList({required this.legends, required this.totalGames});
-
-  @override
-  Widget build(BuildContext context) {
-    if (totalGames == 0 || legends.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppTheme.sm),
-        child: Text('No games', style: AppTheme.caption),
-      );
-    }
-    final sorted = [...legends]..sort((x, y) => y.games.compareTo(x.games));
-    final shown = sorted.take(_kMaxShown).toList();
-
-    return SurfaceCard(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.md,
-        vertical: AppTheme.sm,
-      ),
-      child: Column(
-        children: [
-          for (final l in shown)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppTheme.xs),
-              child: Row(
-                children: [
-                  LegendIcon(legendName: l.legend, size: 14),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      l.legend,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 13,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    formatPercent(l.games / totalGames),
-                    style: AppTheme.caption,
-                  ),
-                  const SizedBox(width: AppTheme.sm),
-                  Text(
-                    '${formatSigned(l.avgRpPerGame)} RP',
-                    style: TextStyle(
-                      color: AppTheme.signColor(l.avgRpPerGame >= 0),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}

@@ -135,8 +135,10 @@ class _RankedEntityCompareState extends State<RankedEntityCompare> {
         const SizedBox(height: AppTheme.md),
         SurfaceCard(
           padding: const EdgeInsets.all(AppTheme.md),
-          child: Column(
-            children: [
+          child: CompareTable(
+            nameA: a.name,
+            nameB: b.name,
+            rows: [
               CompareRow(
                 'Games',
                 '${a.games}',
