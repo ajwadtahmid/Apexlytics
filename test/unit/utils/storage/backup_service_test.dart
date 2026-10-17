@@ -56,6 +56,9 @@ void main() {
       PrefsKeys.recentSearches: false,
       // A view choice for this device, set again in a moment if it is lost.
       PrefsKeys.trendSessionsShown: false,
+      PrefsKeys.pickRateShowAll: false,
+      PrefsKeys.pickRateOwnAverage: false,
+      PrefsKeys.pickRateTable: false,
       // Legacy migration-only key; build() derives the per-mode keys from it.
       PrefsKeys.mapNotifyMinutes: false,
     };

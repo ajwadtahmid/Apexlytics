@@ -40,6 +40,16 @@ class PrefsKeys {
   /// How many sessions the Performance Trends page looks at (0 for all of
   /// them). Device-only: not backed up.
   static const trendSessionsShown = 'trend_sessions_shown';
+
+  /// Whether the Pick Rate page shows legends with too few games, and whether
+  /// it measures "good" against the player's own average. Device-only: not
+  /// backed up.
+  static const pickRateShowAll = 'pick_rate_show_all';
+  static const pickRateOwnAverage = 'pick_rate_own_average';
+
+  /// Whether the Pick Rate page was last left on its table. Device-only: not
+  /// backed up.
+  static const pickRateTable = 'pick_rate_table';
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the

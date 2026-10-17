@@ -2,7 +2,9 @@ import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/ranked_match.dart';
+import '../../providers/pick_rate_options_provider.dart';
 import '../../utils/ranked/label_placement.dart';
 import '../../utils/ranked/legend_table_sort.dart';
 import '../../utils/ranked/pick_rate_quadrants.dart';
@@ -20,6 +22,8 @@ import '../../utils/formatting/format.dart'
         formatAvgKills,
         formatAvgDamage;
 import '../../widgets/nav_entry_card.dart';
+import '../../widgets/segmented_capsule.dart';
+import '../../widgets/sheet_handle.dart';
 import 'widgets/ranked_legend_detail_sheet.dart' show openLegendHistory;
 
 /// Self-contained entry point for the Pick Rate chart: a single tappable row
@@ -91,7 +95,7 @@ double equalSharePickRate({
 /// pick-rate/RP-sign quadrants it falls in. Tapping a dot fills in the detail
 /// card below the chart rather than opening a popup, so several legends can be
 /// compared in a row without dismissing anything.
-class RankedPickRateScreen extends StatefulWidget {
+class RankedPickRateScreen extends ConsumerStatefulWidget {
   final RankedSummary summary;
   final List<LegendBreakdown> legends;
 
@@ -109,13 +113,15 @@ class RankedPickRateScreen extends StatefulWidget {
   });
 
   @override
-  State<RankedPickRateScreen> createState() => _RankedPickRateScreenState();
+  ConsumerState<RankedPickRateScreen> createState() =>
+      _RankedPickRateScreenState();
 }
 
-class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
-  bool _showAll = false;
-  bool _useOwnAverageBaseline = false;
-  bool _tableView = false;
+class _RankedPickRateScreenState extends ConsumerState<RankedPickRateScreen> {
+  bool get _showAll => ref.watch(pickRateOptionsProvider).showAll;
+  bool get _useOwnAverageBaseline =>
+      ref.watch(pickRateOptionsProvider).useOwnAverage;
+  bool get _tableView => ref.watch(pickRateOptionsProvider).tableView;
   LegendBreakdown? _selected;
 
   /// Each looked-up legend's maps, kept so reselecting it doesn't ask again.
@@ -134,27 +140,25 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
   @override
   Widget build(BuildContext context) {
     final total = widget.summary.games;
-    final pool = _showAll
-        ? widget.legends
-        : widget.legends.where((l) => l.games >= kMinGamesForInsight).toList();
+    final pool = pickRatePool(widget.legends, showAll: _showAll);
+    // What was selected may have just been filtered out.
+    ref.listen(pickRateOptionsProvider, (before, now) {
+      if (before?.showAll != now.showAll) setState(() => _selected = null);
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pick Rate'),
         actions: [
           IconButton(
-            icon: Icon(
-              _tableView
-                  ? Icons.bubble_chart_outlined
-                  : Icons.table_rows_outlined,
-            ),
-            tooltip: _tableView ? 'Show chart' : 'Show table',
-            onPressed: () => setState(() => _tableView = !_tableView),
-          ),
-          IconButton(
             icon: const Icon(Icons.tune),
             tooltip: 'Customize',
             onPressed: () => _showCustomizeSheet(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'How to read this',
+            onPressed: () => _showInfoSheet(context),
           ),
         ],
       ),
@@ -162,11 +166,33 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
         child: total == 0 || pool.isEmpty
             ? _EmptyState(
                 showingAll: _showAll,
-                onShowAll: () => setState(() => _showAll = true),
+                onShowAll: () =>
+                    ref.read(pickRateOptionsProvider.notifier).setShowAll(true),
               )
-            : _tableView
-            ? _buildTable(pool, total)
-            : _buildBody(pool, total),
+            : Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppTheme.md,
+                      AppTheme.sm,
+                      AppTheme.md,
+                      0,
+                    ),
+                    child: SegmentedCapsule(
+                      options: const ['Chart', 'Table'],
+                      selected: _tableView ? 1 : 0,
+                      onChanged: (i) => ref
+                          .read(pickRateOptionsProvider.notifier)
+                          .setTableView(i == 1),
+                    ),
+                  ),
+                  Expanded(
+                    child: _tableView
+                        ? _buildTable(pool, total)
+                        : _buildBody(pool, total),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -189,15 +215,9 @@ class _RankedPickRateScreenState extends State<RankedPickRateScreen> {
       context: context,
       isScrollControlled: true,
       builder: (_) => _CustomizeSheet(
-        showAll: _showAll,
-        useOwnAverage: _useOwnAverageBaseline,
+        legends: widget.legends,
+        totalGames: widget.summary.games,
         ownAverage: widget.summary.avgRpPerGame,
-        onShowAllChanged: (v) => setState(() {
-          _showAll = v;
-          _selected = null;
-        }),
-        onUseOwnAverageChanged: (v) =>
-            setState(() => _useOwnAverageBaseline = v),
       ),
     );
   }
@@ -665,40 +685,110 @@ class _Takeaways extends StatelessWidget {
 /// state up via callbacks (into [_RankedPickRateScreenState]) while also
 /// tracking it locally so its own switches update immediately without
 /// waiting for the underlying chart to rebuild.
-class _CustomizeSheet extends StatefulWidget {
-  final bool showAll;
-  final bool useOwnAverage;
-  final double ownAverage;
-  final ValueChanged<bool> onShowAllChanged;
-  final ValueChanged<bool> onUseOwnAverageChanged;
-
-  const _CustomizeSheet({
-    required this.showAll,
-    required this.useOwnAverage,
-    required this.ownAverage,
-    required this.onShowAllChanged,
-    required this.onUseOwnAverageChanged,
-  });
-
-  @override
-  State<_CustomizeSheet> createState() => _CustomizeSheetState();
+void _showInfoSheet(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (context) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppTheme.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SheetHandle(),
+            const SizedBox(height: AppTheme.md),
+            const Text(
+              'Pick Rate',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: AppTheme.md),
+            for (final line in [
+              'Each dot is a legend: further right means you play it more, '
+                  'higher means it earns more RP per game.',
+              'The dashed lines mark an even share of your games and the RP '
+                  'line (0, or your average in Customize). Core is played a '
+                  'lot and gains RP, a comfort trap is played a lot but loses '
+                  'RP, a hidden gem is played less but gains, and bench is '
+                  'played less and loses.',
+              'Legends with under $kMinGamesForInsight games are left out '
+                  'until you choose All in Customize.',
+              'Tap a dot, or a row in the table, to see that legend. Tap its '
+                  'card to open its games. In the table, tap a heading to '
+                  'sort.',
+            ])
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppTheme.sm),
+                child: Text(line, style: AppTheme.captionLarge),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
-class _CustomizeSheetState extends State<_CustomizeSheet> {
-  late bool _showAll;
-  late bool _useOwnAverage;
+class _CustomizeSheet extends ConsumerWidget {
+  final List<LegendBreakdown> legends;
+  final int totalGames;
+  final double ownAverage;
 
-  @override
-  void initState() {
-    super.initState();
-    _showAll = widget.showAll;
-    _useOwnAverage = widget.useOwnAverage;
+  const _CustomizeSheet({
+    required this.legends,
+    required this.totalGames,
+    required this.ownAverage,
+  });
+
+  /// What the "Legends shown" choice does right now.
+  String _shownNote(bool showAll) {
+    final total = legends.length;
+    final underMin = total - pickRatePool(legends, showAll: false).length;
+    if (underMin == 0) {
+      return "Every legend you've played has at least $kMinGamesForInsight "
+          'games, so none are hidden.';
+    }
+    final few =
+        '${plural(underMin, 'legend')} with under '
+        '$kMinGamesForInsight games';
+    return showAll
+        ? 'Including $few. Their averages can swing a lot.'
+        : 'Showing ${total - underMin} of $total. Hiding $few: too few for '
+              'a steady average.';
+  }
+
+  /// What the "Good means" choice does right now, and what the other would
+  /// change.
+  String _goodNote(bool ownAverageLine, List<LegendBreakdown> pool) {
+    final moved = pool.isEmpty || totalGames == 0
+        ? 0
+        : legendsMovedByBaseline(
+            pool,
+            totalGames: totalGames,
+            equalShareRate: equalSharePickRate(
+              poolGames: pool.fold(0, (sum, l) => sum + l.games),
+              totalGames: totalGames,
+              poolSize: pool.length,
+            ),
+            ownAverage: ownAverage,
+          );
+    final effect = moved == 0
+        ? "wouldn't move any legend"
+        : 'would move ${plural(moved, 'legend')}';
+    final average = '${formatSigned(ownAverage)} RP per game';
+    return ownAverageLine
+        ? 'The dashed line sits at your average, $average. Using 0 RP '
+              'instead $effect.'
+        : 'The dashed line sits at 0 RP per game. Your average is $average; '
+              'using it $effect.';
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final options = ref.watch(pickRateOptionsProvider);
+    final notifier = ref.read(pickRateOptionsProvider.notifier);
+    final pool = pickRatePool(legends, showAll: options.showAll);
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppTheme.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -709,31 +799,20 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppTheme.md),
-            _OptionRow(
-              title: 'Minimum games',
-              subtitle: _showAll
-                  ? "Showing every legend you've played"
-                  : 'Showing legends with at least $kMinGamesForInsight games',
-              value: _showAll,
-              onChanged: (v) {
-                setState(() => _showAll = v);
-                widget.onShowAllChanged(v);
-              },
+            _Setting(
+              title: 'Legends shown',
+              options: ['$kMinGamesForInsight+ games', 'All'],
+              selected: options.showAll ? 1 : 0,
+              onChanged: (i) => notifier.setShowAll(i == 1),
+              note: _shownNote(options.showAll),
             ),
-            const SizedBox(height: AppTheme.md),
-            _OptionRow(
-              title: 'What counts as "good"',
-              subtitle: _useOwnAverage
-                  ? 'Comparing against your average this scope '
-                        '(${formatSigned(widget.ownAverage)} RP/game)'
-                  : 'Comparing against 0 RP/game — turn on to compare '
-                        "against your own average instead, so a rough split "
-                        "doesn't paint every legend as a comfort trap",
-              value: _useOwnAverage,
-              onChanged: (v) {
-                setState(() => _useOwnAverage = v);
-                widget.onUseOwnAverageChanged(v);
-              },
+            const SizedBox(height: AppTheme.lg),
+            _Setting(
+              title: 'Good means',
+              options: const ['Above 0 RP', 'Above my average'],
+              selected: options.useOwnAverage ? 1 : 0,
+              onChanged: (i) => notifier.setUseOwnAverage(i == 1),
+              note: _goodNote(options.useOwnAverage, pool),
             ),
           ],
         ),
@@ -742,43 +821,44 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
   }
 }
 
-class _OptionRow extends StatelessWidget {
+/// One setting: its name, the choices side by side, and a line on what the
+/// current choice does.
+class _Setting extends StatelessWidget {
   final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+  final List<String> options;
+  final int selected;
+  final ValueChanged<int> onChanged;
+  final String note;
 
-  const _OptionRow({
+  const _Setting({
     required this.title,
-    required this.subtitle,
-    required this.value,
+    required this.options,
+    required this.selected,
     required this.onChanged,
+    required this.note,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(subtitle, style: AppTheme.caption),
-            ],
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(width: AppTheme.sm),
-        Switch(value: value, onChanged: onChanged),
+        const SizedBox(height: AppTheme.sm),
+        SegmentedCapsule(
+          options: options,
+          selected: selected,
+          onChanged: onChanged,
+        ),
+        const SizedBox(height: AppTheme.sm),
+        Text(note, style: AppTheme.caption),
       ],
     );
   }

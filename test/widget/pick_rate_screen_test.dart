@@ -1,3 +1,4 @@
+import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/ranked_entity_history_screen.dart';
@@ -25,11 +26,12 @@ void main() {
     WidgetTester tester,
     List<RankedMatch> matches, {
     Future<List<RankedMatch>> Function(String legend)? matchesFor,
+    Map<String, Object> saved = const {},
   }) async {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues(saved);
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
@@ -291,7 +293,7 @@ void main() {
       Future<List<RankedMatch>> Function(String legend)? matchesFor,
     }) async {
       await pump(tester, matches, matchesFor: matchesFor);
-      await tester.tap(find.byTooltip('Show table'));
+      await tester.tap(find.text('Table'));
       await tester.pump();
     }
 
@@ -410,11 +412,231 @@ void main() {
       await tester.tap(find.text('Bangalore'));
       await tester.pump();
 
-      await tester.tap(find.byTooltip('Show chart'));
+      await tester.tap(find.text('Chart'));
       await tester.pump();
 
       expect(find.text('Pick rate'), findsOneWidget);
       expect(find.text('Tap a legend to see details'), findsNothing);
+    });
+  });
+
+  group('Customize', () {
+    // Alter sits just above 0 RP, so it is a core legend against 0 but below
+    // the player's average of +4.8. Zed has too few games to show.
+    final custom = [
+      ..._games('Alter', 8, 1),
+      ..._games('Bangalore', 4, 20),
+      ..._games('Wraith', 4, -3),
+      ..._games('Zed', 2, 5),
+    ];
+
+    Future<void> openSheet(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Customize'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('says what each choice does, with the counts', (tester) async {
+      await pump(tester, custom);
+      await openSheet(tester);
+
+      expect(find.text('Legends shown'), findsOneWidget);
+      expect(find.text('3+ games'), findsOneWidget);
+      expect(
+        find.text(
+          'Showing 3 of 4. Hiding 1 legend with under 3 games: too few for '
+          'a steady average.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Good means'), findsOneWidget);
+      expect(
+        find.text(
+          'The dashed line sits at 0 RP per game. Your average is +4.8 RP '
+          'per game; using it would move 1 legend.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('says nothing is hidden when every legend qualifies', (
+      tester,
+    ) async {
+      await pump(tester, matches);
+      await openSheet(tester);
+
+      expect(
+        find.text(
+          "Every legend you've played has at least 3 games, so none are "
+          'hidden.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('All adds the legends with few games, and is kept', (
+      tester,
+    ) async {
+      await pump(tester, custom);
+      expect(chart(tester).scatterSpots, hasLength(3));
+      await openSheet(tester);
+
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Including 1 legend with under 3 games. Their averages can swing a '
+          'lot.',
+        ),
+        findsOneWidget,
+      );
+      expect(chart(tester).scatterSpots, hasLength(4));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(PrefsKeys.pickRateShowAll), isTrue);
+    });
+
+    testWidgets('Above my average moves the line and is kept', (tester) async {
+      await pump(tester, custom);
+      expect(find.textContaining('and 0 RP per game'), findsOneWidget);
+      await openSheet(tester);
+
+      await tester.tap(find.text('Above my average'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'The dashed line sits at your average, +4.8 RP per game. Using 0 RP '
+          'instead would move 1 legend.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('your average of +4.8 RP'), findsOneWidget);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(PrefsKeys.pickRateOwnAverage), isTrue);
+    });
+
+    testWidgets('says no legend would move when none sit between the lines', (
+      tester,
+    ) async {
+      await pump(tester, matches);
+      await openSheet(tester);
+
+      expect(find.textContaining("wouldn't move any legend"), findsOneWidget);
+    });
+
+    testWidgets('starts as it was left', (tester) async {
+      await pump(
+        tester,
+        custom,
+        saved: {
+          PrefsKeys.pickRateShowAll: true,
+          PrefsKeys.pickRateOwnAverage: true,
+        },
+      );
+
+      expect(chart(tester).scatterSpots, hasLength(4));
+      expect(find.textContaining('your average of +4.8 RP'), findsOneWidget);
+    });
+
+    testWidgets('changing what is shown clears the selected legend', (
+      tester,
+    ) async {
+      await pump(tester, custom);
+      await tester.tap(find.textContaining('of your games at'));
+      await tester.pump();
+      expect(find.text('Tap a legend to see details'), findsNothing);
+
+      await openSheet(tester);
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+
+      // The sheet is still over the page; close it to look.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(find.text('Tap a legend to see details'), findsOneWidget);
+    });
+  });
+
+  group('the view selector and info', () {
+    testWidgets('a Chart | Table selector sits on the page, not the app bar', (
+      tester,
+    ) async {
+      await pump(tester, matches);
+
+      expect(find.text('Chart'), findsOneWidget);
+      expect(find.text('Table'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.table_rows_outlined),
+        ),
+        findsNothing,
+      );
+      expect(find.byType(ScatterChart), findsOneWidget);
+    });
+
+    testWidgets(
+      'picking Table shows the table, and Chart brings the chart back',
+      (tester) async {
+        await pump(tester, matches);
+
+        await tester.tap(find.text('Table'));
+        await tester.pump();
+        expect(find.byType(ScatterChart), findsNothing);
+        expect(find.text('LEGEND'), findsOneWidget);
+
+        await tester.tap(find.text('Chart'));
+        await tester.pump();
+        expect(find.byType(ScatterChart), findsOneWidget);
+        expect(find.text('LEGEND'), findsNothing);
+      },
+    );
+
+    testWidgets('the choice is kept', (tester) async {
+      await pump(tester, matches);
+      await tester.tap(find.text('Table'));
+      await tester.pump();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(PrefsKeys.pickRateTable), isTrue);
+    });
+
+    testWidgets('opens on the table when it was left there', (tester) async {
+      await pump(tester, matches, saved: {PrefsKeys.pickRateTable: true});
+
+      expect(find.byType(ScatterChart), findsNothing);
+      expect(find.text('LEGEND'), findsOneWidget);
+    });
+
+    testWidgets('has no selector when there is nothing to show', (
+      tester,
+    ) async {
+      await pump(tester, const []);
+
+      expect(find.text('Chart'), findsNothing);
+      expect(find.text('Table'), findsNothing);
+    });
+
+    testWidgets('the info button explains how to read the page', (
+      tester,
+    ) async {
+      await pump(tester, matches);
+
+      await tester.tap(find.byTooltip('How to read this'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pick Rate'), findsWidgets);
+      expect(find.textContaining('Each dot is a legend'), findsOneWidget);
+      expect(find.textContaining('hidden gem'), findsOneWidget);
+      expect(find.textContaining('choose All in Customize'), findsOneWidget);
+    });
+
+    testWidgets('the app bar has Customize, then info', (tester) async {
+      await pump(tester, matches);
+
+      final tune = tester.getCenter(find.byIcon(Icons.tune));
+      final info = tester.getCenter(find.byIcon(Icons.info_outline));
+      expect(info.dx, greaterThan(tune.dx));
     });
   });
 }

@@ -183,4 +183,57 @@ void main() {
       expect(r.worst, isNull);
     });
   });
+
+  group('pickRatePool', () {
+    final legends = legendBreakdowns([
+      ..._games('Alter', 5, 10),
+      ..._games('Bangalore', 2, 10),
+      ..._games('Wraith', 3, 10),
+    ]);
+
+    test('keeps only legends with enough games by default', () {
+      final pool = pickRatePool(legends, showAll: false);
+
+      expect({for (final l in pool) l.legend}, {'Alter', 'Wraith'});
+    });
+
+    test('keeps every legend when asked', () {
+      expect(pickRatePool(legends, showAll: true), legends);
+    });
+  });
+
+  group('legendsMovedByBaseline', () {
+    // Alter: 8 games at +10. Bangalore: 4 at +2. Wraith: 4 at -6.
+    final pool = legendBreakdowns([
+      ..._games('Alter', 8, 10),
+      ..._games('Bangalore', 4, 2),
+      ..._games('Wraith', 4, -6),
+    ]);
+
+    int moved(double average) => legendsMovedByBaseline(
+      pool,
+      totalGames: 16,
+      equalShareRate: 1 / 3,
+      ownAverage: average,
+    );
+
+    test('counts legends that cross the new line', () {
+      // Bangalore (+2) falls below an average of +5; so does Wraith, but it
+      // was already below 0 and is still below it.
+      expect(moved(5), 1);
+    });
+
+    test('is zero when the average is 0', () {
+      expect(moved(0), 0);
+    });
+
+    test('is zero when no legend sits between 0 and the average', () {
+      expect(moved(1), 0);
+    });
+
+    test('counts a legend that rises above a negative average', () {
+      // Wraith (-6) is below 0 but above an average of -8.
+      expect(moved(-8), 1);
+    });
+  });
 }

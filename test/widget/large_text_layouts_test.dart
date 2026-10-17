@@ -358,20 +358,35 @@ void main() {
     tester.view.physicalSize = const Size(320, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, app) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(2.0)),
-          child: app!,
-        ),
-        home: RankedPickRateScreen(
-          summary: summarize(all),
-          legends: legendBreakdowns(all),
+      ProviderScope(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        child: MaterialApp(
+          builder: (context, app) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2.0)),
+            child: app!,
+          ),
+          home: RankedPickRateScreen(
+            summary: summarize(all),
+            legends: legendBreakdowns(all),
+          ),
         ),
       ),
     );
+    await tester.pump();
+    expectNoOverflow();
+
+    await tester.tap(find.byTooltip('Customize'));
+    await tester.pumpAndSettle();
+    expectNoOverflow();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Table'));
     await tester.pump();
     expectNoOverflow();
   });

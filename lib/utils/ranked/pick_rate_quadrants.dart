@@ -86,6 +86,37 @@ List<PickRateTakeaway> pickRateTakeaways({
   ];
 }
 
+/// The legends the chart and table show: all of them, or only those with at
+/// least [kMinGamesForInsight] games, whose averages are steady enough to read.
+List<LegendBreakdown> pickRatePool(
+  List<LegendBreakdown> legends, {
+  required bool showAll,
+}) => showAll
+    ? legends
+    : [
+        for (final l in legends)
+          if (l.games >= kMinGamesForInsight) l,
+      ];
+
+/// How many legends in [pool] would change quadrant if the RP line moved from
+/// 0 to [ownAverage] (or back: the count is the same either way).
+int legendsMovedByBaseline(
+  List<LegendBreakdown> pool, {
+  required int totalGames,
+  required double equalShareRate,
+  required double ownAverage,
+}) {
+  var moved = 0;
+  for (final l in pool) {
+    final rate = totalGames == 0 ? 0.0 : l.games / totalGames;
+    if (quadrantOf(rate, l.avgRpPerGame, equalShareRate, 0) !=
+        quadrantOf(rate, l.avgRpPerGame, equalShareRate, ownAverage)) {
+      moved++;
+    }
+  }
+  return moved;
+}
+
 /// The maps one legend does best and worst on, among those with at least
 /// [kMinGamesForInsight] games. The worst is null unless two or more maps
 /// qualify and it really is below the best. Ties go to the map with more games.
