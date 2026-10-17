@@ -6,9 +6,11 @@ import 'package:apexlytics/models/server_status.dart';
 import 'package:apexlytics/providers/proxy_health_provider.dart';
 import 'package:apexlytics/screens/home/server_status_page.dart';
 import 'package:apexlytics/services/proxy_health.dart';
+import 'package:apexlytics/screens/ranked/ranked_compare_tab.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
 import 'package:apexlytics/screens/ranked/widgets/history_filter.dart';
 import 'package:apexlytics/screens/ranked/widgets/match_history_list.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_entity_compare.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_best_legend_per_map.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_highlight_cards.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_rp_chart.dart';
@@ -124,7 +126,7 @@ void main() {
     expectNoOverflow();
   });
 
-  testWidgets('the Personal Records streak card', (tester) async {
+  testWidgets('the Records & Compare streak card', (tester) async {
     await pump(
       tester,
       SizedBox(
@@ -228,6 +230,41 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
+    expectNoOverflow();
+  });
+
+  testWidgets('the legend comparison table', (tester) async {
+    await pump(
+      tester,
+      RankedEntityCompare(
+        kind: CompareKind.legends,
+        matches: [
+          for (var i = 0; i < 4; i++)
+            buildMatch(
+              legend: 'Mad Maggie',
+              start: 1782090000 + i * 5000,
+              kills: 2,
+              damage: 900,
+            ),
+          for (var i = 0; i < 4; i++)
+            buildMatch(
+              legend: 'Newcastle',
+              rp: -12,
+              start: 1782190000 + i * 5000,
+              kills: 1,
+              damage: 300,
+            ),
+        ],
+      ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the Comparison switch', (tester) async {
+    await pump(
+      tester,
+      const RankedCompareTab(uid: '1', splits: [], matches: []),
+    );
     expectNoOverflow();
   });
 }

@@ -14,7 +14,7 @@ import 'ranked_compare_tab.dart';
 import '../../widgets/nav_entry_card.dart';
 
 
-/// Entry point for the Personal Records screen: standout single-game and
+/// Entry point for the Records & Compare screen: standout single-game and
 /// win-streak stats. Hides itself when there are no ranked matches to draw
 /// records from. Session-over-session trends live on Performance Trends
 /// instead (see RankedTimeBreakdownScreen) — this page is about peaks, not
@@ -40,7 +40,7 @@ class RankedPersonalRecordsEntry extends StatelessWidget {
 
     return NavEntryCard(
       icon: Icons.emoji_events_outlined,
-      title: 'Personal Records',
+      title: 'Records & Compare',
       onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => RankedPersonalRecordsScreen(
@@ -75,7 +75,7 @@ class RankedPersonalRecordsScreen extends StatelessWidget {
     final records = personalRecords(matches);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Personal Records')),
+      appBar: AppBar(title: const Text('Records & Compare')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppTheme.md),
@@ -100,7 +100,7 @@ class RankedPersonalRecordsScreen extends StatelessWidget {
                 Icon(Icons.compare_arrows, size: 18, color: AppTheme.accent),
                 SizedBox(width: AppTheme.sm),
                 Text(
-                  'Split Comparison',
+                  'Comparison',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontSize: 16,
@@ -110,7 +110,7 @@ class RankedPersonalRecordsScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppTheme.md),
-            RankedCompareTab(uid: uid, splits: splits),
+            RankedCompareTab(uid: uid, splits: splits, matches: matches),
           ],
         ),
       ),

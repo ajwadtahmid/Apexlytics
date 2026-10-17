@@ -1,22 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
 import '../../providers/ranked_provider.dart';
 import '../../utils/formatting/format.dart'
-    show formatAvgDamage, formatAvgKills, formatPercent, formatSigned, formatSignedInt, kNoReading;
+    show
+        formatAvgDamage,
+        formatAvgKills,
+        formatPercent,
+        formatSigned,
+        formatSignedInt,
+        kNoReading;
 import '../../utils/error_messages.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
 import '../../widgets/error_card.dart';
 import '../../widgets/legend_icon.dart';
+import '../../widgets/segmented_capsule.dart';
 import '../../widgets/surface_card.dart';
 import 'ranked_legend_map_matrix_screen.dart';
+import 'widgets/compare_row.dart';
 import 'widgets/ranked_day_of_week_chart.dart';
+import 'widgets/ranked_entity_compare.dart';
 import 'widgets/ranked_time_of_day_chart.dart';
 
 /// Split-vs-split comparison. Embedded inline (not in its own scrollable) at
-/// the bottom of the Personal Records screen, below the standout-game cards
+/// the bottom of the Records & Compare screen, below the standout-game cards
 /// and streak — the caller supplies the surrounding `ListView`.
 ///
 /// Only real, named splits are selectable — not Lifetime (comparing "every
@@ -28,17 +38,32 @@ import 'widgets/ranked_time_of_day_chart.dart';
 /// RP is never compared against another split's, because the ladder resets
 /// between splits, so a diff of two absolute RP values across that boundary
 /// means nothing.
+///
+/// A selector at the top switches between comparing two splits (the default),
+/// and two legends or two maps within [matches], the screen's own period.
 class RankedCompareTab extends ConsumerStatefulWidget {
   final String uid;
   final List<RankedSplitBucket> splits;
 
-  const RankedCompareTab({super.key, required this.uid, required this.splits});
+  /// The ranked games of the period the screen is showing, for the legend and
+  /// map comparisons.
+  final List<RankedMatch> matches;
+
+  const RankedCompareTab({
+    super.key,
+    required this.uid,
+    required this.splits,
+    this.matches = const [],
+  });
 
   @override
   ConsumerState<RankedCompareTab> createState() => _RankedCompareTabState();
 }
 
+enum _CompareMode { splits, legends, maps }
+
 class _RankedCompareTabState extends ConsumerState<RankedCompareTab> {
+  _CompareMode _mode = _CompareMode.splits;
   String? _splitAId;
   String? _splitBId;
 
@@ -59,6 +84,33 @@ class _RankedCompareTabState extends ConsumerState<RankedCompareTab> {
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: SegmentedCapsule(
+            options: const ['Splits', 'Legends', 'Maps'],
+            selected: _mode.index,
+            onChanged: (i) => setState(() => _mode = _CompareMode.values[i]),
+          ),
+        ),
+        const SizedBox(height: AppTheme.md),
+        switch (_mode) {
+          _CompareMode.splits => _buildSplits(),
+          _CompareMode.legends => RankedEntityCompare(
+            kind: CompareKind.legends,
+            matches: widget.matches,
+          ),
+          _CompareMode.maps => RankedEntityCompare(
+            kind: CompareKind.maps,
+            matches: widget.matches,
+          ),
+        },
+      ],
+    );
+  }
+
+  Widget _buildSplits() {
     final real = _comparable;
     if (real.length < 2) {
       return const Padding(
@@ -127,10 +179,7 @@ class _SplitPicker extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: AppTheme.sm),
           child: Padding(
             padding: EdgeInsets.only(bottom: 10),
-            child: Text(
-              'vs',
-              style: AppTheme.captionLarge,
-            ),
+            child: Text('vs', style: AppTheme.captionLarge),
           ),
         ),
         Expanded(
@@ -339,10 +388,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppTheme.sm),
-      child: Text(
-        text,
-        style: AppTheme.cardTitle,
-      ),
+      child: Text(text, style: AppTheme.cardTitle),
     );
   }
 }
@@ -407,7 +453,7 @@ class _SummarySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _SectionHeader('SUMMARY'),
-          _Row(
+          CompareRow(
             'Games',
             '${a.summary.games}',
             '${b.summary.games}',
@@ -417,7 +463,7 @@ class _SummarySection extends StatelessWidget {
             // better, so this is the one row where "more" colors red.
             invert: true,
           ),
-          _Row(
+          CompareRow(
             'Games/day',
             gamesPerDayA == null ? kNoReading : gamesPerDayA.toStringAsFixed(1),
             gamesPerDayB == null ? kNoReading : gamesPerDayB.toStringAsFixed(1),
@@ -426,14 +472,14 @@ class _SummarySection extends StatelessWidget {
                 : null,
             invert: true,
           ),
-          _Row(
+          CompareRow(
             'Net RP',
             formatSignedInt(a.summary.netRp),
             formatSignedInt(b.summary.netRp),
             delta: (b.summary.netRp - a.summary.netRp).toDouble(),
             integerDelta: true,
           ),
-          _Row(
+          CompareRow(
             'RP/day',
             rpPerDayA == null ? kNoReading : formatSigned(rpPerDayA),
             rpPerDayB == null ? kNoReading : formatSigned(rpPerDayB),
@@ -441,25 +487,25 @@ class _SummarySection extends StatelessWidget {
                 ? rpPerDayB - rpPerDayA
                 : null,
           ),
-          _Row(
+          CompareRow(
             'Avg RP/game',
             formatSigned(a.summary.avgRpPerGame),
             formatSigned(b.summary.avgRpPerGame),
             delta: b.summary.avgRpPerGame - a.summary.avgRpPerGame,
           ),
-          _Row(
+          CompareRow(
             'Win rate',
             formatPercent(a.summary.winRate),
             formatPercent(b.summary.winRate),
             delta: (b.summary.winRate - a.summary.winRate) * 100,
           ),
-          _Row(
+          CompareRow(
             'Avg Kills',
             formatAvgKills(a.summary.avgKills),
             formatAvgKills(b.summary.avgKills),
             delta: _diff(a.summary.avgKills, b.summary.avgKills),
           ),
-          _Row(
+          CompareRow(
             'Avg Dmg',
             formatAvgDamage(a.summary.avgDamage),
             formatAvgDamage(b.summary.avgDamage),
@@ -474,85 +520,6 @@ class _SummarySection extends StatelessWidget {
 /// [b] minus [a], or null when either side has no reading to compare.
 double? _diff(double? a, double? b) => a == null || b == null ? null : b - a;
 
-class _Row extends StatelessWidget {
-  final String label;
-  final String valueA;
-  final String valueB;
-  final double? delta;
-
-  /// True when the delta is a whole count, shown without a decimal.
-  final bool integerDelta;
-
-  /// True for metrics where a higher value is worse (e.g. needing more games
-  /// for the same result), so the delta's color reads opposite of the sign.
-  final bool invert;
-
-  const _Row(
-    this.label,
-    this.valueA,
-    this.valueB, {
-    this.delta,
-    this.integerDelta = false,
-    this.invert = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final d = delta;
-    final isGood = d == null ? null : (invert ? d < 0 : d >= 0);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              label,
-              style: AppTheme.caption,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              valueA,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              valueB,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (d != null)
-            Expanded(
-              child: Text(
-                integerDelta ? formatSignedInt(d.round()) : formatSigned(d),
-                textAlign: TextAlign.end,
-                style: TextStyle(
-                  color: isGood! ? AppTheme.green : AppTheme.red,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            )
-          else
-            const Expanded(child: SizedBox()),
-        ],
-      ),
-    );
-  }
-}
-
 class _PickRateList extends StatelessWidget {
   final List<LegendBreakdown> legends;
   final int totalGames;
@@ -565,10 +532,7 @@ class _PickRateList extends StatelessWidget {
     if (totalGames == 0 || legends.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: AppTheme.sm),
-        child: Text(
-          'No games',
-          style: AppTheme.caption,
-        ),
+        child: Text('No games', style: AppTheme.caption),
       );
     }
     final sorted = [...legends]..sort((x, y) => y.games.compareTo(x.games));

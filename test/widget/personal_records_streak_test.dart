@@ -32,6 +32,13 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('the screen is called Records & Compare', (tester) async {
+    await pump(tester, live: true);
+
+    expect(find.text('Records & Compare'), findsOneWidget);
+    expect(find.text('Comparison'), findsOneWidget);
+  });
+
   testWidgets('a live scope tells the player they are on the streak now', (
     tester,
   ) async {

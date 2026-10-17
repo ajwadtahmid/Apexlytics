@@ -18,6 +18,7 @@ export 'player_stats_tabs.dart';
 export 'profile_manager_sheet.dart';
 export 'ranked_info_card.dart';
 export 'server_summary_card.dart';
+export 'segmented_capsule.dart';
 export 'setting_row.dart';
 export 'low_power_warning.dart';
 export 'sheet_handle.dart';

@@ -6,6 +6,7 @@ import '../utils/theme.dart';
 import 'legend_stats_section.dart';
 import 'weapon_stats_section.dart';
 import 'control_pill.dart';
+import 'segmented_capsule.dart';
 
 enum _LegendSortOrder { byLastPlayed, byKills, byDamage, byWins, byRole }
 
@@ -136,7 +137,7 @@ class _PlayerStatsTabsState extends State<PlayerStatsTabs> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Center(
-          child: _SegmentedCapsule(
+          child: SegmentedCapsule(
             options: const ['Legends', 'Guns'],
             selected: _tab,
             onChanged: (i) => setState(() => _tab = i),
@@ -271,55 +272,6 @@ class _RoleChip extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SegmentedCapsule extends StatelessWidget {
-  final List<String> options;
-  final int selected;
-  final ValueChanged<int> onChanged;
-
-  const _SegmentedCapsule({
-    required this.options,
-    required this.selected,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface2,
-        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-      ),
-      padding: const EdgeInsets.all(3),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: options.indexed.map((record) {
-          final (index, option) = record;
-          final isSelected = index == selected;
-          return GestureDetector(
-            onTap: () => onChanged(index),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-              decoration: BoxDecoration(
-                color: isSelected ? AppTheme.accent : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-              ),
-              child: Text(
-                option,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : AppTheme.muted,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
