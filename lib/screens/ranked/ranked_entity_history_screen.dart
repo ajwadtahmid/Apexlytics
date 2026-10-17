@@ -22,8 +22,10 @@ class RankedEntityHistoryScreen extends StatefulWidget {
   /// Lower-case noun for the secondary grouping, e.g. 'map' or 'legend'.
   final String groupLabel;
 
-  /// How to section matches when grouped mode is active.
-  final MatchGrouping grouping;
+  /// How to section matches when grouped mode is active. Null for a page with
+  /// nothing to group by (a single legend on a single map), which then has no
+  /// sort toggle.
+  final MatchGrouping? grouping;
 
   /// The scope's full history (newest first), which sessions are found over.
   /// Null for Lifetime: break rows are then hidden.
@@ -35,8 +37,8 @@ class RankedEntityHistoryScreen extends StatefulWidget {
     required this.subtitle,
     required this.matches,
     required this.onRefresh,
-    required this.groupLabel,
-    required this.grouping,
+    this.groupLabel = '',
+    this.grouping,
     this.sessionPool,
   });
 
@@ -100,11 +102,13 @@ class _RankedEntityHistoryScreenState extends State<RankedEntityHistoryScreen> {
           // history it needs; a map's page only has one map's worth of each
           // legend, which would skew the average.
           averagePool: widget.groupLabel == 'map' ? _matches : null,
-          header: _SortToggle(
-            grouped: _grouped,
-            groupLabel: widget.groupLabel,
-            onTap: () => setState(() => _grouped = !_grouped),
-          ),
+          header: widget.grouping == null
+              ? null
+              : _SortToggle(
+                  grouped: _grouped,
+                  groupLabel: widget.groupLabel,
+                  onTap: () => setState(() => _grouped = !_grouped),
+                ),
         ),
       ),
     );

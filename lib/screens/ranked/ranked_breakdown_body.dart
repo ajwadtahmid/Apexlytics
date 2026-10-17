@@ -668,7 +668,13 @@ class _OverviewTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppTheme.sm),
-                Expanded(child: RankedLegendMapMatrixEntry(matches: matches)),
+                Expanded(
+                  child: RankedLegendMapMatrixEntry(
+                    matches: matches,
+                    onRefresh: onRefresh,
+                    sessionPool: data.view.history,
+                  ),
+                ),
               ],
             ),
           ),

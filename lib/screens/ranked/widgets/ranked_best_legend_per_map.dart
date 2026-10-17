@@ -5,10 +5,10 @@ import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 
-/// For each map the player has played: their record there and the legend that
-/// does best on it, so the matrix doubles as a pre-game decision. The map in
-/// the live ranked rotation ([currentMapName]) comes first, marked "Playing
-/// now".
+/// For each map the player has played: their record there and the legends that
+/// do best and worst on it, so the matrix doubles as a pre-game decision. The
+/// map in the live ranked rotation ([currentMapName]) comes first, marked
+/// "Playing now".
 class RankedBestLegendPerMap extends StatelessWidget {
   final List<LegendMapCell> cells;
   final String? currentMapName;
@@ -32,7 +32,10 @@ class RankedBestLegendPerMap extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('BEST LEGEND PER MAP', style: AppTheme.cardTitle),
+          const Text(
+            'BEST AND WORST LEGEND PER MAP',
+            style: AppTheme.cardTitle,
+          ),
           const SizedBox(height: AppTheme.xs),
           const Text(
             'Needs $kMinGamesForInsight or more games on a map.',
@@ -97,27 +100,47 @@ class _MapRow extends StatelessWidget {
           const SizedBox(height: AppTheme.xs),
           Text(
             insight.hasRecord
-                ? 'You: ${_rate(insight.avgRpPerGame)} RP/game over '
+                ? 'Overall: ${_rate(insight.avgRpPerGame)} RP/game, '
                       '${plural(insight.games, 'game')}'
                 : 'Only ${plural(insight.games, 'game')} here so far',
             style: AppTheme.caption,
           ),
           if (best != null) ...[
             const SizedBox(height: 2),
-            Text(
-              'Best legend: ${best.legend} (${_rate(best.avgRpPerGame)} '
-              'RP/game, ${plural(best.games, 'game')})',
-              style: TextStyle(
-                color: AppTheme.signColor(best.avgRpPerGame >= 0),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            _LegendLine('Best', best),
+          ],
+          if (insight.worst != null) ...[
+            const SizedBox(height: 2),
+            _LegendLine('Worst', insight.worst!),
+          ] else if (best != null && insight.qualified == 1)
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Text(
+                'No other legend has $kMinGamesForInsight+ games here yet',
+                style: AppTheme.captionSmall,
               ),
             ),
-          ],
         ],
       ),
     );
   }
 
   static String _rate(double v) => formatSigned(v);
+}
+
+/// "Best: Bangalore (+30.0 RP/game, 4 games)", in the colour of its RP.
+class _LegendLine extends StatelessWidget {
+  final String label;
+  final LegendMapCell cell;
+  const _LegendLine(this.label, this.cell);
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppTheme.signColor(cell.avgRpPerGame >= 0);
+    return Text(
+      '$label: ${cell.legend} (${formatSigned(cell.avgRpPerGame)} '
+      'RP/game, ${plural(cell.games, 'game')})',
+      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+    );
+  }
 }

@@ -447,7 +447,7 @@ List<LegendMapCell> legendMapBreakdowns(List<RankedMatch> matches) {
   ];
 }
 
-/// One map's record and the legend that does best on it.
+/// One map's record and the legends that do best and worst on it.
 class MapLegendInsight {
   final String mapName;
   final int games;
@@ -457,11 +457,20 @@ class MapLegendInsight {
   /// least [kMinGamesForInsight] games there; null when none has played enough.
   final LegendMapCell? best;
 
+  /// The one with the lowest, among the same legends. Null unless there are two
+  /// or more of them and it does worse than [best].
+  final LegendMapCell? worst;
+
+  /// How many legends have enough games here to be compared.
+  final int qualified;
+
   const MapLegendInsight({
     required this.mapName,
     required this.games,
     required this.totalRp,
     required this.best,
+    this.worst,
+    this.qualified = 0,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
@@ -470,28 +479,51 @@ class MapLegendInsight {
   bool get hasRecord => games >= kMinGamesForInsight;
 }
 
-/// For each map in [cells], the player's record there and their best legend,
-/// most-played map first. Ties on RP per game go to the legend with more games.
+/// For each map in [cells], the player's record there and their best and worst
+/// legend, most-played map first. Ties on RP per game go to the legend with
+/// more games.
 List<MapLegendInsight> mapLegendInsights(List<LegendMapCell> cells) {
   final byMap = <String, List<LegendMapCell>>{};
   for (final c in cells) {
     byMap.putIfAbsent(c.mapName, () => []).add(c);
   }
+  int byRpThenGames(LegendMapCell a, LegendMapCell b) {
+    final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
+    return byRp != 0 ? byRp : b.games.compareTo(a.games);
+  }
+
   final insights =
       [
         for (final e in byMap.entries)
-          MapLegendInsight(
-            mapName: e.key,
-            games: e.value.fold(0, (a, c) => a + c.games),
-            totalRp: e.value.fold(0, (a, c) => a + c.totalRp),
-            best:
-                (e.value.where((c) => c.games >= kMinGamesForInsight).toList()
-                      ..sort((a, b) {
-                        final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
-                        return byRp != 0 ? byRp : b.games.compareTo(a.games);
-                      }))
-                    .firstOrNull,
-          ),
+          () {
+            final enough = [
+              for (final c in e.value)
+                if (c.games >= kMinGamesForInsight) c,
+            ]..sort(byRpThenGames);
+            final best = enough.firstOrNull;
+            // The lowest RP per game; among equals, the one with more games behind
+            // it. Only worth naming when it really is below the best.
+            final lowest = enough.isEmpty
+                ? null
+                : enough.reduce(
+                    (a, b) => a.avgRpPerGame != b.avgRpPerGame
+                        ? (a.avgRpPerGame < b.avgRpPerGame ? a : b)
+                        : (a.games >= b.games ? a : b),
+                  );
+            return MapLegendInsight(
+              mapName: e.key,
+              games: e.value.fold(0, (a, c) => a + c.games),
+              totalRp: e.value.fold(0, (a, c) => a + c.totalRp),
+              best: best,
+              worst:
+                  enough.length >= 2 &&
+                      lowest != null &&
+                      lowest.avgRpPerGame < best!.avgRpPerGame
+                  ? lowest
+                  : null,
+              qualified: enough.length,
+            );
+          }(),
       ]..sort((a, b) {
         final g = b.games.compareTo(a.games);
         return g != 0 ? g : a.mapName.compareTo(b.mapName);
