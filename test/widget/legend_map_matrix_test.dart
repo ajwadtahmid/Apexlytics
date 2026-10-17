@@ -270,7 +270,7 @@ void main() {
     ) async {
       await pump(tester);
 
-      await tester.tap(find.text('+30.0').last);
+      await tester.tap(find.byKey(const ValueKey('cell|Bangalore|Olympus')));
       await tester.pumpAndSettle();
 
       expect(find.byType(RankedEntityHistoryScreen), findsOneWidget);
@@ -278,6 +278,169 @@ void main() {
       expect(find.text('4 ranked games · +30.0 RP/game'), findsOneWidget);
       // One legend on one map has nothing to group by.
       expect(find.text('Sort:'), findsNothing);
+    });
+
+    group('the All row and column, and sorting', () {
+      Finder cell(String legend, String map) =>
+          find.byKey(ValueKey('cell|$legend|$map'));
+
+      Finder inCell(String legend, String map, String text) =>
+          find.descendant(of: cell(legend, map), matching: find.text(text));
+
+      testWidgets('add up each legend, each map and the whole grid', (
+        tester,
+      ) async {
+        await pump(tester);
+
+        // Bangalore: 4 games at +30. Axle: 5 at -10. Together 9 at +7.8.
+        expect(inCell('Bangalore', 'All', '4'), findsOneWidget);
+        expect(inCell('Bangalore', 'All', '+30.0'), findsOneWidget);
+        expect(inCell('Axle', 'All', '-10.0'), findsOneWidget);
+        expect(inCell('All', 'Olympus', '4'), findsOneWidget);
+        expect(inCell('All', 'Storm Point', '5'), findsOneWidget);
+        expect(inCell('All', 'All', '9'), findsOneWidget);
+        expect(inCell('All', 'All', '+7.8'), findsOneWidget);
+        expect(find.text('All'), findsNWidgets(2)); // the heading and the row
+      });
+
+      testWidgets('the All row sits below the legends', (tester) async {
+        await pump(tester);
+
+        final bottom = tester.getTopLeft(cell('All', 'Olympus')).dy;
+        expect(
+          tester.getTopLeft(cell('Bangalore', 'Olympus')).dy,
+          lessThan(bottom),
+        );
+        expect(tester.getTopLeft(cell('Axle', 'Olympus')).dy, lessThan(bottom));
+      });
+
+      testWidgets('tapping a legend\'s total opens its games on every map', (
+        tester,
+      ) async {
+        await pump(tester);
+
+        await tester.tap(cell('Bangalore', 'All'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Bangalore · All maps'), findsOneWidget);
+        expect(find.text('4 ranked games · +30.0 RP/game'), findsOneWidget);
+      });
+
+      testWidgets('tapping a map\'s total opens every legend\'s games there', (
+        tester,
+      ) async {
+        await pump(tester);
+
+        await tester.tap(cell('All', 'Storm Point'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('All legends · Storm Point'), findsOneWidget);
+        expect(find.text('5 ranked games · -10.0 RP/game'), findsOneWidget);
+      });
+
+      testWidgets('tapping the overall total opens every game in the grid', (
+        tester,
+      ) async {
+        await pump(tester);
+
+        await tester.tap(cell('All', 'All'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('All legends · All maps'), findsOneWidget);
+        expect(find.text('9 ranked games · +7.8 RP/game'), findsOneWidget);
+      });
+
+      testWidgets(
+        'leave out the column with one map and the row with one legend',
+        (tester) async {
+          await pump(
+            tester,
+            games: _games('Bangalore', 'olympus_rotation', 4, 30, 0),
+          );
+
+          expect(find.text('All'), findsNothing);
+          expect(cell('Bangalore', 'All'), findsNothing);
+          expect(cell('All', 'Olympus'), findsNothing);
+          // Nothing to put in order either.
+          expect(find.text('Most played'), findsNothing);
+        },
+      );
+
+      // Wraith: 6 games at +5. Bangalore: 4 at +20. Axle: 2 at +50, too few.
+      final mixed = [
+        ..._games('Wraith', 'olympus_rotation', 6, 5, 0),
+        ..._games('Bangalore', 'olympus_rotation', 4, 20, 10),
+        ..._games('Axle', 'storm_point_rotation', 2, 50, 20),
+      ];
+
+      List<String> rowOrder(WidgetTester tester) {
+        final rows = [
+          for (final l in ['Wraith', 'Bangalore', 'Axle'])
+            (l, tester.getTopLeft(cell(l, 'All')).dy),
+        ]..sort((a, b) => a.$2.compareTo(b.$2));
+        return [for (final r in rows) r.$1];
+      }
+
+      testWidgets('start with the most played legend first', (tester) async {
+        await pump(tester, games: mixed);
+
+        expect(find.text('Most played'), findsOneWidget);
+        expect(rowOrder(tester), ['Wraith', 'Bangalore', 'Axle']);
+      });
+
+      testWidgets('Best RP puts the best average first and few games last', (
+        tester,
+      ) async {
+        await pump(tester, games: mixed);
+
+        await tester.tap(find.text('Best RP'));
+        await tester.pump();
+
+        expect(rowOrder(tester), ['Bangalore', 'Wraith', 'Axle']);
+      });
+
+      testWidgets('A to Z orders by name', (tester) async {
+        await pump(tester, games: mixed);
+
+        await tester.tap(find.text('A–Z'));
+        await tester.pump();
+
+        expect(rowOrder(tester), ['Axle', 'Bangalore', 'Wraith']);
+      });
+
+      testWidgets('the same choice orders the map columns', (tester) async {
+        // Olympus is played more; Storm Point earns more per game.
+        await pump(
+          tester,
+          games: [
+            ..._games('Wraith', 'olympus_rotation', 6, 5, 0),
+            ..._games('Bangalore', 'storm_point_rotation', 4, 20, 10),
+          ],
+        );
+        double left(String map) => tester.getTopLeft(cell('All', map)).dx;
+        expect(left('Olympus'), lessThan(left('Storm Point')));
+
+        await tester.tap(find.text('Best RP'));
+        await tester.pump();
+        expect(left('Storm Point'), lessThan(left('Olympus')));
+
+        await tester.tap(find.text('A–Z'));
+        await tester.pump();
+        expect(left('Olympus'), lessThan(left('Storm Point')));
+      });
+
+      testWidgets('the info sheet mentions both', (tester) async {
+        await pump(tester);
+
+        await tester.tap(find.byTooltip('How to read this'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('The All row and column'), findsOneWidget);
+        expect(
+          find.textContaining('order the legends and maps'),
+          findsOneWidget,
+        );
+      });
     });
   });
 

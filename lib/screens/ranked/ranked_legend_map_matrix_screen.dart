@@ -4,11 +4,13 @@ import '../../constants/legend_constants.dart' show legendInfo;
 import '../../constants/map_constants.dart' show battleRoyaleMapInfo;
 import '../../models/ranked_match.dart';
 import '../../providers/map_provider.dart';
+import '../../utils/ranked/matrix_totals.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatting/format.dart' show formatSigned, plural;
 import '../../widgets/legend_icon.dart';
 import '../../widgets/nav_entry_card.dart';
+import '../../widgets/segmented_capsule.dart';
 import '../../widgets/sheet_handle.dart';
 import 'ranked_entity_history_screen.dart';
 import 'widgets/ranked_best_legend_per_map.dart';
@@ -64,21 +66,25 @@ class RankedLegendMapMatrixScreen extends ConsumerWidget {
     this.sessionPool,
   });
 
-  /// Opens the games behind one cell as a history page.
+  /// Opens the games behind one cell as a history page. A total cell
+  /// ([kMatrixAll] for its legend or its map) covers that whole row or column,
+  /// but only games the grid itself counts, so the numbers agree.
   void _openCell(BuildContext context, LegendMapCell cell) {
-    final games =
-        matches
-            .where(
-              (m) =>
-                  legendInfo(m.legend)?.name == cell.legend &&
-                  battleRoyaleMapInfo(m.mapKey)?.name == cell.mapName,
-            )
-            .toList()
-          ..sort((a, b) => b.endTime.compareTo(a.endTime));
+    final anyLegend = cell.legend == kMatrixAll;
+    final anyMap = cell.mapName == kMatrixAll;
+    final games = matches.where((m) {
+      final legend = legendInfo(m.legend)?.name;
+      final map = battleRoyaleMapInfo(m.mapKey)?.name;
+      if (legend == null || map == null) return false;
+      return (anyLegend || legend == cell.legend) &&
+          (anyMap || map == cell.mapName);
+    }).toList()..sort((a, b) => b.endTime.compareTo(a.endTime));
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => RankedEntityHistoryScreen(
-          title: '${cell.legend} · ${cell.mapName}',
+          title:
+              '${anyLegend ? 'All legends' : cell.legend} · '
+              '${anyMap ? 'All maps' : cell.mapName}',
           subtitle:
               '${plural(cell.games, 'ranked game')} · '
               '${formatSigned(cell.avgRpPerGame)} RP/game',
@@ -147,6 +153,11 @@ void _showInfoSheet(BuildContext context) {
               'A stronger colour is a bigger gain or loss. Fainter cells have '
                   'under $kMinGamesForInsight games, which says little.',
               'Tap a cell to see those games.',
+              'The All row and column add up each map and each legend, and '
+                  'tapping one shows those games.',
+              'The chips above the grid order the legends and maps by games '
+                  'played, RP per game, or name. Best RP puts those with only a '
+                  'few games last.',
               'Below the grid, the best and worst legend on each map are '
                   'picked from legends with $kMinGamesForInsight or more games '
                   'there. The map in the live ranked rotation comes first.',
@@ -202,29 +213,30 @@ double matrixCellStrength({
   return games < kMinGamesForInsight ? strength.clamp(0.0, 0.1) : strength;
 }
 
-class _Matrix extends StatelessWidget {
+class _Matrix extends StatefulWidget {
   final List<LegendMapCell> cells;
   final Widget? footer;
   final ValueChanged<LegendMapCell>? onCellTap;
   const _Matrix({required this.cells, this.footer, this.onCellTap});
 
   @override
-  Widget build(BuildContext context) {
-    final byLegend = <String, List<LegendMapCell>>{};
-    final legendTotals = <String, int>{};
-    final mapTotals = <String, int>{};
-    for (final c in cells) {
-      byLegend.putIfAbsent(c.legend, () => []).add(c);
-      legendTotals[c.legend] = (legendTotals[c.legend] ?? 0) + c.games;
-      mapTotals[c.mapName] = (mapTotals[c.mapName] ?? 0) + c.games;
-    }
+  State<_Matrix> createState() => _MatrixState();
+}
 
-    // Most-played first in both directions — the rows/columns a player cares
-    // about most surface without scrolling.
-    final legendOrder = byLegend.keys.toList()
-      ..sort((a, b) => legendTotals[b]!.compareTo(legendTotals[a]!));
-    final mapOrder = mapTotals.keys.toList()
-      ..sort((a, b) => mapTotals[b]!.compareTo(mapTotals[a]!));
+class _MatrixState extends State<_Matrix> {
+  MatrixSort _sort = MatrixSort.mostPlayed;
+
+  @override
+  Widget build(BuildContext context) {
+    final cells = widget.cells;
+    final onCellTap = widget.onCellTap;
+    final byPair = {for (final c in cells) (c.legend, c.mapName): c};
+    final totals = matrixTotals(cells);
+    final legendOrder = orderedMatrixNames(totals.byLegend, _sort);
+    final mapOrder = orderedMatrixNames(totals.byMap, _sort);
+    // With one map the All column would repeat it, and likewise one legend.
+    final allColumn = mapOrder.length > 1;
+    final allRow = legendOrder.length > 1;
 
     // The biggest swing among cells with enough games, so one lucky game
     // doesn't wash out the rest.
@@ -233,30 +245,49 @@ class _Matrix extends StatelessWidget {
         .map((c) => c.avgRpPerGame.abs())
         .fold(0.0, (a, b) => a > b ? a : b);
 
-    LegendMapCell? cellFor(String legend, String mapName) {
-      for (final c in byLegend[legend]!) {
-        if (c.mapName == mapName) return c;
-      }
-      return null;
-    }
+    Widget value(LegendMapCell? cell, String legend, String map) => _ValueCell(
+      cell,
+      key: ValueKey('cell|$legend|$map'),
+      maxAbsRp: maxAbsRp,
+      onTap: onCellTap,
+    );
 
+    final columns = mapOrder.length + (allColumn ? 2 : 0);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTheme.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (legendOrder.length > 1 || mapOrder.length > 1) ...[
+            Center(
+              child: SegmentedCapsule(
+                options: [for (final s in MatrixSort.values) s.label],
+                selected: _sort.index,
+                onChanged: (i) => setState(() => _sort = MatrixSort.values[i]),
+              ),
+            ),
+            const SizedBox(height: AppTheme.md),
+          ],
           Table(
             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
             columnWidths: {
               0: const IntrinsicColumnWidth(),
               for (var i = 0; i < mapOrder.length; i++)
                 i + 1: const FlexColumnWidth(),
+              if (allColumn) ...{
+                mapOrder.length + 1: const FixedColumnWidth(1),
+                mapOrder.length + 2: const FlexColumnWidth(),
+              },
             },
             children: [
               TableRow(
                 children: [
                   const SizedBox(),
                   for (final mapName in mapOrder) _HeaderCell(mapName),
+                  if (allColumn) ...[
+                    const _VerticalRule(),
+                    const _HeaderCell(kMatrixAll, strong: true),
+                  ],
                 ],
               ),
               for (final legend in legendOrder)
@@ -264,17 +295,95 @@ class _Matrix extends StatelessWidget {
                   children: [
                     _LegendCell(legend),
                     for (final mapName in mapOrder)
-                      _ValueCell(
-                        cellFor(legend, mapName),
-                        maxAbsRp: maxAbsRp,
-                        onTap: onCellTap,
-                      ),
+                      value(byPair[(legend, mapName)], legend, mapName),
+                    if (allColumn) ...[
+                      const _VerticalRule(),
+                      value(totals.byLegend[legend], legend, kMatrixAll),
+                    ],
                   ],
                 ),
+              if (allRow) ...[
+                TableRow(
+                  children: [
+                    for (var i = 0; i < columns + 1; i++)
+                      const _HorizontalRule(),
+                  ],
+                ),
+                TableRow(
+                  children: [
+                    const _AllLabel(),
+                    for (final mapName in mapOrder)
+                      value(totals.byMap[mapName], kMatrixAll, mapName),
+                    if (allColumn) ...[
+                      const _VerticalRule(),
+                      value(totals.grand, kMatrixAll, kMatrixAll),
+                    ],
+                  ],
+                ),
+              ],
             ],
           ),
-          if (footer != null) ...[const SizedBox(height: AppTheme.lg), footer!],
+          if (widget.footer != null) ...[
+            const SizedBox(height: AppTheme.lg),
+            widget.footer!,
+          ],
         ],
+      ),
+    );
+  }
+}
+
+/// The faint line that sets the All column and row apart from the grid.
+final _ruleColor = AppTheme.muted.withValues(alpha: 0.35);
+
+class _VerticalRule extends StatelessWidget {
+  const _VerticalRule();
+
+  @override
+  Widget build(BuildContext context) {
+    return TableCell(
+      verticalAlignment: TableCellVerticalAlignment.fill,
+      child: Center(
+        child: SizedBox(
+          width: 1,
+          height: double.infinity,
+          child: ColoredBox(color: _ruleColor),
+        ),
+      ),
+    );
+  }
+}
+
+class _HorizontalRule extends StatelessWidget {
+  const _HorizontalRule();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.xs),
+      child: SizedBox(height: 1, child: ColoredBox(color: _ruleColor)),
+    );
+  }
+}
+
+/// The label at the left of the All row.
+class _AllLabel extends StatelessWidget {
+  const _AllLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: AppTheme.sm,
+        horizontal: AppTheme.xs,
+      ),
+      child: Text(
+        kMatrixAll,
+        style: TextStyle(
+          color: AppTheme.textPrimary,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -282,24 +391,30 @@ class _Matrix extends StatelessWidget {
 
 class _HeaderCell extends StatelessWidget {
   final String label;
-  const _HeaderCell(this.label);
+
+  /// Brighter, for the All column.
+  final bool strong;
+  const _HeaderCell(this.label, {this.strong = false});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.xs,
+        horizontal: 1,
         vertical: AppTheme.sm,
       ),
-      child: Text(
-        label,
-        textAlign: TextAlign.center,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: AppTheme.muted,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+      // Two-word names break at the space and shrink to fit, so a narrow
+      // column shows the whole name rather than a clipped one.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label.replaceFirst(' ', '\n'),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: strong ? AppTheme.textPrimary : AppTheme.muted,
+            fontSize: 10,
+            fontWeight: strong ? FontWeight.bold : FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -340,7 +455,7 @@ class _ValueCell extends StatelessWidget {
   final LegendMapCell? cell;
   final double maxAbsRp;
   final ValueChanged<LegendMapCell>? onTap;
-  const _ValueCell(this.cell, {required this.maxAbsRp, this.onTap});
+  const _ValueCell(this.cell, {super.key, required this.maxAbsRp, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -379,23 +494,28 @@ class _ValueCell extends StatelessWidget {
             onTap: onTap == null ? null : () => onTap!(c),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Column(
-                children: [
-                  Text(
-                    '${c.games}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
+              // Scales down rather than crowding the next column when there
+              // are many maps or large text.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  children: [
+                    Text(
+                      '${c.games}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    formatSigned(c.avgRpPerGame),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: color, fontSize: 11),
-                  ),
-                ],
+                    Text(
+                      formatSigned(c.avgRpPerGame),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: color, fontSize: 11),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
