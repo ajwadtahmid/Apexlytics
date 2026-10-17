@@ -128,6 +128,26 @@ void main() {
       expect(alerts, isEmpty);
     });
 
+    test('drops alerts due within the minimum lead of now', () {
+      // Fire time lands a few seconds after now: past the plain isAfter check,
+      // but close enough to expire before the platform call completes.
+      const leadSecs = 60 + 45; // minutesBefore (1) + scheduleSlack.
+      final tooSoon = project(
+        mode('WE', durationMins: 0),
+        remainingSecs: leadSecs + 5,
+        minutesBefore: 1,
+      );
+      expect(tooSoon, isEmpty);
+
+      final clearOfMargin = project(
+        mode('WE', durationMins: 0),
+        remainingSecs:
+            leadSecs + NotificationService.scheduleMinLead.inSeconds + 1,
+        minutesBefore: 1,
+      );
+      expect(clearOfMargin, hasLength(1));
+    });
+
     test('assigns contiguous ids from idBase', () {
       final alerts = project(
         mode('WE'),

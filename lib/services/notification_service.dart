@@ -255,6 +255,13 @@ class NotificationService {
   @visibleForTesting
   static const scheduleSlack = Duration(seconds: 45);
 
+  /// Alerts due sooner than this after `now` are dropped. The plugin rejects a
+  /// date already past by the time the platform call runs, and dispatch is a
+  /// sequence of awaited calls (slower still on a locked device), so an alert
+  /// only just ahead of `now` can expire in flight.
+  @visibleForTesting
+  static const scheduleMinLead = Duration(seconds: 10);
+
   /// Schedules a batch of upcoming-rotation notifications per enabled mode and
   /// cancels any previously scheduled ones.
   ///
@@ -413,11 +420,19 @@ class NotificationService {
       mapSequence: mapSequence,
       now: now,
     );
+    var scheduled = 0;
     for (final a in alerts) {
-      await _dispatch(a.id, a.body, a.notifyAt, now);
+      try {
+        await _dispatch(a.id, a.body, a.notifyAt, now);
+        scheduled++;
+      } on ArgumentError catch (e) {
+        // One alert that expired in flight must not abort the rest of the
+        // series — everything was already cancelled, so nothing would be armed.
+        log.w('$modeLabel: skipped alert ${a.id}', error: e);
+      }
     }
-    log.d('$modeLabel: scheduled ${alerts.length} notification(s)');
-    return alerts.length;
+    log.d('$modeLabel: scheduled $scheduled notification(s)');
+    return scheduled;
   }
 
   /// Pure projection of which alerts a single mode should schedule, given the
@@ -481,7 +496,7 @@ class NotificationService {
           .subtract(Duration(minutes: minutesBefore))
           .subtract(scheduleSlack);
 
-      if (notifyAt.isAfter(now)) {
+      if (notifyAt.isAfter(now.add(scheduleMinLead))) {
         final unit = minutesBefore == 1 ? 'minute' : 'minutes';
         // "about", deliberately. Android batches inexact alarms and may defer
         // them by minutes under Doze, so promising an exact lead time is a
