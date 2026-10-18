@@ -34,6 +34,9 @@ const _excludedKeys = {
   PrefsKeys.pickRateShowAll,
   PrefsKeys.pickRateOwnAverage,
   PrefsKeys.pickRateTable,
+  PrefsKeys.legendSort,
+  PrefsKeys.legendSortReversed,
+  PrefsKeys.legendRoleFilter,
   // Device-local first-run state: a restored backup on a fresh install should
   // still show the orientation tour once, and shouldn't suppress it elsewhere.
   PrefsKeys.onboardingVersion,

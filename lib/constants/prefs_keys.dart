@@ -50,6 +50,12 @@ class PrefsKeys {
   /// Whether the Pick Rate page was last left on its table. Device-only: not
   /// backed up.
   static const pickRateTable = 'pick_rate_table';
+
+  /// How the Legends tab of the tracker pages was last ordered, which way
+  /// round, and which role it was filtered to. Device-only: not backed up.
+  static const legendSort = 'legend_sort';
+  static const legendSortReversed = 'legend_sort_reversed';
+  static const legendRoleFilter = 'legend_role_filter';
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the

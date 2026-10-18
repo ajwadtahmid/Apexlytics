@@ -7,6 +7,14 @@ import '../utils/theme.dart';
 class ControlPill extends StatelessWidget {
   final String? prefix;
   final IconData icon;
+
+  /// Drawn in place of [icon] when given, for a picture that isn't an icon
+  /// glyph (a role's badge, say). It should be about 13 px square.
+  final Widget? leading;
+
+  /// Tints the whole pill, as a role badge is, and colours its label and icon.
+  /// Null keeps the plain accent pill.
+  final Color? color;
   final String label;
   final VoidCallback onTap;
 
@@ -14,29 +22,32 @@ class ControlPill extends StatelessWidget {
     super.key,
     this.prefix,
     required this.icon,
+    this.leading,
+    this.color,
     required this.label,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final tint = color ?? AppTheme.accent;
     final pill = GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppTheme.xs),
         decoration: BoxDecoration(
-          color: AppTheme.surface2,
+          color: color == null ? AppTheme.surface2 : color!.withAlpha(35),
           borderRadius: BorderRadius.circular(AppTheme.radiusFull),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 13, color: AppTheme.accent),
+            leading ?? Icon(icon, size: 13, color: tint),
             const SizedBox(width: 4),
             Text(
               label,
-              style: const TextStyle(
-                color: AppTheme.accent,
+              style: TextStyle(
+                color: tint,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),

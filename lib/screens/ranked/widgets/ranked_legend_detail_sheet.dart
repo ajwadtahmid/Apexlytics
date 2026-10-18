@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../constants/legend_constants.dart';
 import '../../../models/player_stats.dart';
 import '../../../models/ranked_match.dart';
 import '../../../providers/settings_provider.dart';
@@ -16,9 +15,8 @@ import '../../../utils/formatting/format.dart'
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/storage/legend_stats_storage.dart';
 import '../../../utils/theme.dart';
-import '../../../widgets/legend_asset_image.dart';
-import '../../../widgets/legend_detail_page.dart';
-import '../../../widgets/role_badge.dart';
+import '../../../widgets/legend_header.dart';
+import '../../../widgets/legend_trackers_sheet.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/trend_lines.dart';
 import '../../../widgets/win_loss_stat.dart';
@@ -79,10 +77,10 @@ void openLegendHistory(
 /// uses. "All Trackers" resolves the persisted career [LegendStat] for this
 /// legend — a pure read of what [mergeLegendStats] already wrote during the
 /// normal My Stats flow, so opening this never re-triggers that merge — and
-/// pushes the same [LegendDetailPage] My Stats uses; hidden when no matching
-/// stat exists. Labeled "Trackers" (not "All Trackers", the Overview button
-/// that opens every legend's trackers) since this one is scoped to a single
-/// legend.
+/// opens the same trackers sheet the All Trackers list uses; hidden when no
+/// matching stat exists. Labeled "Trackers" (not "All Trackers", the Overview
+/// button that opens every legend's trackers) since this one is scoped to a
+/// single legend.
 class _LegendDetailSheet extends ConsumerStatefulWidget {
   final LegendBreakdown breakdown;
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
@@ -127,14 +125,11 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
   }
 
   void _viewTrackers(BuildContext context, LegendStat stat) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => LegendDetailPage(legend: stat)));
+    showLegendTrackersSheet(context, stat);
   }
 
   @override
   Widget build(BuildContext context) {
-    final info = legendInfo(breakdown.legend);
     final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
     final prefs = ref.watch(sharedPreferencesProvider);
     final target = breakdown.legend.toLowerCase();
@@ -153,43 +148,7 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  child: SizedBox(
-                    width: 84,
-                    height: 84,
-                    child: LegendAssetImage(
-                      imageKey: legendImageKey(breakdown.legend),
-                      displayName: breakdown.legend,
-                      fallbackFontSize: 30,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppTheme.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        breakdown.legend,
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (info != null) ...[
-                        const SizedBox(height: 8),
-                        RoleBadge(role: info.role),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            LegendHeader(name: breakdown.legend),
             const SizedBox(height: AppTheme.md),
             Column(
               children: [

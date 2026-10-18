@@ -8,7 +8,7 @@ export 'icon_text_row.dart';
 export 'stat_display.dart';
 export 'graph_card.dart';
 export 'legend_asset_image.dart';
-export 'legend_detail_page.dart';
+export 'legend_trackers_sheet.dart';
 export 'legend_stats_section.dart';
 export 'nav_entry_card.dart';
 export 'platform_picker.dart';

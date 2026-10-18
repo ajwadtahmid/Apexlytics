@@ -27,6 +27,13 @@ void showTrackerInfoSheet(BuildContext context) {
             'Tracker Info',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
+          const SizedBox(height: AppTheme.sm),
+          const Text(
+            'These are career totals for Battle Royale, not just ranked or '
+            'this split. Each legend reports only the trackers it has '
+            'equipped, so "—" means that tracker isn\'t reported, not zero.',
+            style: AppTheme.caption,
+          ),
           const SizedBox(height: AppTheme.lg),
           ..._buildTrackerInfoSection('Available Stats Calculations', const [
             ('Damage per Kill', 'BR Damage & BR Kills'),
