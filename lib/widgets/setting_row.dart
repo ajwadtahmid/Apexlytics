@@ -6,23 +6,38 @@ import 'surface_card.dart';
 class SectionLabel extends StatelessWidget {
   final String label;
   final IconData icon;
-  const SectionLabel({super.key, required this.label, required this.icon});
+
+  /// Something at the right-hand end of the label, such as a small action.
+  final Widget? trailing;
+  const SectionLabel({
+    super.key,
+    required this.label,
+    required this.icon,
+    this.trailing,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final text = _text();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12, left: AppTheme.xs),
-      child: IconTextRow(
-        icon: icon,
-        text: label,
-        iconSize: 14,
-        iconColor: AppTheme.accent,
-        gap: 6,
-        textStyle: const TextStyle(
-          color: AppTheme.muted,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
+      child: trailing == null
+          ? text
+          : Row(children: [text, const Spacer(), trailing!]),
+    );
+  }
+
+  Widget _text() {
+    return IconTextRow(
+      icon: icon,
+      text: label,
+      iconSize: 14,
+      iconColor: AppTheme.accent,
+      gap: 6,
+      textStyle: const TextStyle(
+        color: AppTheme.muted,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
       ),
     );
   }

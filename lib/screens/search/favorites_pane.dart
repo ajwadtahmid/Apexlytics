@@ -1,6 +1,7 @@
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/api_constants.dart';
 import '../../models/player_stats.dart';
@@ -9,6 +10,7 @@ import '../../providers/player_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../utils/error_messages.dart' show AppException;
 import '../../utils/formatting/format.dart' show formatNumber;
+import '../../utils/formatting/platform_utils.dart' show platformIconFor;
 import '../../utils/formatting/rank_utils.dart' show rankAssetPath, rankLabel;
 import '../../utils/formatting/search_utils.dart';
 import '../../utils/navigation_utils.dart' show openExternalLink;
@@ -175,25 +177,35 @@ class FavoritesPane extends ConsumerWidget {
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
           if (favorites.isNotEmpty) ...[
-            _FavoritesHeader(onClear: () => _confirmClear(context, ref)),
+            _ListHeader(
+              icon: Icons.star,
+              label: 'Favorites',
+              onClear: () => _confirmClear(context, ref),
+            ),
             ...favorites.map(
-              (r) => Dismissible(
-                key: ValueKey(
-                  'favorite:${r.uid ?? '${r.platform}:${r.query}'}',
-                ),
-                direction: DismissDirection.endToStart,
-                background: const _RemoveBackground(),
-                onDismissed: (_) => _remove(context, ref, r),
-                child: _FavoriteTile(
-                  playerRef: r,
-                  onTap: () => onPick(r),
-                  onLongPress: () => _showMenu(context, ref, r),
+              (r) => Padding(
+                padding: const EdgeInsets.only(bottom: AppTheme.sm),
+                child: Dismissible(
+                  key: ValueKey(
+                    'favorite:${r.uid ?? '${r.platform}:${r.query}'}',
+                  ),
+                  direction: DismissDirection.endToStart,
+                  background: const _RemoveBackground(),
+                  onDismissed: (_) => _remove(context, ref, r),
+                  child: _FavoriteTile(
+                    playerRef: r,
+                    onTap: () => onPick(r),
+                    onLongPress: () => _showMenu(context, ref, r),
+                  ),
                 ),
               ),
             ),
+            if (recents.isNotEmpty) const SizedBox(height: AppTheme.sm),
           ],
           if (recents.isNotEmpty) ...[
-            _RecentsHeader(
+            _ListHeader(
+              icon: Icons.history,
+              label: 'Recent',
               onClear: () =>
                   ref.read(searchStateProvider.notifier).clearRecents(),
             ),
@@ -211,44 +223,35 @@ class FavoritesPane extends ConsumerWidget {
   }
 }
 
-class _RecentsHeader extends StatelessWidget {
+/// A section's title, in the app's section-label style, with its quiet
+/// "Clear" at the right.
+class _ListHeader extends StatelessWidget {
+  final IconData icon;
+  final String label;
   final VoidCallback onClear;
-  const _RecentsHeader({required this.onClear});
+  const _ListHeader({
+    required this.icon,
+    required this.label,
+    required this.onClear,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        top: AppTheme.sm,
-        bottom: AppTheme.sm,
-        left: AppTheme.xs,
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.history, size: 14, color: AppTheme.muted),
-          const SizedBox(width: 6),
-          const Expanded(
-            child: Text(
-              'Recent',
-              style: TextStyle(
-                color: AppTheme.muted,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: onClear,
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm),
-            ),
-            child: const Text(
-              'Clear',
-              style: TextStyle(color: AppTheme.muted, fontSize: 11),
-            ),
-          ),
-        ],
+    return SectionLabel(
+      icon: icon,
+      label: label,
+      trailing: TextButton(
+        onPressed: onClear,
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.sm),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: const Text(
+          'Clear',
+          style: TextStyle(color: AppTheme.muted, fontSize: 12),
+        ),
       ),
     );
   }
@@ -284,55 +287,6 @@ class _RecentTile extends StatelessWidget {
   }
 }
 
-class _FavoritesHeader extends StatelessWidget {
-  final VoidCallback onClear;
-  const _FavoritesHeader({required this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppTheme.sm, left: AppTheme.xs),
-      child: Row(
-        children: [
-          const Icon(Icons.star, size: 14, color: AppTheme.accent),
-          const SizedBox(width: 6),
-          const Expanded(
-            child: Text(
-              'Favorites',
-              style: TextStyle(
-                color: AppTheme.muted,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: onClear,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: AppTheme.xs,
-              ),
-              decoration: BoxDecoration(
-                color: AppTheme.red.withAlpha(25),
-                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-              ),
-              child: const Text(
-                'Clear All',
-                style: TextStyle(
-                  color: AppTheme.red,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// What shows behind a favorite as it is swiped away.
 class _RemoveBackground extends StatelessWidget {
   const _RemoveBackground();
@@ -344,7 +298,7 @@ class _RemoveBackground extends StatelessWidget {
       padding: const EdgeInsets.only(right: AppTheme.md),
       decoration: BoxDecoration(
         color: AppTheme.red.withAlpha(25),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       ),
       child: const Icon(Icons.delete_outline, color: AppTheme.red),
     );
@@ -383,33 +337,12 @@ class _FavoriteTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final synced = ref.watch(sessionRefreshedProvider).contains(_sessionKey());
-    final platformLabel = ApiConstants.labelFor(playerRef.platform);
 
-    String title;
-    Color leadingColor;
-    Widget subtitle;
-
-    if (!synced) {
-      final cachedStats = _getCachedStats(ref);
-      leadingColor = AppTheme.muted;
-
-      if (cachedStats == null) {
-        title = playerRef.query;
-        subtitle = Text(platformLabel, style: AppTheme.caption);
-      } else {
-        title = cachedStats.name;
-        final label = rankLabel(cachedStats);
-        final rpText = '${formatNumber(cachedStats.rankScore)} RP';
-        final rankAsset = rankAssetPath(cachedStats);
-
-        subtitle = _RankSubtitle(
-          platformLabel: platformLabel,
-          rankText: label,
-          rpText: rpText,
-          rankAsset: rankAsset,
-        );
-      }
-    } else {
+    // What is known of the player, and how far to trust it: this session's
+    // lookup once it has run, otherwise whatever was cached.
+    PlayerStats? stats;
+    var failed = false;
+    if (synced) {
       final byUid = playerRef.hasUid;
       final statsAsync = ref.watch(
         searchPlayerProvider((
@@ -418,74 +351,168 @@ class _FavoriteTile extends ConsumerWidget {
           searchByUid: byUid,
         )),
       );
-      final stats = statsAsync.whenOrNull(data: (result) => result.data);
-
-      if (statsAsync.hasError) {
-        leadingColor = AppTheme.red;
-        title = playerRef.query;
-        subtitle = const Text(
-          'Failed to load',
-          style: TextStyle(color: AppTheme.red, fontSize: 12),
-        );
-      } else if (stats == null) {
-        leadingColor = AppTheme.muted;
-        title = playerRef.query;
-        subtitle = Text(platformLabel, style: AppTheme.caption);
-      } else {
-        leadingColor = playerPresenceColor(stats);
-        title = stats.name;
-        final label = rankLabel(stats);
-        final rpText = '${formatNumber(stats.rankScore)} RP';
-        final rankAsset = rankAssetPath(stats);
-
-        subtitle = _RankSubtitle(
-          platformLabel: platformLabel,
-          rankText: label,
-          rpText: rpText,
-          rankAsset: rankAsset,
-        );
-      }
+      stats = statsAsync.whenOrNull(data: (result) => result.data);
+      failed = statsAsync.hasError;
+    } else {
+      stats = _getCachedStats(ref);
     }
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
-      leading: StatusDot(color: leadingColor),
-      title: Text(title),
-      subtitle: subtitle,
-      onTap: onTap,
-      onLongPress: onLongPress,
+    // Presence is only known from a lookup made this session.
+    final dot = failed
+        ? AppTheme.red
+        : synced && stats != null
+        ? playerPresenceColor(stats)
+        : AppTheme.muted;
+
+    return Material(
+      color: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        side: const BorderSide(color: AppTheme.surface2),
+      ),
+      child: InkWell(
+        customBorder: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        ),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.md,
+            vertical: AppTheme.sm + 2,
+          ),
+          child: Row(
+            children: [
+              _Avatar(
+                rankAsset: stats == null ? null : rankAssetPath(stats),
+                presence: dot,
+              ),
+              const SizedBox(width: AppTheme.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      stats?.name ?? playerRef.query,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    _Subtitle(
+                      platform: playerRef.platform,
+                      rank: stats == null ? null : rankLabel(stats),
+                      failed: failed,
+                    ),
+                  ],
+                ),
+              ),
+              if (stats != null) ...[
+                const SizedBox(width: AppTheme.sm),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      formatNumber(stats.rankScore),
+                      style: const TextStyle(
+                        color: AppTheme.accent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const Text('RP', style: AppTheme.caption),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _RankSubtitle extends StatelessWidget {
-  final String platformLabel;
-  final String rankText;
-  final String rpText;
+/// A favorite's rank badge, with its presence dot on the corner. Without a
+/// rank to show (nothing looked up yet), a plain person icon holds the place.
+class _Avatar extends StatelessWidget {
   final String? rankAsset;
+  final Color presence;
+  const _Avatar({required this.rankAsset, required this.presence});
 
-  const _RankSubtitle({
-    required this.platformLabel,
-    required this.rankText,
-    required this.rpText,
-    required this.rankAsset,
+  static const double _size = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: _size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: rankAsset == null
+                ? const DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface2,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.person_outline,
+                      color: AppTheme.muted,
+                      size: 22,
+                    ),
+                  )
+                : RankBadge(assetPath: rankAsset, size: _size),
+          ),
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.surface, width: 2),
+              ),
+              child: StatusDot(color: presence, size: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The platform's icon and name, then the rank.
+class _Subtitle extends StatelessWidget {
+  final String platform;
+  final String? rank;
+  final bool failed;
+  const _Subtitle({
+    required this.platform,
+    required this.rank,
+    required this.failed,
   });
 
   @override
   Widget build(BuildContext context) {
+    final icon = platformIconFor(platform);
     return Row(
       children: [
-        Text(platformLabel, style: AppTheme.caption),
-        const SizedBox(width: AppTheme.xs),
-        const Text('·', style: AppTheme.caption),
-        const SizedBox(width: AppTheme.xs),
-        RankBadge(assetPath: rankAsset, size: 12),
-        const SizedBox(width: AppTheme.xs),
-        Expanded(
+        FaIcon(icon.icon, size: 11, color: icon.color),
+        const SizedBox(width: AppTheme.xs + 2),
+        Flexible(
           child: Text(
-            '$rankText · $rpText',
-            style: AppTheme.caption,
+            failed
+                ? 'Failed to load'
+                : rank == null
+                ? ApiConstants.labelFor(platform)
+                : '${ApiConstants.labelFor(platform)} · $rank',
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: failed
+                ? const TextStyle(color: AppTheme.red, fontSize: 12)
+                : AppTheme.caption,
           ),
         ),
       ],
