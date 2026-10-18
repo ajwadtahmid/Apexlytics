@@ -20,6 +20,33 @@ void main() {
     overridePath: 'file:api_cache_test_${dbCounter++}?mode=memory&cache=shared',
   );
 
+  group('ApiCache.usage', () {
+    test('counts the entries and the text they hold', () async {
+      final cache = ApiCache(freshStore());
+      expect(cache.usage, (entries: 0, bytes: 0));
+
+      await cache.save('a', {'n': 1});
+      await cache.save('b', {'name': 'Someone'});
+
+      expect(cache.usage.entries, 2);
+      expect(
+        cache.usage.bytes,
+        jsonEncode({'n': 1}).length + jsonEncode({'name': 'Someone'}).length,
+      );
+    });
+
+    test('an overwrite is still one entry, and a clear empties it', () async {
+      final cache = ApiCache(freshStore());
+      await cache.save('a', {'n': 1});
+      await cache.save('a', {'n': 22});
+      expect(cache.usage.entries, 1);
+
+      await cache.clear();
+
+      expect(cache.usage, (entries: 0, bytes: 0));
+    });
+  });
+
   group('ApiCache.save after a clear', () {
     test('a save tied to an earlier generation is dropped', () async {
       final store = freshStore();

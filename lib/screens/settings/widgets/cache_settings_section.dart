@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/api_provider.dart';
+import '../../../providers/backup_status_provider.dart';
+import '../../../providers/navigation_provider.dart';
+import '../../../providers/news_provider.dart';
+import '../../../providers/player_provider.dart' show myPlayerStatsProvider;
+import '../../../providers/predator_provider.dart';
+import '../../../providers/server_provider.dart';
+import '../../../providers/storage_usage_provider.dart';
 import '../../../providers/owner_provider.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../providers/search_provider.dart';
@@ -9,7 +16,10 @@ import '../../../providers/settings_provider.dart';
 import '../../../services/background_service.dart';
 import '../../../services/notification_service.dart';
 import '../../../utils/app_logger.dart';
+import '../../../utils/backup_reminder.dart';
 import '../../../utils/error_messages.dart';
+import '../../../utils/formatting/format.dart'
+    show formatBytes, formatNumber, plural;
 import '../../../utils/notifications.dart';
 import '../../../utils/storage/backup_service.dart';
 import '../../../utils/storage/ranked_history_store.dart';
@@ -20,8 +30,34 @@ import '../../../widgets/widgets.dart';
 class CacheSettingsSection extends ConsumerWidget {
   const CacheSettingsSection({super.key});
 
+  /// Under Export data: what there is to back up, and when it last was.
+  static String _exportLine(StorageUsage? u, DateTime? lastBackup) {
+    final backup = lastBackup == null
+        ? 'Never backed up'
+        : 'Backed up ${backupAgeLabel(lastBackup, DateTime.now())}';
+    if (u == null) return backup;
+    final saved = u.games == 0
+        ? 'No games saved yet'
+        : '${formatNumber(u.games)} ${u.games == 1 ? 'game' : 'games'} · '
+              '${formatBytes(u.historyBytes)}';
+    return '$saved · $backup';
+  }
+
+  static String _cacheLine(StorageUsage? u) => u == null
+      ? 'Counting…'
+      : u.cachedResponses == 0
+      ? 'Nothing saved'
+      : '${plural(u.cachedResponses, 'saved response')}, '
+            '${formatBytes(u.cacheBytes)}';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Counted afresh each time Settings is opened: games and responses are
+    // saved while it is out of view.
+    ref.listen(currentTabProvider, (_, tab) {
+      if (tab == AppTab.settings) ref.invalidate(storageUsageProvider);
+    });
+    final usage = ref.watch(storageUsageProvider).asData?.value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -33,7 +69,8 @@ class CacheSettingsSection extends ConsumerWidget {
               ActionRow(
                 icon: Icons.upload_outlined,
                 label: 'Export data',
-                onTap: () => _exportData(context, ref),
+                onTap: () => exportData(context, ref),
+                subtitle: _exportLine(usage, ref.watch(lastBackupProvider)),
               ),
               const Divider(color: AppTheme.surface2, height: 24),
               ActionRow(
@@ -43,68 +80,164 @@ class CacheSettingsSection extends ConsumerWidget {
               ),
               const Divider(color: AppTheme.surface2, height: 24),
               ActionRow(
-                icon: Icons.person_remove_outlined,
-                label: 'Clear profiles & favorites',
-                color: AppTheme.orange,
-                onTap: () => _confirm(
-                  context,
-                  title: 'Clear profiles & favorites?',
-                  body:
-                      'Your saved profiles and favorite players will be '
-                      'removed. Your settings, RP history and match history '
-                      'are kept.',
-                  confirmLabel: 'Clear',
-                  confirmColor: AppTheme.orange,
-                  onConfirm: () => _clearProfilesAndFavorites(context, ref),
-                ),
-              ),
-              const Divider(color: AppTheme.surface2, height: 24),
-              ActionRow(
-                icon: Icons.delete_outline,
-                label: 'Clear all data',
-                color: AppTheme.red,
-                // Two confirmations: ranked history is forward-only, so a
-                // mis-tap here destroys accrual that can't be re-fetched.
-                onTap: () => _confirm(
-                  context,
-                  title: 'Clear all data?',
-                  body:
-                      'Everything will be removed: your profiles, favorites, '
-                      'settings, RP history and recorded match history.',
-                  confirmLabel: 'Continue',
-                  onConfirm: () async {
-                    if (!context.mounted) return;
-                    await _confirm(
-                      context,
-                      title: 'This cannot be undone',
-                      body:
-                          'Recorded match history only accrues while the app '
-                          'is open, so it cannot be downloaded again. Export a '
-                          'backup first if you might want it back.\n\n'
-                          'Permanently erase all data?',
-                      confirmLabel: 'Erase everything',
-                      onConfirm: () async {
-                        // Only an owner device has a token to decide on.
-                        final removeOwnerToken = ref.read(ownerUnlockedProvider)
-                            ? await _askRemoveOwnerToken(context)
-                            : true;
-                        if (removeOwnerToken == null || !context.mounted) {
-                          return;
-                        }
-                        await _clearAll(
-                          context,
-                          ref,
-                          removeOwnerToken: removeOwnerToken,
-                        );
-                      },
-                    );
-                  },
-                ),
+                icon: Icons.delete_sweep_outlined,
+                label: 'Clear data',
+                onTap: () => _openClearSheet(context, ref),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  /// "Clear data": the three ways to clear, mildest first, each asking before
+  /// it does anything.
+  void _openClearSheet(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppTheme.lg),
+          child: Consumer(
+            builder: (_, sheetRef, _) {
+              final usage = sheetRef.watch(storageUsageProvider).asData?.value;
+              // Close the sheet, then ask: the question belongs to the page.
+              void choose(void Function() ask) {
+                Navigator.pop(sheetContext);
+                ask();
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SheetHandle(),
+                  const SizedBox(height: AppTheme.md),
+                  const Text(
+                    'Clear data',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: AppTheme.md),
+                  ActionRow(
+                    icon: Icons.cleaning_services_outlined,
+                    label: 'Clear cached responses',
+                    subtitle: _cacheLine(usage),
+                    onTap: () => choose(() {
+                      _confirm(
+                        context,
+                        title: 'Clear cached responses?',
+                        body:
+                            'Removes the saved copies of server data (stats, news, '
+                            'Pred cutoffs, lookups) that the app shows when it is '
+                            'offline, and fetches them again. Your profiles, '
+                            'favorites, settings and match history are kept.',
+                        confirmLabel: 'Clear',
+                        confirmColor: AppTheme.accent,
+                        onConfirm: () => _clearCachedResponses(context, ref),
+                      );
+                    }),
+                  ),
+                  const Divider(color: AppTheme.surface2, height: 24),
+                  ActionRow(
+                    icon: Icons.person_remove_outlined,
+                    label: 'Clear profiles & favorites',
+                    subtitle: 'Saved profiles and favorite players',
+                    color: AppTheme.orange,
+                    onTap: () => choose(() {
+                      _confirm(
+                        context,
+                        title: 'Clear profiles & favorites?',
+                        body:
+                            'Your saved profiles and favorite players will be '
+                            'removed. Your settings, RP history and match history '
+                            'are kept.',
+                        confirmLabel: 'Clear',
+                        confirmColor: AppTheme.orange,
+                        onConfirm: () =>
+                            _clearProfilesAndFavorites(context, ref),
+                      );
+                    }),
+                  ),
+                  const Divider(color: AppTheme.surface2, height: 24),
+                  ActionRow(
+                    icon: Icons.delete_outline,
+                    label: 'Clear all data',
+                    subtitle: 'Everything, including match history',
+                    color: AppTheme.red,
+                    onTap: () => choose(() {
+                      // Two confirmations: ranked history is forward-only, so a
+                      // mis-tap here destroys accrual that can't be re-fetched.
+                      _confirm(
+                        context,
+                        title: 'Clear all data?',
+                        body:
+                            'Everything will be removed: your profiles, favorites, '
+                            'settings, RP history and recorded match history.',
+                        confirmLabel: 'Continue',
+                        onConfirm: () async {
+                          if (!context.mounted) return;
+                          await _confirm(
+                            context,
+                            title: 'This cannot be undone',
+                            body:
+                                'Recorded match history only accrues while the app '
+                                'is open, so it cannot be downloaded again. Export a '
+                                'backup first if you might want it back.\n\n'
+                                'Permanently erase all data?',
+                            confirmLabel: 'Erase everything',
+                            onConfirm: () async {
+                              // Only an owner device has a token to decide on.
+                              final removeOwnerToken =
+                                  ref.read(ownerUnlockedProvider)
+                                  ? await _askRemoveOwnerToken(context)
+                                  : true;
+                              if (removeOwnerToken == null ||
+                                  !context.mounted) {
+                                return;
+                              }
+                              await _clearAll(
+                                context,
+                                ref,
+                                removeOwnerToken: removeOwnerToken,
+                              );
+                            },
+                          );
+                        },
+                      );
+                    }),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Drops the saved server responses and nothing else, then has what is on
+  /// screen fetch again, so stale-looking data is replaced and not just
+  /// forgotten.
+  Future<void> _clearCachedResponses(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final api = ref.read(apiServiceProvider);
+    final before = api.cacheUsage;
+    await api.clearCache();
+    ref.invalidate(myPlayerStatsProvider);
+    ref.invalidate(predatorProvider);
+    ref.invalidate(newsProvider);
+    ref.invalidate(serverStatusProvider);
+    ref.invalidate(storageUsageProvider);
+    if (!context.mounted) return;
+    context.showMessage(
+      before.entries == 0
+          ? 'Nothing was saved.'
+          : 'Cleared ${plural(before.entries, 'saved response')} '
+                '(${formatBytes(before.bytes)}).',
     );
   }
 
@@ -212,6 +345,7 @@ class CacheSettingsSection extends ConsumerWidget {
     // after a partial failure: what did clear must stop showing.
     resetSnapshotCache();
     invalidatePlayerDerivedProviders(ref);
+    ref.invalidate(lastBackupProvider);
     if (!context.mounted) return;
     if (failed.isEmpty) {
       context.showMessage('All data cleared.');
@@ -220,32 +354,6 @@ class CacheSettingsSection extends ConsumerWidget {
         "Couldn't clear ${failed.join(' or ')}. Everything else was cleared "
         '— try again to finish.',
       );
-    }
-  }
-
-  Future<void> _exportData(BuildContext context, WidgetRef ref) async {
-    try {
-      final prefs = ref.read(sharedPreferencesProvider);
-      final fileName = await exportBackup(
-        prefs,
-        rankedStore: ref.read(rankedHistoryStoreProvider),
-      );
-      if (fileName == null) return;
-
-      if (context.mounted) {
-        // iOS hands the file to the share sheet; everywhere else it is saved
-        // where the user chose. The message names only the file, never its
-        // location.
-        context.showMessage(
-          'Backup ${backupGoesThroughShareSheet ? 'shared' : 'saved'}: '
-          '$fileName',
-          duration: const Duration(seconds: 4),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        context.showError('Export failed: ${friendlyError(e)}');
-      }
     }
   }
 
@@ -296,7 +404,10 @@ class CacheSettingsSection extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Import', style: TextStyle(color: AppTheme.accent)),
+            child: const Text(
+              'Import',
+              style: TextStyle(color: AppTheme.accent),
+            ),
           ),
         ],
       ),
@@ -397,6 +508,35 @@ class CacheSettingsSection extends ConsumerWidget {
       await onConfirm();
     } catch (e) {
       if (context.mounted) context.showError(friendlyError(e));
+    }
+  }
+}
+
+/// Exports a backup and says how it went. Shared by the Data section and the
+/// backup reminder, so both record the date the same way.
+Future<void> exportData(BuildContext context, WidgetRef ref) async {
+  try {
+    final prefs = ref.read(sharedPreferencesProvider);
+    final fileName = await exportBackup(
+      prefs,
+      rankedStore: ref.read(rankedHistoryStoreProvider),
+    );
+    if (fileName == null) return;
+    await ref.read(lastBackupProvider.notifier).markBackedUp();
+
+    if (context.mounted) {
+      // iOS hands the file to the share sheet; everywhere else it is saved
+      // where the user chose. The message names only the file, never its
+      // location.
+      context.showMessage(
+        'Backup ${backupGoesThroughShareSheet ? 'shared' : 'saved'}: '
+        '$fileName',
+        duration: const Duration(seconds: 4),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      context.showError('Export failed: ${friendlyError(e)}');
     }
   }
 }

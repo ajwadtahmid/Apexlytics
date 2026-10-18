@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../constants/map_constants.dart';
@@ -23,6 +24,21 @@ class PlannedAlert {
     required this.body,
     required this.notifyAt,
   });
+}
+
+/// How a test alert went; see [NotificationService.sendTestAlert].
+enum TestAlertResult {
+  /// Handed to the system, which should show it now.
+  sent,
+
+  /// The plugin never started, so no alert can be shown.
+  notReady,
+
+  /// The system refuses notifications from the app.
+  permissionOff,
+
+  /// The system call failed.
+  failed,
 }
 
 class NotificationService {
@@ -559,6 +575,45 @@ class NotificationService {
       m.eventName != null && m.eventName!.isNotEmpty
       ? '${m.map} (${m.eventName})'
       : m.map;
+
+  /// Shows one alert now, so a player can see that alerts get through before
+  /// relying on one. Asks for permission if it has not been given. This checks
+  /// the plugin, the permission and the notification channel; the OS may still
+  /// hold back a scheduled alert later (battery limits), which only waiting for
+  /// a real one shows.
+  ///
+  /// Each call posts a new alert (its own id, and the time in its text), so a
+  /// second test is seen and heard, not folded into the first.
+  static Future<TestAlertResult> sendTestAlert({DateTime? now}) async {
+    if (!_initialized) await init();
+    if (!_initialized) return TestAlertResult.notReady;
+    try {
+      if (!await notificationsEnabled()) {
+        await requestPermissions();
+        if (!await notificationsEnabled()) return TestAlertResult.permissionOff;
+      }
+      final at = now ?? DateTime.now();
+      await _plugin.show(
+        id: nextTestAlertId(),
+        title: 'Apexlytics',
+        body:
+            'Test alert at ${DateFormat('h:mm a').format(at)}: this is how a '
+            'map alert will look.',
+        notificationDetails: _details,
+      );
+      return TestAlertResult.sent;
+    } catch (e) {
+      log.w('NotificationService: test alert failed', error: e);
+      return TestAlertResult.failed;
+    }
+  }
+
+  // Test alerts take turns over the ids reserved below for future categories
+  // (1 to 9), so the newest never replaces the one before it outright.
+  static int _testAlertCount = 0;
+
+  @visibleForTesting
+  static int nextTestAlertId() => 1 + _testAlertCount++ % 9;
 
   /// Attempts cancellation even when [init] never completed (e.g. every
   /// Android icon fallback failed) — a stale alert from an earlier,

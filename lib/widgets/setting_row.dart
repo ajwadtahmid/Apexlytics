@@ -75,26 +75,46 @@ class ActionRow extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
+  /// A quiet line under the label, lined up with it.
+  final String? subtitle;
+
   const ActionRow({
     super.key,
     required this.icon,
     required this.label,
     required this.onTap,
     this.color = AppTheme.textPrimary,
+    this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final row = IconTextRow(
+      icon: icon,
+      text: label,
+      iconSize: 20,
+      iconColor: color,
+      textStyle: TextStyle(color: color, fontSize: 14),
+    );
     return InkWell(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
       onTap: onTap,
-      child: IconTextRow(
-        icon: icon,
-        text: label,
-        iconSize: 20,
-        iconColor: color,
-        textStyle: TextStyle(color: color, fontSize: 14),
-      ),
+      child: subtitle == null
+          ? row
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                row,
+                Padding(
+                  // Under the label, past the icon and its gap.
+                  padding: const EdgeInsets.only(
+                    left: 20 + AppTheme.sm,
+                    top: 2,
+                  ),
+                  child: Text(subtitle!, style: AppTheme.caption),
+                ),
+              ],
+            ),
     );
   }
 }

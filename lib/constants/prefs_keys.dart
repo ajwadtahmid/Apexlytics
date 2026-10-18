@@ -105,6 +105,9 @@ class PrefsKeys {
   /// background fetch isolate.
   static const seasonalMapsCache = 'seasonal_maps_cache';
 
+  /// When the last backup was exported (epoch ms); device-local, not backed up.
+  static const lastBackupAt = 'last_backup_at';
+
   /// Outcome of the most recent background fetch; device-local, not backed up.
   static const bgFetchLastResult = 'bg_fetch_last_result';
 

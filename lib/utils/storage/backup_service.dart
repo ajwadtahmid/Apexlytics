@@ -41,6 +41,9 @@ const _excludedKeys = {
   // Device-local first-run state: a restored backup on a fresh install should
   // still show the orientation tour once, and shouldn't suppress it elsewhere.
   PrefsKeys.onboardingVersion,
+  // About this device's last export; a restored copy would claim a backup the
+  // new device never made.
+  PrefsKeys.lastBackupAt,
 };
 
 const _staticBackupKeys = {

@@ -1,56 +1,22 @@
 import 'dart:async' show unawaited;
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../providers/api_provider.dart';
+import '../../providers/bug_report_provider.dart';
+import '../../utils/bug_report.dart' show BugReportChannel;
 import '../../utils/onboarding.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
 import 'about_screen.dart';
+import 'widgets/backup_reminder_banner.dart';
 import 'widgets/cache_settings_section.dart';
 import 'widgets/general_settings_section.dart';
 import 'widgets/notification_settings_section.dart';
 import 'widgets/stats_refresh_section.dart';
 import '../../utils/navigation_utils.dart';
-import '../../utils/formatting/format.dart' show kNoReading;
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
-
-  static String _buildBugReportUrl(String version, String buildNumber) {
-    final body = Uri.encodeComponent(
-      '**Describe the bug**\n'
-      '<!-- What happened? What did you expect? -->\n\n'
-      '**Steps to reproduce**\n'
-      '1. \n'
-      '2. \n\n'
-      '**Additional context**\n'
-      '<!-- Screenshots, logs, etc. -->\n\n'
-      '---\n\n'
-      '**App version:** $version ($buildNumber)\n'
-      '**Platform:** ${Platform.operatingSystem}\n'
-      '**OS version:** ${Platform.operatingSystemVersion}',
-    );
-    return 'https://github.com/ajwadtahmid/Apexlytics/issues/new?body=$body';
-  }
-
-  static String _buildBugReportEmailUrl(String version, String buildNumber) {
-    final body = Uri.encodeComponent(
-      'Describe the bug:\n'
-      '(What happened? What did you expect?)\n\n'
-      'Steps to reproduce:\n'
-      '1. \n'
-      '2. \n\n'
-      'Additional context:\n'
-      '(Screenshots, logs, etc.)\n\n'
-      '---\n\n'
-      'App version: $version ($buildNumber)\n'
-      'Platform: ${Platform.operatingSystem}\n'
-      'OS version: ${Platform.operatingSystemVersion}',
-    );
-    return 'mailto:support@ajwadtahmid.com?subject=Apexlytics+Bug+Report&body=$body';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -59,6 +25,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
+          const BackupReminderBanner(),
           const GeneralSettingsSection(),
           const SizedBox(height: AppTheme.md),
           const StatsRefreshSection(),
@@ -70,33 +37,20 @@ class SettingsScreen extends ConsumerWidget {
 
           // ── Support ─────────────────────────────────────
           const SectionLabel(label: 'Support', icon: Icons.help_outline),
-          SettingsCard(
+          const SettingsCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Builder(
-                  builder: (context) {
-                    final info = ref
-                        .watch(packageInfoProvider)
-                        .whenOrNull(data: (info) => info);
-                    final version = info?.version ?? kNoReading;
-                    final build = info?.buildNumber ?? kNoReading;
-                    return Column(
-                      children: [
-                        _SupportRow(
-                          icon: Icons.bug_report_outlined,
-                          label: 'Report a bug (GitHub)',
-                          url: _buildBugReportUrl(version, build),
-                        ),
-                        const Divider(color: AppTheme.surface2, height: 24),
-                        _SupportRow(
-                          icon: Icons.mail_outline,
-                          label: 'Report a bug (Email)',
-                          url: _buildBugReportEmailUrl(version, build),
-                        ),
-                      ],
-                    );
-                  },
+                _SupportRow(
+                  icon: Icons.bug_report_outlined,
+                  label: 'Report a bug (GitHub)',
+                  channel: BugReportChannel.github,
+                ),
+                Divider(color: AppTheme.surface2, height: 24),
+                _SupportRow(
+                  icon: Icons.mail_outline,
+                  label: 'Report a bug (Email)',
+                  channel: BugReportChannel.email,
                 ),
               ],
             ),
@@ -135,22 +89,28 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _SupportRow extends StatelessWidget {
+/// Opens a bug report prefilled with the version, a few diagnostics and the
+/// recent log (see [bugReportProvider]).
+class _SupportRow extends ConsumerWidget {
   final IconData icon;
   final String label;
-  final String url;
+  final BugReportChannel channel;
 
   const _SupportRow({
     required this.icon,
     required this.label,
-    required this.url,
+    required this.channel,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return InkWell(
       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-      onTap: () => openExternalLink(context, Uri.parse(url)),
+      onTap: () async {
+        final report = await ref.read(bugReportProvider(channel).future);
+        if (!context.mounted) return;
+        await openExternalLink(context, report.uri);
+      },
       child: Row(
         children: [
           Icon(icon, color: AppTheme.textPrimary, size: 20),

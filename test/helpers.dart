@@ -6,6 +6,8 @@ import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
+import 'package:apexlytics/services/api_service.dart';
+import 'package:apexlytics/utils/storage/api_cache_store.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:apexlytics/widgets/lookup_card.dart' show LookupModePicker;
 import 'package:dio/dio.dart';
@@ -21,6 +23,19 @@ void useFfiDatabase() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 }
+
+var _isolatedCacheCounter = 0;
+
+/// An [ApiService] for one test: its cache is a uniquely named in-memory
+/// database (a bare in-memory path is shared by every store in the process)
+/// and nothing leaves the test. Call [useFfiDatabase] in `setUpAll` first.
+ApiService isolatedApiService([HttpClientAdapter? adapter]) => ApiService(
+  ApiCacheStore(
+    overridePath:
+        'file:isolated_api_cache_${_isolatedCacheCounter++}?mode=memory&cache=shared',
+  ),
+  httpClientAdapter: adapter ?? FakeHttpAdapter(),
+);
 
 /// A [ProviderContainer] backed by mock [SharedPreferences] holding [values],
 /// disposed when the test ends. Returns the prefs too, to assert on what the

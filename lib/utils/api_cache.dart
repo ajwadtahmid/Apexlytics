@@ -220,7 +220,15 @@ class ApiCache {
     await _store.removeMany(doomed);
   }
 
-  /// Removes every cached response — used by "Clear all data".
+  /// How many responses are held and roughly how much text they take (the
+  /// stored JSON, in characters), for Settings to show.
+  ({int entries, int bytes}) get usage => (
+    entries: _entries.length,
+    bytes: _entries.values.fold(0, (sum, e) => sum + e.json.length),
+  );
+
+  /// Removes every cached response — used by "Clear all data" and by "Clear
+  /// cached responses".
   Future<void> clear() async {
     _generation++;
     _entries.clear();

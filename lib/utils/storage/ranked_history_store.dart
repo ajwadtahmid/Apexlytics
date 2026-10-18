@@ -1202,6 +1202,38 @@ class RankedHistoryStore {
     return (rows.first['c'] as num?)?.toInt() ?? 0;
   }
 
+  /// How many matches, across every UID, started after [since] (all of them
+  /// when null). Backs the backup reminder.
+  Future<int> countStartedSince(DateTime? since) async {
+    final db = await _open();
+    final rows = since == null
+        ? await db.rawQuery('SELECT COUNT(*) AS c FROM $table')
+        : await db.rawQuery(
+            'SELECT COUNT(*) AS c FROM $table WHERE start_ms > ?',
+            [since.millisecondsSinceEpoch],
+          );
+    return (rows.first['c'] as num?)?.toInt() ?? 0;
+  }
+
+  /// How much space the history database takes: its pages, as SQLite counts
+  /// them, so it holds on every platform without finding the file.
+  Future<int> storageBytes() async {
+    final db = await _open();
+    final pages = Sqflite.firstIntValue(await db.rawQuery('PRAGMA page_count'));
+    final size = Sqflite.firstIntValue(await db.rawQuery('PRAGMA page_size'));
+    return (pages ?? 0) * (size ?? 0);
+  }
+
+  /// When the oldest stored match, across every UID, started; null with none.
+  Future<DateTime?> oldestStart() async {
+    final db = await _open();
+    final rows = await db.rawQuery(
+      'SELECT MIN(start_ms) AS m FROM $table WHERE start_ms IS NOT NULL',
+    );
+    final ms = (rows.first['m'] as num?)?.toInt();
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
   /// Every stored match id, across all UIDs. Backs the backup-import preview,
   /// which needs to say how many of a backup file's rows are actually new
   /// before the user commits to restoring it — a plain `id`-only projection

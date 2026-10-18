@@ -112,6 +112,59 @@ void main() {
     expect(await store.count(''), 0);
   });
 
+  group('what the backup reminder reads', () {
+    test('counts games after a moment, across every player', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.upsertAll('1', [match('1', 100), match('1', 200)]);
+      await store.upsertAll('2', [match('2', 300), match('2', 400)]);
+
+      expect(await store.countStartedSince(null), 4);
+      expect(
+        await store.countStartedSince(
+          DateTime.fromMillisecondsSinceEpoch(250 * 1000),
+        ),
+        2,
+      );
+      // A game that started at that very moment is already in the backup.
+      expect(
+        await store.countStartedSince(
+          DateTime.fromMillisecondsSinceEpoch(400 * 1000),
+        ),
+        0,
+      );
+    });
+
+    test('reports the space the history takes, which grows with it', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.deleteAll();
+      final empty = await store.storageBytes();
+
+      await store.upsertAll('1', [
+        for (var i = 0; i < 400; i++) match('1', 1000 + i * 700),
+      ]);
+
+      expect(empty, greaterThan(0));
+      expect(await store.storageBytes(), greaterThan(empty));
+    });
+
+    test('finds the oldest game, or none', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      expect(await store.oldestStart(), isNull);
+      expect(await store.countStartedSince(null), 0);
+
+      await store.upsertAll('1', [match('1', 500), match('1', 200)]);
+      await store.upsertAll('2', [match('2', 300)]);
+
+      expect(
+        await store.oldestStart(),
+        DateTime.fromMillisecondsSinceEpoch(200 * 1000),
+      );
+    });
+  });
+
   test('exportRowPages walks every row once, whatever the page size', () async {
     final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
     addTearDown(store.close);

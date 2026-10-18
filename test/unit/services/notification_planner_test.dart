@@ -277,4 +277,16 @@ void main() {
       expect(alerts.length, 1);
     });
   });
+  group('test alerts', () {
+    test('each takes a different id from the one before, within 1 to 9', () {
+      final ids = [for (var i = 0; i < 30; i++) NotificationService.nextTestAlertId()];
+
+      for (final id in ids) {
+        expect(id, inInclusiveRange(1, 9));
+      }
+      for (var i = 1; i < ids.length; i++) {
+        expect(ids[i], isNot(ids[i - 1]));
+      }
+    });
+  });
 }

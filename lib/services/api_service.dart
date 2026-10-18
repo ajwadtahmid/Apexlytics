@@ -69,8 +69,12 @@ class ApiService {
     }
   }
 
-  /// Removes every cached response — used by "Clear all data".
+  /// Removes every cached response — used by "Clear all data" and by "Clear
+  /// cached responses".
   Future<void> clearCache() => _cache.clear();
+
+  /// How many responses are cached, and about how large they are.
+  ({int entries, int bytes}) get cacheUsage => _cache.usage;
 
   /// Returns cached data synchronously without making a network request.
   /// Returns null if no valid cache entry exists.

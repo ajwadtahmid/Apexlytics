@@ -55,6 +55,13 @@ String formatPercent(double ratio, {int decimals = 1}) =>
 String plural(int n, String word, [String? many]) =>
     n == 1 ? '$n $word' : '$n ${many ?? '${word}s'}';
 
+/// A storage size for people: `312 B`, `48 KB`, `3.2 MB`.
+String formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
 /// Shown where a stat has no reading at all (e.g. no game reported the kills
 /// tracker), instead of a 0 that would read as a measured value.
 const kNoReading = '—';

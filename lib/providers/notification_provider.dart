@@ -7,3 +7,9 @@ import '../services/notification_service.dart';
 final notificationsEnabledProvider = FutureProvider<bool>(
   (ref) => NotificationService.notificationsEnabled(),
 );
+
+/// Sends the test alert shown in the map alerts sheet. A provider so tests can
+/// stand in for the notification plugin, which does not exist under them.
+final testAlertSenderProvider = Provider<Future<TestAlertResult> Function()>(
+  (ref) => NotificationService.sendTestAlert,
+);

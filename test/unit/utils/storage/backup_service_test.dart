@@ -50,6 +50,8 @@ void main() {
       // Device-local first-run state: a restore on a fresh install should
       // still show the tour once.
       PrefsKeys.onboardingVersion: false,
+      // About this device's last export, so a restore must not carry it.
+      PrefsKeys.lastBackupAt: false,
       PrefsKeys.uidSearchWarningShown: false,
       PrefsKeys.rankedInfoCoachMarkShown: false,
       // A convenience list of lookups, not data worth carrying over.

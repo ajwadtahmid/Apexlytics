@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
+import 'log_buffer.dart';
+
 /// App-wide logger. Import and use directly:
 ///   log.d('cache hit');        // debug build only — never reaches production
 ///   log.i('service ready');    // release: low-priority Sentry breadcrumb
@@ -18,8 +20,32 @@ final log = Logger(
         )
       : SimplePrinter(colors: false),
   filter: kDebugMode ? DevelopmentFilter() : _ReleaseFilter(),
-  output: kDebugMode ? ConsoleOutput() : _SentryOutput(),
+  output: MultiOutput([
+    kDebugMode ? ConsoleOutput() : _SentryOutput(),
+    _BufferOutput(),
+  ]),
 );
+
+/// Keeps what passed the filter in [LogBuffer.instance], for bug reports. Reads
+/// the event itself, not the printed lines, so the text is the same in debug
+/// and release builds.
+class _BufferOutput extends LogOutput {
+  @override
+  void output(OutputEvent event) {
+    final origin = event.origin;
+    LogBuffer.instance.add(
+      switch (origin.level) {
+        Level.error || Level.fatal => 'E',
+        Level.warning => 'W',
+        Level.info => 'I',
+        _ => 'D',
+      },
+      origin.message.toString(),
+      error: origin.error,
+      time: origin.time,
+    );
+  }
+}
 
 /// Passes info+ in release. Debug logs are suppressed — they are too noisy
 /// and contain internal state that should never leave the device.

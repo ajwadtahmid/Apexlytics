@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart'
+    show openAppSettings;
 import '../../constants/map_constants.dart';
 import '../../models/seasonal_maps.dart';
 import '../../providers/map_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/notification_service.dart';
 import '../../utils/error_messages.dart';
@@ -37,6 +41,8 @@ class _MapAlertsSheetContentState
   late Set<String> _pubsNotify;
   bool _showAllRanked = false;
   bool _showAllPubs = false;
+  bool _sendingTest = false;
+  _TestAlertNote? _testNote;
 
   // Whether _initializeFromSettings() last saw real map names. "Empty
   // favorites" means "notify every map" and seeds from the current name
@@ -317,6 +323,19 @@ class _MapAlertsSheetContentState
 
   Future<void> _reschedule() => rescheduleMapAlerts(ref);
 
+  Future<void> _sendTestAlert() async {
+    setState(() {
+      _sendingTest = true;
+      _testNote = null;
+    });
+    final result = await ref.read(testAlertSenderProvider)();
+    if (!mounted) return;
+    setState(() {
+      _sendingTest = false;
+      _testNote = _TestAlertNote.of(result, DateTime.now());
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final notifyRanked = ref.watch(
@@ -376,7 +395,46 @@ class _MapAlertsSheetContentState
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: AppTheme.md),
+            const SizedBox(height: AppTheme.sm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _sendingTest ? null : _sendTestAlert,
+                icon: const Icon(Icons.notifications_active_outlined, size: 18),
+                label: const Text('Send a test alert'),
+                style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
+              ),
+            ),
+            if (_testNote case final note?)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppTheme.sm),
+                child: InkWell(
+                  onTap: note.opensSettings ? openAppSettings : null,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(note.icon, size: 18, color: note.color),
+                      const SizedBox(width: AppTheme.sm),
+                      Expanded(
+                        child: Text(
+                          note.text,
+                          style: const TextStyle(fontSize: 13, height: 1.4),
+                        ),
+                      ),
+                      if (note.opensSettings)
+                        const Text(
+                          'Fix',
+                          style: TextStyle(
+                            color: AppTheme.accent,
+                            fontSize: 13,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: AppTheme.sm),
 
             SettingsCard(
               child: Column(
@@ -399,8 +457,11 @@ class _MapAlertsSheetContentState
                     icon: Icons.leaderboard_outlined,
                     label: 'Ranked',
                     enabled: notifyRanked,
-                    onTap: () =>
-                        _toggleMode(context, MapAlertMode.ranked, !notifyRanked),
+                    onTap: () => _toggleMode(
+                      context,
+                      MapAlertMode.ranked,
+                      !notifyRanked,
+                    ),
                   ),
                   if (notifyRanked) ...[
                     MapTimingTile(
@@ -529,4 +590,50 @@ class _MapAlertsSheetContentState
       ),
     );
   }
+}
+
+/// What the sheet says under "Send a test alert" once one has been tried.
+class _TestAlertNote {
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  /// Whether tapping it should open the system's notification settings.
+  final bool opensSettings;
+
+  const _TestAlertNote(
+    this.icon,
+    this.color,
+    this.text, {
+    this.opensSettings = false,
+  });
+
+  /// [at] is when it was tried, so a second try visibly changes the note.
+  static _TestAlertNote of(
+    TestAlertResult result,
+    DateTime at,
+  ) => switch (result) {
+    TestAlertResult.sent => _TestAlertNote(
+      Icons.check_circle_outline,
+      AppTheme.green,
+      'Sent at ${DateFormat('h:mm a').format(at)}. If it did not show, check '
+      'your notification settings or battery limits for Apexlytics.',
+    ),
+    TestAlertResult.permissionOff => const _TestAlertNote(
+      Icons.notifications_off_outlined,
+      AppTheme.red,
+      'Notifications are off for Apexlytics.',
+      opensSettings: true,
+    ),
+    TestAlertResult.notReady => const _TestAlertNote(
+      Icons.error_outline,
+      AppTheme.red,
+      "Alerts couldn't start. Try restarting the app.",
+    ),
+    TestAlertResult.failed => const _TestAlertNote(
+      Icons.error_outline,
+      AppTheme.red,
+      "Couldn't send the test alert. Try again.",
+    ),
+  };
 }
