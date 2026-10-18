@@ -102,6 +102,10 @@ class SearchNotifier extends Notifier<SearchState> {
   /// [toggleFavorite]) rather than silently evicting the oldest one.
   static const int maxFavorites = 20;
 
+  static const _favoritesFull = AppException(
+    'You can save up to $maxFavorites favorites. Remove one to add another.',
+  );
+
   /// How many recent lookups are kept.
   static const int maxRecents = 5;
 
@@ -191,28 +195,56 @@ class SearchNotifier extends Notifier<SearchState> {
     state = state.copyWith(favorites: favorites);
   }
 
+  static int _favoriteIndex(List<PlayerRef> favorites, PlayerRef playerRef) =>
+      favorites.indexWhere((f) {
+        // Prefer UID matching when both entries have a UID (stable across
+        // renames).
+        if (playerRef.hasUid && f.hasUid) return f.uid == playerRef.uid;
+        // Otherwise (neither has a UID, or only one does) fall back to a
+        // case-insensitive name+platform match, so the same player can't be
+        // favorited twice under a stale casing or before syncDisplayName
+        // enriches one side with a UID.
+        return f.platform == playerRef.platform &&
+            f.query.toLowerCase() == playerRef.query.toLowerCase();
+      });
+
+  /// Takes [playerRef] off the favourites. The list changes before the save
+  /// finishes, which a swiped-away row needs: it must be gone from the list on
+  /// the frame it is dismissed.
+  Future<void> removeFavorite(PlayerRef playerRef) async {
+    final favorites = List<PlayerRef>.from(state.favorites);
+    final idx = _favoriteIndex(favorites, playerRef);
+    if (idx < 0) return;
+    favorites.removeAt(idx);
+    state = state.copyWith(favorites: favorites);
+    await _save(PrefsKeys.searchFavorites, favorites);
+  }
+
+  /// Puts a removed favourite back at [index] (clamped), for an Undo. Does
+  /// nothing if that player was saved again meanwhile; throws like
+  /// [toggleFavorite] when the list has filled up in the meantime.
+  Future<void> restoreFavorite(PlayerRef playerRef, int index) async {
+    final favorites = List<PlayerRef>.from(state.favorites);
+    if (_favoriteIndex(favorites, playerRef) >= 0) return;
+    if (favorites.length >= maxFavorites) {
+      throw _favoritesFull;
+    }
+    favorites.insert(index.clamp(0, favorites.length), playerRef);
+    state = state.copyWith(favorites: favorites);
+    await _save(PrefsKeys.searchFavorites, favorites);
+  }
+
   /// Adds [playerRef] as a favourite, or removes it if already saved. Throws
   /// an [AppException] when adding would pass [maxFavorites]; removing is
   /// always allowed.
   Future<void> toggleFavorite(PlayerRef playerRef) async {
     final favorites = List<PlayerRef>.from(state.favorites);
-    final idx = favorites.indexWhere((f) {
-      // Prefer UID matching when both entries have a UID (stable across renames).
-      if (playerRef.hasUid && f.hasUid) return f.uid == playerRef.uid;
-      // Otherwise (neither has a UID, or only one does) fall back to a
-      // case-insensitive name+platform match, so the same player can't be
-      // favorited twice under a stale casing or before syncDisplayName
-      // enriches one side with a UID.
-      return f.platform == playerRef.platform &&
-          f.query.toLowerCase() == playerRef.query.toLowerCase();
-    });
+    final idx = _favoriteIndex(favorites, playerRef);
     if (idx >= 0) {
       favorites.removeAt(idx);
     } else {
       if (favorites.length >= maxFavorites) {
-        throw const AppException(
-          'You can save up to $maxFavorites favorites. Remove one to add another.',
-        );
+        throw _favoritesFull;
       }
       favorites.insert(0, playerRef);
     }

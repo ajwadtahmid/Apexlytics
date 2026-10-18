@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/api_constants.dart';
@@ -9,6 +11,7 @@ import '../../utils/error_messages.dart' show AppException;
 import '../../utils/formatting/format.dart' show formatNumber;
 import '../../utils/formatting/rank_utils.dart' show rankAssetPath, rankLabel;
 import '../../utils/formatting/search_utils.dart';
+import '../../utils/navigation_utils.dart' show openExternalLink;
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
@@ -78,6 +81,74 @@ class FavoritesPane extends ConsumerWidget {
     }
   }
 
+  /// Takes [player] off the favorites, with an Undo that puts it back where it
+  /// was.
+  void _remove(BuildContext context, WidgetRef ref, PlayerRef player) {
+    final notifier = ref.read(searchStateProvider.notifier);
+    final index = ref.read(searchStateProvider).favorites.indexOf(player);
+    unawaited(notifier.removeFavorite(player));
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Removed ${player.query} from favorites'),
+          action: SnackBarAction(
+            label: 'Undo',
+            textColor: AppTheme.accent,
+            onPressed: () async {
+              try {
+                await notifier.restoreFavorite(player, index);
+              } on AppException catch (e) {
+                messenger.showError(e.message);
+              }
+            },
+          ),
+        ),
+      );
+  }
+
+  /// What a long press on a favorite offers: the same removal as a swipe, for
+  /// anyone who can't swipe, and the player's page on the website.
+  Future<void> _showMenu(
+    BuildContext context,
+    WidgetRef ref,
+    PlayerRef player,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.star_border, color: AppTheme.red),
+              title: const Text('Remove from favorites'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _remove(context, ref, player);
+              },
+            ),
+            if (player.hasUid)
+              ListTile(
+                leading: const Icon(Icons.public, color: AppTheme.accent),
+                title: const Text('Open on ALS'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  openExternalLink(
+                    context,
+                    Uri.parse(
+                      '${ApiConstants.alsProfileBaseUrl}/${player.platform}/${player.uid}',
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(searchStateProvider);
@@ -106,7 +177,19 @@ class FavoritesPane extends ConsumerWidget {
           if (favorites.isNotEmpty) ...[
             _FavoritesHeader(onClear: () => _confirmClear(context, ref)),
             ...favorites.map(
-              (r) => _FavoriteTile(playerRef: r, onTap: () => onPick(r)),
+              (r) => Dismissible(
+                key: ValueKey(
+                  'favorite:${r.uid ?? '${r.platform}:${r.query}'}',
+                ),
+                direction: DismissDirection.endToStart,
+                background: const _RemoveBackground(),
+                onDismissed: (_) => _remove(context, ref, r),
+                child: _FavoriteTile(
+                  playerRef: r,
+                  onTap: () => onPick(r),
+                  onLongPress: () => _showMenu(context, ref, r),
+                ),
+              ),
             ),
           ],
           if (recents.isNotEmpty) ...[
@@ -250,11 +333,34 @@ class _FavoritesHeader extends StatelessWidget {
   }
 }
 
+/// What shows behind a favorite as it is swiped away.
+class _RemoveBackground extends StatelessWidget {
+  const _RemoveBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: AppTheme.md),
+      decoration: BoxDecoration(
+        color: AppTheme.red.withAlpha(25),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      ),
+      child: const Icon(Icons.delete_outline, color: AppTheme.red),
+    );
+  }
+}
+
 class _FavoriteTile extends ConsumerWidget {
   final PlayerRef playerRef;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
-  const _FavoriteTile({required this.playerRef, required this.onTap});
+  const _FavoriteTile({
+    required this.playerRef,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   String _sessionKey() {
     if (playerRef.uid != null && playerRef.uid!.isNotEmpty) {
@@ -347,6 +453,7 @@ class _FavoriteTile extends ConsumerWidget {
       title: Text(title),
       subtitle: subtitle,
       onTap: onTap,
+      onLongPress: onLongPress,
     );
   }
 }

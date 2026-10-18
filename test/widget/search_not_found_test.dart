@@ -96,6 +96,156 @@ void main() {
     expect(adapter.paths, ['/player/uid']);
   });
 
+  group('trying another platform', () {
+    testWidgets('a name search offers the other platforms that take names', (
+      t,
+    ) async {
+      await open(t, byUid: false);
+
+      expect(find.text('Try another platform'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'PlayStation'), findsOne);
+      expect(find.widgetWithText(OutlinedButton, 'Xbox'), findsOneWidget);
+      // Not the platform just tried, and not one that has no name lookup.
+      expect(find.widgetWithText(OutlinedButton, 'PC'), findsNothing);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Nintendo Switch'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a UID search offers every other platform, Switch included', (
+      t,
+    ) async {
+      await open(t, byUid: true, query: '1234567890');
+
+      for (final label in ['PlayStation', 'Xbox', 'Nintendo Switch']) {
+        expect(find.widgetWithText(OutlinedButton, label), findsOneWidget);
+      }
+      expect(find.widgetWithText(OutlinedButton, 'PC'), findsNothing);
+    });
+
+    testWidgets('a button runs the same lookup on that platform', (t) async {
+      final adapter = await open(t, byUid: false);
+      expect(adapter.requests.single.queryParameters['platform'], 'PC');
+
+      await t.tap(find.widgetWithText(OutlinedButton, 'Xbox'));
+      for (var i = 0; i < 20; i++) {
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await t.pump(const Duration(milliseconds: 100));
+        if (adapter.requests.length > 1) break;
+      }
+
+      final retry = adapter.requests.last;
+      expect(retry.queryParameters['platform'], 'X1');
+      expect(retry.queryParameters['player'], 'nobody');
+    });
+
+    testWidgets('it replaces the page, so Back returns to Search', (t) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          apiServiceProvider.overrideWithValue(
+            ApiService(
+              ApiCacheStore(
+                overridePath:
+                    'file:not_found_${dbCounter++}?mode=memory&cache=shared',
+              ),
+              httpClientAdapter: FakeHttpAdapter(),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await t.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PlayerResultPage(
+                        query: 'Nobody',
+                        platform: 'PC',
+                      ),
+                    ),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await t.tap(find.text('open'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+      for (var i = 0; i < 20; i++) {
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await t.pump(const Duration(milliseconds: 100));
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+      }
+
+      await t.tap(find.widgetWithText(OutlinedButton, 'Xbox'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 500));
+      await t.pump(const Duration(milliseconds: 500));
+      await t.tap(find.byType(BackButton));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      // One Back from the retried lookup, not two.
+      expect(find.text('open'), findsOneWidget);
+    });
+
+    testWidgets('a failure that is not "not found" offers none', (t) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          apiServiceProvider.overrideWithValue(
+            ApiService(
+              ApiCacheStore(
+                overridePath:
+                    'file:not_found_${dbCounter++}?mode=memory&cache=shared',
+              ),
+              httpClientAdapter: FakeHttpAdapter({
+                '/player': const FakeReply(500, {'error': 'boom'}),
+              }),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await t.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: PlayerResultPage(query: 'Someone', platform: 'PC'),
+          ),
+        ),
+      );
+      for (var i = 0; i < 40; i++) {
+        await t.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await t.pump(const Duration(seconds: 2));
+        if (find.byIcon(Icons.search_off).evaluate().isNotEmpty) break;
+      }
+
+      expect(find.byIcon(Icons.search_off), findsOneWidget);
+      expect(find.text('Try another platform'), findsNothing);
+    });
+  });
+
   testWidgets('Back on the error screen leaves the page', (t) async {
     await open(t, byUid: false);
 

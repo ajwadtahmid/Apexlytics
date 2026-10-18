@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -171,6 +173,104 @@ void main() {
 
       final state = container.read(searchStateProvider);
       expect(state.favorites, isEmpty);
+    });
+
+    group('removing one favorite', () {
+      PlayerRef fav(int n) =>
+          PlayerRef(query: 'Player$n', platform: 'PC', uid: '$n');
+
+      List<PlayerRef> saved() => [
+        for (final m
+            in jsonDecode(prefs.getString(PrefsKeys.searchFavorites)!) as List)
+          PlayerRef.fromJson(m as Map<String, dynamic>),
+      ];
+
+      Future<SearchNotifier> three() async {
+        final notifier = container.read(searchStateProvider.notifier);
+        // Each is added first, so the list reads 3, 2, 1.
+        for (final n in [1, 2, 3]) {
+          await notifier.toggleFavorite(fav(n));
+        }
+        return notifier;
+      }
+
+      test('takes only that one, and keeps that', () async {
+        final notifier = await three();
+
+        await notifier.removeFavorite(fav(2));
+
+        expect(container.read(searchStateProvider).favorites, [fav(3), fav(1)]);
+        expect(saved(), [fav(3), fav(1)]);
+      });
+
+      test('changes the list before the save is done', () async {
+        final notifier = await three();
+
+        final saving = notifier.removeFavorite(fav(2));
+
+        expect(container.read(searchStateProvider).favorites, [fav(3), fav(1)]);
+        await saving;
+      });
+
+      test('does nothing for a player who is not saved', () async {
+        final notifier = await three();
+
+        await notifier.removeFavorite(fav(9));
+
+        expect(container.read(searchStateProvider).favorites, hasLength(3));
+      });
+
+      test('an undo puts it back where it was', () async {
+        final notifier = await three();
+        final index = container
+            .read(searchStateProvider)
+            .favorites
+            .indexOf(fav(2));
+        await notifier.removeFavorite(fav(2));
+
+        await notifier.restoreFavorite(fav(2), index);
+
+        expect(container.read(searchStateProvider).favorites, [
+          fav(3),
+          fav(2),
+          fav(1),
+        ]);
+        expect(saved(), [fav(3), fav(2), fav(1)]);
+      });
+
+      test('an undo for a player saved again meanwhile adds nothing', () async {
+        final notifier = await three();
+        await notifier.removeFavorite(fav(2));
+        await notifier.toggleFavorite(fav(2));
+
+        await notifier.restoreFavorite(fav(2), 2);
+
+        expect(
+          container
+              .read(searchStateProvider)
+              .favorites
+              .where((f) => f == fav(2)),
+          hasLength(1),
+        );
+      });
+
+      test('an undo past the cap is refused', () async {
+        final notifier = container.read(searchStateProvider.notifier);
+        for (var i = 0; i < SearchNotifier.maxFavorites; i++) {
+          await notifier.toggleFavorite(fav(i));
+        }
+        await notifier.removeFavorite(fav(0));
+        await notifier.toggleFavorite(fav(99));
+
+        await expectLater(
+          notifier.restoreFavorite(fav(0), 0),
+          throwsA(isA<AppException>()),
+        );
+        expect(
+          container.read(searchStateProvider).favorites,
+          hasLength(SearchNotifier.maxFavorites),
+        );
+      });
     });
   });
 

@@ -222,6 +222,14 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
           iconColor: AppTheme.red,
           iconSize: 48,
           message: friendlyError(e),
+          // Nobody by that name there is most often the wrong platform.
+          extra: e is AppException && e.status == 404
+              ? _TryOtherPlatforms(
+                  query: widget.query,
+                  platform: widget.platform,
+                  searchByUid: widget.searchByUid,
+                )
+              : null,
           actionLabel: 'Back',
           onAction: () => Navigator.pop(context),
         ),
@@ -310,6 +318,62 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
           ),
         );
       },
+    );
+  }
+}
+
+/// One button for each other platform the same lookup could be tried on. A
+/// name can't be looked up on a platform that only takes UIDs, but a UID can.
+class _TryOtherPlatforms extends StatelessWidget {
+  final String query;
+  final String platform;
+  final bool searchByUid;
+
+  const _TryOtherPlatforms({
+    required this.query,
+    required this.platform,
+    required this.searchByUid,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final others = [
+      for (final p in ApiConstants.platforms)
+        if (p != platform && (searchByUid || !ApiConstants.isUidOnly(p))) p,
+    ];
+    if (others.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppTheme.md),
+      child: Column(
+        children: [
+          const Text('Try another platform', style: AppTheme.caption),
+          const SizedBox(height: AppTheme.sm),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: AppTheme.sm,
+            runSpacing: AppTheme.sm,
+            children: [
+              for (final p in others)
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).pushReplacement(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PlayerResultPage(
+                        query: query,
+                        platform: p,
+                        searchByUid: searchByUid,
+                      ),
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.accent,
+                    side: const BorderSide(color: AppTheme.accent),
+                  ),
+                  child: Text(ApiConstants.labelFor(p)),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
