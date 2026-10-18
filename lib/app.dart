@@ -180,7 +180,7 @@ class _AppShellState extends ConsumerState<_AppShell>
   };
 
   /// Fires API requests in priority order on launch:
-  ///   Phase 1 — Map rotation + Seasonal maps + My Stats in parallel (highest priority)
+  ///   Phase 1 — Map rotation + Seasonal maps + Stats in parallel (highest priority)
   ///   Phase 2 — Predator cutoff + Server health (150 ms later)
   /// Favorites are NOT pre-fetched — only updated on manual sync.
   Future<void> _runStartupSequence() async {
@@ -261,7 +261,7 @@ class _AppShellState extends ConsumerState<_AppShell>
         // Fixed type keeps every label visible.
         type: BottomNavigationBarType.fixed,
         currentIndex: index,
-        onTap: (i) => ref.read(currentTabProvider.notifier).setTab(tabs[i]),
+        onTap: (i) => ref.read(currentTabProvider.notifier).tapNav(tabs[i]),
         items: [for (final t in tabs) _navItemFor(t)],
       ),
     );

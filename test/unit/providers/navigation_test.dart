@@ -49,7 +49,7 @@ void main() {
 
     test('every visible tab has a distinct, non-empty label', () {
       final labels = [for (final t in AppTab.values) t.label];
-      expect(labels, ['Home', 'My Stats', 'Search', 'Settings']);
+      expect(labels, ['Home', 'Stats', 'Search', 'Settings']);
       expect(labels.toSet(), hasLength(labels.length));
     });
 

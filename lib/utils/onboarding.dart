@@ -12,7 +12,7 @@ import '../screens/onboarding/onboarding_screen.dart';
 const int kOnboardingVersion = 2;
 
 /// Shows the orientation tour on first launch (or after [kOnboardingVersion] is
-/// bumped). Marks it seen, then drops the user on My Stats so setting up an
+/// bumped). Marks it seen, then drops the user on Stats so setting up an
 /// account is the next thing they see.
 Future<void> showOnboardingIfNeeded(BuildContext context, WidgetRef ref) async {
   final prefs = ref.read(sharedPreferencesProvider);
@@ -39,7 +39,7 @@ Future<void> showOnboardingIfNeeded(BuildContext context, WidgetRef ref) async {
     await prefs.setInt(PrefsKeys.onboardingVersion, kOnboardingVersion);
   }
 
-  // Land on My Stats so the profile-setup form is the first thing they reach.
+  // Land on Stats so the profile-setup form is the first thing they reach.
   ref.read(currentTabProvider.notifier).setTab(AppTab.stats);
 }
 

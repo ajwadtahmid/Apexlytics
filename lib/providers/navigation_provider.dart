@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// backups: never renumber one.
 enum AppTab {
   home('Home', 0),
-  stats('My Stats', 1),
+  stats('Stats', 1),
   search('Search', 2),
   settings('Settings', 3);
 
@@ -22,7 +22,7 @@ enum AppTab {
   final int storedValue;
 }
 
-/// The ordered list of visible tabs. Ranked Breakdown is part of My Stats
+/// The ordered list of visible tabs. Ranked Breakdown is part of Stats
 /// (see `StatsScreen`), not a separate tab.
 final visibleTabsProvider = Provider<List<AppTab>>((ref) {
   return const [AppTab.home, AppTab.stats, AppTab.search, AppTab.settings];
@@ -44,4 +44,26 @@ class _CurrentTabNotifier extends Notifier<AppTab> {
   AppTab build() => AppTab.home;
 
   void setTab(AppTab tab) => state = tab;
+
+  /// A tap on [tab] in the nav bar. Tapping Stats while already on it also
+  /// asks the page to go back to its first tab (see [statsReselectProvider]).
+  void tapNav(AppTab tab) {
+    if (tab == AppTab.stats && state == AppTab.stats) {
+      ref.read(statsReselectProvider.notifier).bump();
+    }
+    state = tab;
+  }
+}
+
+/// Counts taps on Stats in the nav bar while it is already showing. Stats
+/// listens, and returns to its Overview tab on each one.
+final statsReselectProvider = NotifierProvider<_StatsReselectNotifier, int>(
+  _StatsReselectNotifier.new,
+);
+
+class _StatsReselectNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state++;
 }

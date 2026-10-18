@@ -11,7 +11,7 @@ import '../../utils/formatting/format.dart' show formatSigned, plural;
 import '../../widgets/legend_icon.dart';
 import '../../widgets/nav_entry_card.dart';
 import '../../widgets/segmented_capsule.dart';
-import '../../widgets/sheet_handle.dart';
+import '../../widgets/info_sheet.dart';
 import 'ranked_entity_history_screen.dart';
 import 'widgets/ranked_best_legend_per_map.dart';
 
@@ -129,49 +129,25 @@ class RankedLegendMapMatrixScreen extends ConsumerWidget {
   }
 }
 
-void _showInfoSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(AppTheme.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SheetHandle(),
-            const SizedBox(height: AppTheme.md),
-            const Text(
-              'Legend × Map',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppTheme.md),
-            for (final line in [
-              'Each cell is one legend on one map: games played on top, and '
-                  'the average RP gained or lost per game below.',
-              'A stronger colour is a bigger gain or loss. Fainter cells have '
-                  'under $kMinGamesForInsight games, which says little.',
-              'Tap a cell to see those games.',
-              'The All row and column add up each map and each legend, and '
-                  'tapping one shows those games.',
-              'The chips above the grid order the legends and maps by games '
-                  'played, RP per game, or name. Best RP puts those with only a '
-                  'few games last.',
-              'Below the grid, the best and worst legend on each map are '
-                  'picked from legends with $kMinGamesForInsight or more games '
-                  'there. The map in the live ranked rotation comes first.',
-            ])
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppTheme.sm),
-                child: Text(line, style: AppTheme.captionLarge),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+void _showInfoSheet(BuildContext context) => showInfoSheet(
+  context,
+  title: 'Legend × Map',
+  lines: [
+    'Each cell is one legend on one map: games played on top, and '
+        'the average RP gained or lost per game below.',
+    'A stronger colour is a bigger gain or loss. Fainter cells have '
+        'under $kMinGamesForInsight games, which says little.',
+    'Tap a cell to see those games.',
+    'The All row and column add up each map and each legend, and '
+        'tapping one shows those games.',
+    'The chips above the grid order the legends and maps by games '
+        'played, RP per game, or name. Best RP puts those with only a '
+        'few games last.',
+    'Below the grid, the best and worst legend on each map are '
+        'picked from legends with $kMinGamesForInsight or more games '
+        'there. The map in the live ranked rotation comes first.',
+  ],
+);
 
 /// The grid itself, reused by [RankedLegendMapMatrixScreen] (from in-memory
 /// matches) and the split-comparison tab (from a precomputed SQL breakdown for

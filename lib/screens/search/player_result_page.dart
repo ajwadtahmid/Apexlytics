@@ -409,7 +409,7 @@ class _PlayerResultBodyState extends ConsumerState<PlayerResultBody>
     return ref.read(searchStateProvider).favorites.any((f) => f.uid == uid);
   }
 
-  // A season learned here (a different provider subtree than the Ranked section of My Stats)
+  // A season learned here (a different provider subtree than the Ranked section of Stats)
   // won't otherwise reach rankedSeasonsProvider's frozen snapshot until the
   // next app launch — invalidate it so the ranked split picker picks it up
   // this session too.

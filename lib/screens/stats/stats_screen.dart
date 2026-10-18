@@ -23,7 +23,7 @@ import '../ranked/widgets/ranked_period_selector.dart'
 import 'refresh_all_sheet.dart';
 import '../../utils/navigation_utils.dart';
 
-/// My Stats — the app's default tab. Hosts the player's own snapshot info
+/// Stats — the app's default tab. Hosts the player's own snapshot info
 /// plus the full Ranked Breakdown (rank header, RP graph, and every Ranked
 /// tab), merged into one screen so users don't have to jump between two tabs
 /// to see their own numbers.
@@ -135,7 +135,7 @@ class _StatsViewState extends ConsumerState<_StatsView> {
     });
   }
 
-  /// Combined manual refresh: both My Stats (`/player`) and Ranked's match
+  /// Combined manual refresh: both Stats (`/player`) and Ranked's match
   /// history are independent syncs with their own cooldowns, but there's only
   /// one refresh control in the AppBar, so a tap fires both.
   Future<void> _sync() async {

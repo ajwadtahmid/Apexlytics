@@ -76,7 +76,7 @@ void openLegendHistory(
 /// and pushes the same [RankedEntityHistoryScreen] drill-down the Legends tab
 /// uses. "All Trackers" resolves the persisted career [LegendStat] for this
 /// legend — a pure read of what [mergeLegendStats] already wrote during the
-/// normal My Stats flow, so opening this never re-triggers that merge — and
+/// normal Stats flow, so opening this never re-triggers that merge — and
 /// opens the same trackers sheet the All Trackers list uses; hidden when no
 /// matching stat exists. Labeled "Trackers" (not "All Trackers", the Overview
 /// button that opens every legend's trackers) since this one is scoped to a

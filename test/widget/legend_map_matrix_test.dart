@@ -219,6 +219,25 @@ void main() {
       expect(find.text('Tap a cell to see those games.'), findsOneWidget);
     });
 
+    testWidgets('the info sheet scrolls on a small screen', (tester) async {
+      await pump(tester);
+      tester.view.physicalSize = const Size(360, 420);
+
+      await tester.tap(find.byTooltip('How to read this'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      final sheet = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(SingleChildScrollView),
+      );
+      await tester.drag(sheet, const Offset(0, -2000));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('comes first'), findsOneWidget);
+    });
+
     testWidgets('the grid comes first and the best and worst legends below', (
       tester,
     ) async {

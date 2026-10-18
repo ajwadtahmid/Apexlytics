@@ -6,7 +6,7 @@ import '../utils/theme.dart';
 
 /// Warns that "Keep screen on" can't work in iOS Low Power Mode. Hidden unless
 /// [lowPowerWarningProvider] holds. [dismissible] makes it a closable banner
-/// (Home, My Stats); otherwise it sits inline under the setting.
+/// (Home, Stats); otherwise it sits inline under the setting.
 class LowPowerWarning extends ConsumerWidget {
   final bool dismissible;
   const LowPowerWarning({super.key, this.dismissible = false});

@@ -316,7 +316,7 @@ class CacheSettingsSection extends ConsumerWidget {
         ref.invalidate(playerSettingsProvider);
         ref.invalidate(searchStateProvider);
         // Same UID as before restore, so these families' cached values would
-        // otherwise survive and the Ranked section of My Stats would show stale data.
+        // otherwise survive and the Ranked section of Stats would show stale data.
         invalidatePlayerDerivedProviders(ref);
         // The same counts the preview dialog showed.
         context.showMessage(

@@ -146,7 +146,7 @@ class _NoPlayerContent extends StatelessWidget {
             ),
           ),
           Text(
-            'Go to My Stats',
+            'Go to Stats',
             style: TextStyle(color: AppTheme.accent, fontSize: 13),
           ),
           SizedBox(width: AppTheme.xs),

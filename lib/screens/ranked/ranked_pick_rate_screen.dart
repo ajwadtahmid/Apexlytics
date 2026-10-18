@@ -23,7 +23,7 @@ import '../../utils/formatting/format.dart'
         formatAvgDamage;
 import '../../widgets/nav_entry_card.dart';
 import '../../widgets/segmented_capsule.dart';
-import '../../widgets/sheet_handle.dart';
+import '../../widgets/info_sheet.dart';
 import 'widgets/ranked_legend_detail_sheet.dart' show openLegendHistory;
 
 /// Self-contained entry point for the Pick Rate chart: a single tappable row
@@ -685,48 +685,24 @@ class _Takeaways extends StatelessWidget {
 /// state up via callbacks (into [_RankedPickRateScreenState]) while also
 /// tracking it locally so its own switches update immediately without
 /// waiting for the underlying chart to rebuild.
-void _showInfoSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppTheme.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SheetHandle(),
-            const SizedBox(height: AppTheme.md),
-            const Text(
-              'Pick Rate',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppTheme.md),
-            for (final line in [
-              'Each dot is a legend: further right means you play it more, '
-                  'higher means it earns more RP per game.',
-              'The dashed lines mark an even share of your games and the RP '
-                  'line (0, or your average in Customize). Core is played a '
-                  'lot and gains RP, a comfort trap is played a lot but loses '
-                  'RP, a hidden gem is played less but gains, and bench is '
-                  'played less and loses.',
-              'Legends with under $kMinGamesForInsight games are left out '
-                  'until you choose All in Customize.',
-              'Tap a dot, or a row in the table, to see that legend. Tap its '
-                  'card to open its games. In the table, tap a heading to '
-                  'sort.',
-            ])
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppTheme.sm),
-                child: Text(line, style: AppTheme.captionLarge),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+void _showInfoSheet(BuildContext context) => showInfoSheet(
+  context,
+  title: 'Pick Rate',
+  lines: [
+    'Each dot is a legend: further right means you play it more, '
+        'higher means it earns more RP per game.',
+    'The dashed lines mark an even share of your games and the RP '
+        'line (0, or your average in Customize). Core is played a '
+        'lot and gains RP, a comfort trap is played a lot but loses '
+        'RP, a hidden gem is played less but gains, and bench is '
+        'played less and loses.',
+    'Legends with under $kMinGamesForInsight games are left out '
+        'until you choose All in Customize.',
+    'Tap a dot, or a row in the table, to see that legend. Tap its '
+        'card to open its games. In the table, tap a heading to '
+        'sort.',
+  ],
+);
 
 class _CustomizeSheet extends ConsumerWidget {
   final List<LegendBreakdown> legends;

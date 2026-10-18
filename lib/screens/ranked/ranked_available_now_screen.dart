@@ -10,7 +10,7 @@ import '../../widgets/surface_card.dart';
 /// Reached from Ranked's empty states while match history hasn't arrived
 /// yet. Shows the snapshot-based RP graph (device-local RP samples) and All
 /// Trackers (career-lifetime legend/weapon stats from the live player-stats
-/// API) — neither depends on the match history the Ranked section of My Stats is waiting on.
+/// API) — neither depends on the match history the Ranked section of Stats is waiting on.
 /// Each section falls back to [_EmptySection] when its own data hasn't
 /// accumulated yet, rather than rendering blank.
 class RankedAvailableNowScreen extends StatelessWidget {

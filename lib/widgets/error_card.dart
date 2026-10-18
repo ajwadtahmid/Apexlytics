@@ -8,7 +8,7 @@ import 'surface_card.dart';
 /// - `compact: true` → tile row (icon + title/subtitle + Retry) for a tight
 ///   space, e.g. a Home summary tile.
 /// - `fullScreen: true` → centered whole-screen state with optional title,
-///   extra content, and up to three actions, e.g. My Stats/Search fetch
+///   extra content, and up to three actions, e.g. Stats/Search fetch
 ///   failures or Ranked Breakdown's "still waiting for data" states.
 /// - default → inline block in a [SurfaceCard], e.g. Home's map-rotation card.
 ///

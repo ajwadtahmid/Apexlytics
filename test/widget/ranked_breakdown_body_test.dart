@@ -8,6 +8,7 @@ import 'package:apexlytics/models/player_stats.dart'
     show LegendStat, PlayerStats;
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
+import 'package:apexlytics/providers/navigation_provider.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/ranked_breakdown_body.dart';
@@ -121,7 +122,7 @@ void main() {
       return runs;
     }
 
-    testWidgets('leaves the sync to My Stats\' timer when a refresh interval '
+    testWidgets('leaves the sync to Stats\' timer when a refresh interval '
         'is set, instead of firing a second request', (tester) async {
       expect(await syncRunsAfterTenMinutes(tester, 10), 1);
     });
@@ -497,5 +498,75 @@ void main() {
         expect(find.byIcon(Icons.sync), findsNothing);
       },
     );
+  });
+  group('tapping Stats in the nav bar while on it', () {
+    const uid = 'uid123';
+    const splitId = 'br_ranked_s29_s1';
+
+    Future<ProviderContainer> showSplit(WidgetTester tester) async {
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.synced,
+          splits: const [
+            RankedSplitBucket(id: splitId, displayName: 'S29 Split 1'),
+          ],
+          splitMatches: [matchWith(uid: uid, cumulativeRp: 1000)],
+        ),
+      );
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RankedBreakdownBody)),
+      );
+      container.read(currentTabProvider.notifier).setTab(AppTab.stats);
+      return container;
+    }
+
+    bool selected(WidgetTester tester, String label) {
+      final index = ['Overview', 'Legends', 'Maps', 'History'].indexOf(label);
+      return DefaultTabController.of(
+            tester.element(find.byType(TabBar)),
+          ).index ==
+          index;
+    }
+
+    for (final tab in ['Legends', 'Maps', 'History']) {
+      testWidgets('returns to Overview from $tab', (tester) async {
+        final container = await showSplit(tester);
+        await tester.tap(find.text(tab));
+        await tester.pumpAndSettle();
+        expect(selected(tester, tab), isTrue);
+
+        container.read(currentTabProvider.notifier).tapNav(AppTab.stats);
+        await tester.pumpAndSettle();
+
+        expect(selected(tester, 'Overview'), isTrue);
+      });
+    }
+
+    testWidgets('does not move you when you arrive from another tab', (
+      tester,
+    ) async {
+      final container = await showSplit(tester);
+      await tester.tap(find.text('Maps'));
+      await tester.pumpAndSettle();
+      container.read(currentTabProvider.notifier).setTab(AppTab.home);
+
+      container.read(currentTabProvider.notifier).tapNav(AppTab.stats);
+      await tester.pumpAndSettle();
+
+      expect(selected(tester, 'Maps'), isTrue);
+      expect(container.read(currentTabProvider), AppTab.stats);
+    });
+
+    testWidgets('leaves Overview where it is', (tester) async {
+      final container = await showSplit(tester);
+
+      container.read(currentTabProvider.notifier).tapNav(AppTab.stats);
+      await tester.pumpAndSettle();
+
+      expect(selected(tester, 'Overview'), isTrue);
+    });
   });
 }

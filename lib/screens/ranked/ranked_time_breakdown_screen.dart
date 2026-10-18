@@ -8,7 +8,7 @@ import '../../utils/ranked/performance_insights.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
 import '../../widgets/segmented_capsule.dart';
-import '../../widgets/sheet_handle.dart';
+import '../../widgets/info_sheet.dart';
 import '../../widgets/surface_card.dart';
 import '../../utils/ranked/slot_compare.dart';
 import 'widgets/ranked_slot_chart.dart';
@@ -132,51 +132,27 @@ class RankedTimeBreakdownScreen extends ConsumerWidget {
   }
 }
 
-void _showInfoSheet(BuildContext context) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppTheme.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SheetHandle(),
-            const SizedBox(height: AppTheme.md),
-            const Text(
-              'Performance Trends',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppTheme.md),
-            for (final line in [
-              'Sessions shown sets the headline and the trends: the latest '
-                  'sessions against the same number before them. A count is '
-                  'offered once you have twice as many sessions. All gives the '
-                  'average over every session instead.',
-              'When you play best and the hour and day charts use every game in '
-                  'this period, whichever count is chosen.',
-              'The light line over each chart averages every session with the '
-                  'two before it, so one big night does not swing it.',
-              'Game length and games per session are said as up or down: '
-                  'neither is better or worse as it rises.',
-              'In the hour and day charts, bars with under '
-                  '$kMinGamesForInsight games are faded in the RP per game '
-                  'view. Best and toughest times need $kPlayInsightGames games '
-                  '(or $kPlayInsightLowSampleGames, shown as a hint, for newer '
-                  'players).',
-            ])
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppTheme.sm),
-                child: Text(line, style: AppTheme.captionLarge),
-              ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+void _showInfoSheet(BuildContext context) => showInfoSheet(
+  context,
+  title: 'Performance Trends',
+  lines: [
+    'Sessions shown sets the headline and the trends: the latest '
+        'sessions against the same number before them. A count is '
+        'offered once you have twice as many sessions. All gives the '
+        'average over every session instead.',
+    'When you play best and the hour and day charts use every game in '
+        'this period, whichever count is chosen.',
+    'The light line over each chart averages every session with the '
+        'two before it, so one big night does not swing it.',
+    'Game length and games per session are said as up or down: '
+        'neither is better or worse as it rises.',
+    'In the hour and day charts, bars with under '
+        '$kMinGamesForInsight games are faded in the RP per game '
+        'view. Best and toughest times need $kPlayInsightGames games '
+        '(or $kPlayInsightLowSampleGames, shown as a hint, for newer '
+        'players).',
+  ],
+);
 
 /// How many of the latest sessions the headline and trends look at.
 class _SessionsShown extends StatelessWidget {

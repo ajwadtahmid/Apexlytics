@@ -8,6 +8,7 @@ import '../../constants/rank_constants.dart' show kApexPredatorRank;
 import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
+import '../../providers/navigation_provider.dart';
 import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../utils/error_messages.dart';
@@ -35,13 +36,13 @@ import 'widgets/ranked_summary_header.dart';
 import '../../widgets/player_info_card.dart';
 
 /// The ranked-breakdown content — tabs, highlights, and every drill-down —
-/// embedded as the lower portion of the My Stats tab, below the shared
+/// embedded as the lower portion of the Stats tab, below the shared
 /// AppBar. Everything, including the player-info card and rank header, lives
 /// inside the Overview tab's own single scrollable list rather than a
 /// separately-scrolling block pinned above the tabs — one scroll surface per
 /// tab, no nested scrollables. It reads everything from providers except the
 /// player snapshot and merged legend/weapon trackers (passed in, since those
-/// come from the My Stats side of the merge) and the combined refresh
+/// come from the Stats side of the merge) and the combined refresh
 /// callback.
 class RankedBreakdownBody extends ConsumerStatefulWidget {
   final String uid;
@@ -79,7 +80,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
   void initState() {
     super.initState();
     _refreshTimer = Timer.periodic(_kViewRefreshInterval, (_) {
-      // With a refresh interval set, My Stats' own timer already runs this
+      // With a refresh interval set, Stats' own timer already runs this
       // sync (see StatsScreen._sync); both firing back to back started two
       // `/games` requests for the same profile.
       if (ref.read(playerSettingsProvider).statsRefreshMinutes > 0) return;
@@ -111,7 +112,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     _dismissCoachMark();
   }
 
-  // Mirrors the combined My Stats + Ranked sync (see StatsScreen._sync), so
+  // Mirrors the combined Stats + Ranked sync (see StatsScreen._sync), so
   // a manual retry or pull-to-refresh here matches the AppBar's button.
   Future<void> _refresh() => widget.onRefresh();
 
@@ -399,20 +400,22 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
     return DefaultTabController(
       key: ValueKey(key),
       length: labels.length,
-      child: Column(
-        children: [
-          TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.center,
-            labelStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+      child: _OverviewOnReselect(
+        child: Column(
+          children: [
+            TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
+              labelStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+              unselectedLabelStyle: const TextStyle(fontSize: 14),
+              tabs: [for (final l in labels) Tab(height: 42, text: l)],
             ),
-            unselectedLabelStyle: const TextStyle(fontSize: 14),
-            tabs: [for (final l in labels) Tab(height: 42, text: l)],
-          ),
-          Expanded(child: TabBarView(children: views)),
-        ],
+            Expanded(child: TabBarView(children: views)),
+          ],
+        ),
       ),
     );
   }
@@ -927,5 +930,21 @@ class _InfoCoachMark extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Sends the tab bar below it back to Overview whenever Stats is tapped in
+/// the nav bar while it is already showing.
+class _OverviewOnReselect extends ConsumerWidget {
+  final Widget child;
+  const _OverviewOnReselect({required this.child});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(statsReselectProvider, (_, _) {
+      final controller = DefaultTabController.of(context);
+      if (controller.index != 0) controller.animateTo(0);
+    });
+    return child;
   }
 }

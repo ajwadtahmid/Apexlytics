@@ -92,7 +92,7 @@ void main() {
   }
 
   group('with no player set up', () {
-    testWidgets('offers to set one up, and takes you to My Stats', (
+    testWidgets('offers to set one up, and takes you to Stats', (
       tester,
     ) async {
       await openHome(tester);

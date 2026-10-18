@@ -52,7 +52,7 @@ const _pages = <_OnboardingPage>[
     icon: Icons.leaderboard_outlined,
     title: 'Record your ranked history',
     body:
-        'Your ranked breakdown lives on the My Stats tab: RP over time, '
+        'Your ranked breakdown lives on the Stats tab: RP over time, '
         'your best legends and maps, and how you play by time of day.',
     tip:
         'Tip: matches only record while your profile is actively tracked, '

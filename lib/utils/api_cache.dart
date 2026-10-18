@@ -65,7 +65,7 @@ class ApiCache {
   static const _maxEntries = 150;
 
   /// How many entries stay decoded. Enough for what a screen re-reads on every
-  /// rebuild (My Stats, a few favourites, the home cards).
+  /// rebuild (Stats, a few favourites, the home cards).
   static const _maxDecoded = 12;
 
   /// In-memory copy of every persisted entry — what [load]/[loadStale]
