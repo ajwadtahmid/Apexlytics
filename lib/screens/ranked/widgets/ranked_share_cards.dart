@@ -8,10 +8,13 @@ import '../../../utils/formatting/format.dart'
         formatNumber,
         formatNumberOrNone,
         formatSessionSpan,
+        formatSigned,
         formatSignedInt,
-        plural;
+        formatTotalOrNone,
+        kNoReading;
 import '../../../utils/formatting/rank_utils.dart'
     show rankAssetPathFromImageUrl;
+import '../../../utils/ranked/recap_tiles.dart';
 import '../../../utils/ranked/split_recap.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/rank_badge.dart';
@@ -19,8 +22,8 @@ import '../../../widgets/share_card.dart';
 
 Color _signed(num v) => AppTheme.signColor(v >= 0);
 
-/// The taller card the recap needs for its seven figures: 2:3.
-const double _kRecapHeight = 540;
+/// The taller card the recap needs for up to ten figures.
+const double _kRecapHeight = 560;
 
 /// A period of ranked play in numbers: [recap] for [scope] ("S30 Split 2"). The
 /// player's name appears only when [playerName] is given; a UID never does.
@@ -32,18 +35,105 @@ class RecapShareCard extends StatelessWidget {
   /// Whether the player finished the period as Apex Predator. Match history
   /// only ever carries the Master badge for them, so this is told separately.
   final bool isPredator;
+
+  /// The tiles to draw, in the order given; null for the default eight. A tile
+  /// with nothing to show (no best legend, no best session) is skipped.
+  final List<RecapTile>? tiles;
+
+  /// Where the RP was netted, said after it: "this split", or "in Week 3" when a
+  /// single week is on screen.
+  final String periodPhrase;
   const RecapShareCard({
     super.key,
     required this.recap,
     required this.scope,
     this.playerName,
     this.isPredator = false,
+    this.tiles,
+    this.periodPhrase = 'this split',
   });
+
+  /// One tile of the card, or null when it has nothing to show.
+  ShareTile? _tile(RecapTile tile) {
+    final r = recap;
+    switch (tile) {
+      case RecapTile.games:
+        return ShareTile(
+          icon: Icons.sports_esports_outlined,
+          label: 'Games',
+          value: '${r.games}',
+        );
+      case RecapTile.peakRp:
+        return ShareTile(
+          icon: Icons.trending_up,
+          label: 'Peak RP',
+          value: formatNumber(r.peakRp),
+        );
+      case RecapTile.kills:
+        return ShareTile(
+          icon: Icons.sports_kabaddi,
+          label: 'Kills',
+          value: formatTotalOrNone(r.totalKills, r.killsGames),
+        );
+      case RecapTile.damage:
+        return ShareTile(
+          icon: Icons.local_fire_department,
+          label: 'Damage',
+          value: formatTotalOrNone(r.totalDamage, r.damageGames),
+        );
+      case RecapTile.bestSession:
+        final s = r.bestSession;
+        return s == null
+            ? null
+            : ShareTile(
+                icon: Icons.timeline,
+                label: 'Best session',
+                value: '${formatSignedInt(s.netRp)} RP',
+                color: _signed(s.netRp),
+              );
+      case RecapTile.timePlayed:
+        return ShareTile(
+          icon: Icons.schedule,
+          label: 'Time played',
+          value: formatDuration(r.playSecs),
+        );
+      case RecapTile.bestLegend:
+        return r.bestLegend == null
+            ? null
+            : ShareTile(
+                icon: Icons.person_outline,
+                label: 'Best legend',
+                value: r.bestLegend!.legend,
+              );
+      case RecapTile.bestMap:
+        return r.bestMap == null
+            ? null
+            : ShareTile(
+                icon: Icons.map_outlined,
+                label: 'Best map',
+                value: r.bestMap!.displayName,
+              );
+      case RecapTile.winRate:
+        return ShareTile(
+          icon: Icons.percent,
+          label: 'Win rate',
+          value: r.winRate == null
+              ? kNoReading
+              : '${(r.winRate! * 100).round()}%',
+        );
+      case RecapTile.rpPerGame:
+        return ShareTile(
+          icon: Icons.bolt,
+          label: 'RP per game',
+          value: formatSigned(r.avgRpPerGame),
+          color: _signed(r.avgRpPerGame),
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final r = recap;
-    final session = r.bestSession;
     return ShareCardFrame(
       label: '$scope recap',
       name: playerName,
@@ -77,11 +167,16 @@ class RecapShareCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Text(
-                      '${formatSignedInt(r.netRp)} this period',
-                      style: TextStyle(
-                        color: _signed(r.netRp),
-                        fontWeight: FontWeight.w600,
+                    // One line whatever the font, so the card keeps its height.
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${formatSignedInt(r.netRp)} RP $periodPhrase',
+                        style: TextStyle(
+                          color: _signed(r.netRp),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -89,50 +184,14 @@ class RecapShareCard extends StatelessWidget {
               ),
             ],
           ),
-          const Spacer(),
+          // The tiles start at the same place whatever their number; any room
+          // left over is at the bottom.
+          const SizedBox(height: AppTheme.lg),
           Wrap(
             spacing: AppTheme.sm,
             runSpacing: AppTheme.sm,
             children: [
-              ShareTile(
-                icon: Icons.sports_esports_outlined,
-                label: 'Games',
-                value: '${r.games}',
-              ),
-              ShareTile(
-                icon: Icons.trending_up,
-                label: 'Peak RP',
-                value: formatNumber(r.peakRp),
-              ),
-              ShareTile(
-                icon: Icons.military_tech_outlined,
-                label: 'Win streak',
-                value: plural(r.longestWinStreak, 'game'),
-              ),
-              ShareTile(
-                icon: Icons.schedule,
-                label: 'Time played',
-                value: formatDuration(r.playSecs),
-              ),
-              if (r.bestLegend != null)
-                ShareTile(
-                  icon: Icons.person_outline,
-                  label: 'Best legend',
-                  value: r.bestLegend!.legend,
-                ),
-              if (r.bestMap != null)
-                ShareTile(
-                  icon: Icons.map_outlined,
-                  label: 'Best map',
-                  value: r.bestMap!.displayName,
-                ),
-              if (session != null)
-                ShareTile(
-                  icon: Icons.timeline,
-                  label: 'Best session',
-                  value: '${formatSignedInt(session.netRp)} RP',
-                  color: _signed(session.netRp),
-                ),
+              for (final t in tiles ?? defaultRecapTiles.toList()) ?_tile(t),
             ],
           ),
         ],

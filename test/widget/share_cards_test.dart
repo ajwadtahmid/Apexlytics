@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:apexlytics/screens/ranked/ranked_recap_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_share_screens.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_share_cards.dart';
+import 'package:apexlytics/utils/ranked/ranked_period.dart';
+import 'package:apexlytics/utils/ranked/recap_tiles.dart';
 import 'package:apexlytics/utils/ranked/split_recap.dart';
 import 'package:apexlytics/utils/share_image.dart';
 import 'package:apexlytics/utils/theme.dart';
@@ -54,7 +57,7 @@ void main() {
       expect(find.text('S30 Split 2 recap'), findsOneWidget);
       expect(find.text('Reptar'), findsOneWidget);
       expect(find.text('1,080 RP'), findsOneWidget);
-      expect(find.text('+80 this period'), findsOneWidget);
+      expect(find.text('+80 RP this split'), findsOneWidget);
       expect(find.text('4'), findsOneWidget); // games
       expect(find.text('Axle'), findsOneWidget); // best legend
 
@@ -65,6 +68,210 @@ void main() {
         ),
       );
       expect(find.text('Reptar'), findsNothing);
+    });
+
+    testWidgets('says RP and the split under the finishing RP', (tester) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+        ),
+      );
+
+      expect(find.text('+80 RP this split'), findsOneWidget);
+      expect(find.textContaining('this period'), findsNothing);
+    });
+
+    testWidgets('says week when a single week is on screen', (tester) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: splitRecap(matches),
+            scope: 'S30 Split 2',
+            periodPhrase: 'in Week 4',
+          ),
+        ),
+      );
+
+      expect(find.text('+80 RP in Week 4'), findsOneWidget);
+    });
+
+    testWidgets('has eight tiles to begin with, two to a row', (tester) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+        ),
+      );
+
+      expect(find.byType(ShareTile), findsNWidgets(8));
+      final rows = [
+        ['GAMES', 'PEAK RP'],
+        ['KILLS', 'DAMAGE'],
+        ['BEST SESSION', 'TIME PLAYED'],
+        ['BEST LEGEND', 'BEST MAP'],
+      ];
+      double? previousTop;
+      for (final row in rows) {
+        final left = tester.getTopLeft(find.text(row[0]));
+        final right = tester.getTopLeft(find.text(row[1]));
+        expect(left.dy, right.dy, reason: '$row share a row');
+        expect(left.dx, lessThan(right.dx), reason: '$row in order');
+        if (previousTop != null) expect(left.dy, greaterThan(previousTop));
+        previousTop = left.dy;
+      }
+    });
+
+    testWidgets('leaves the win rate and RP per game for when they are asked '
+        'for, and has no win streak', (tester) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+        ),
+      );
+
+      expect(find.text('WIN RATE'), findsNothing);
+      expect(find.text('RP PER GAME'), findsNothing);
+      expect(find.text('WIN STREAK'), findsNothing);
+    });
+
+    testWidgets('shows kills and damage as totals', (tester) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+        ),
+      );
+
+      // Four games of two kills and 400 damage.
+      expect(find.text('8'), findsOneWidget);
+      expect(find.text('1,600'), findsOneWidget);
+    });
+
+    testWidgets('shows the best session by the RP it gained', (tester) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+        ),
+      );
+
+      // The four wins are one session of +80.
+      expect(
+        find.descendant(
+          of: find.widgetWithText(ShareTile, 'BEST SESSION'),
+          matching: find.text('+80 RP'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('reads kills and damage as none when no game reported them', (
+      tester,
+    ) async {
+      final bare = [
+        for (var i = 0; i < 3; i++)
+          buildMatch(start: t0 + i * 1500, rp: 20, cumulativeRp: 1020 + i * 20),
+      ];
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(recap: splitRecap(bare), scope: 'S30'),
+        ),
+      );
+
+      for (final label in ['KILLS', 'DAMAGE']) {
+        expect(
+          find.descendant(
+            of: find.widgetWithText(ShareTile, label),
+            matching: find.text('—'),
+          ),
+          findsOneWidget,
+          reason: label,
+        );
+      }
+    });
+
+    testWidgets('shows the win rate and RP per game when they are given', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: splitRecap(matches),
+            scope: 'S30',
+            tiles: const [RecapTile.winRate, RecapTile.rpPerGame],
+          ),
+        ),
+      );
+
+      // Four wins of four games, +20 RP each.
+      expect(find.text('100%'), findsOneWidget);
+      expect(find.text('+20.0'), findsOneWidget);
+    });
+
+    testWidgets('a split of only losses has a win rate of 0% and a negative '
+        'RP per game', (tester) async {
+      final losses = [
+        for (var i = 0; i < 3; i++)
+          buildMatch(start: t0 + i * 1500, rp: -20, cumulativeRp: 980 - i * 20),
+      ];
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: splitRecap(losses),
+            scope: 'S30',
+            tiles: const [RecapTile.winRate, RecapTile.rpPerGame],
+          ),
+        ),
+      );
+
+      expect(find.text('0%'), findsOneWidget);
+      expect(find.text('-20.0'), findsOneWidget);
+      expect(find.byType(ShareTile), findsNWidgets(2));
+    });
+
+    testWidgets('draws only the tiles it is given, in that order', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: splitRecap(matches),
+            scope: 'S30',
+            tiles: const [RecapTile.peakRp, RecapTile.games],
+          ),
+        ),
+      );
+
+      expect(find.byType(ShareTile), findsNWidgets(2));
+      final peak = tester.getTopLeft(find.text('PEAK RP'));
+      final games = tester.getTopLeft(find.text('GAMES'));
+      // Side by side on one row, the first given on the left.
+      expect(peak.dy, games.dy);
+      expect(peak.dx, lessThan(games.dx));
+    });
+
+    testWidgets('fits all ten tiles', (tester) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: splitRecap(matches),
+            scope: 'S30 Split 2',
+            playerName: 'A Rather Long Player Name',
+            tiles: RecapTile.values,
+          ),
+        ),
+      );
+
+      expect(find.byType(ShareTile), findsNWidgets(10));
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -191,7 +398,7 @@ void main() {
       expect(find.text('LEGEND'), findsOneWidget);
     });
 
-    testWidgets('is a 4:5 card, the recap 2:3, with the tiles in two columns', (
+    testWidgets('is a 4:5 card, the recap taller, tiles in two columns', (
       tester,
     ) async {
       await pump(
@@ -226,7 +433,7 @@ void main() {
           body: RecapShareCard(recap: recap, scope: 'x'),
         ),
       );
-      expect(tester.getSize(find.byType(ShareCardFrame)), const Size(360, 540));
+      expect(tester.getSize(find.byType(ShareCardFrame)), const Size(360, 560));
     });
 
     testWidgets('fades the legend portrait in behind the card', (tester) async {
@@ -676,7 +883,10 @@ void main() {
       );
       await tester.tap(find.text('Recap'));
       await tester.pumpAndSettle();
-      expect(find.text('S30 Split 2 recap'), findsOneWidget);
+      // The recap page; the card to share is a tap further on.
+      expect(find.byType(RankedRecapScreen), findsOneWidget);
+      expect(find.text('S30 Split 2'), findsOneWidget);
+      expect(find.byType(RecapShareCard), findsNothing);
     });
 
     testWidgets('Recap passes the predator status on to the card', (
@@ -700,6 +910,56 @@ void main() {
         tester.widget<RankBadge>(find.byType(RankBadge)).assetPath,
         'assets/ranks/apex_predator.webp',
       );
+    });
+
+    testWidgets('Recap says week when it is opened for a single week', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        Scaffold(
+          body: RankedRecapEntry(
+            matches: matches,
+            scope: 'S30 Split 2',
+            playerName: 'Reptar',
+            periodPhrase: 'in Week 4',
+          ),
+        ),
+      );
+      await tester.tap(find.text('Recap'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('+80 RP in Week 4'), findsOneWidget);
+    });
+
+    test('names the period by whether a week is picked', () {
+      RankedView view(int week) => RankedView(
+        splits: const [],
+        effectiveSplitId: '',
+        weeks: const [],
+        weekIndex: week,
+        filtered: const [],
+        history: const [],
+      );
+
+      expect(recapPeriodPhrase(view(-1)), 'this split');
+      expect(recapPeriodPhrase(view(0)), 'in Week 1');
+      expect(recapPeriodPhrase(view(3)), 'in Week 4');
+    });
+
+    test('a title can leave the week out', () {
+      RankedView view(int week) => RankedView(
+        splits: const [],
+        effectiveSplitId: '',
+        weeks: const [],
+        weekIndex: week,
+        filtered: const [],
+        history: const [],
+      );
+
+      expect(recapScopeLabel(view(3)), 'Ranked Week 4');
+      expect(recapScopeLabel(view(3), week: false), 'Ranked');
+      expect(recapScopeLabel(view(-1), week: false), 'Ranked');
     });
 
     testWidgets('Recap with no games says so instead of opening', (

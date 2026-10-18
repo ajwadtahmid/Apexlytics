@@ -56,6 +56,10 @@ class PrefsKeys {
   static const legendSort = 'legend_sort';
   static const legendSortReversed = 'legend_sort_reversed';
   static const legendRoleFilter = 'legend_role_filter';
+
+  /// Which tiles the recap card shows, as a list of tile names. Device-only:
+  /// not backed up.
+  static const recapTiles = 'recap_card_tiles';
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the

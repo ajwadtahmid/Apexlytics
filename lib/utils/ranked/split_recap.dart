@@ -26,6 +26,14 @@ class SplitRecap {
   final RankedSession? bestSession;
   final int longestWinStreak;
   final int totalKills;
+
+  /// Games whose kills upstream reported: with none, [totalKills] is unknown
+  /// rather than zero.
+  final int killsGames;
+
+  /// Damage over the period, and the games that reported it, as for kills.
+  final int totalDamage;
+  final int damageGames;
   final int playSecs;
 
   const SplitRecap({
@@ -41,10 +49,20 @@ class SplitRecap {
     required this.bestSession,
     required this.longestWinStreak,
     required this.totalKills,
+    required this.killsGames,
+    required this.totalDamage,
+    required this.damageGames,
     required this.playSecs,
   });
 
   bool get isEmpty => games == 0;
+
+  /// Wins over wins plus losses, as a fraction; a game that moved no RP is
+  /// neither. Null when there were none of either.
+  double? get winRate => wins + losses == 0 ? null : wins / (wins + losses);
+
+  /// RP gained per game over the period, 0 with no games.
+  double get avgRpPerGame => games == 0 ? 0 : netRp / games;
 }
 
 SplitRecap splitRecap(List<RankedMatch> matches) {
@@ -79,6 +97,9 @@ SplitRecap splitRecap(List<RankedMatch> matches) {
     bestSession: sessions.firstOrNull,
     longestWinStreak: personalRecords(ranked).bestWinStreak,
     totalKills: summary.totalKills,
+    killsGames: summary.killsGames,
+    totalDamage: summary.totalDamage,
+    damageGames: summary.damageGames,
     playSecs: summary.totalLengthSecs,
   );
 }

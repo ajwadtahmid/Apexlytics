@@ -62,6 +62,7 @@ void main() {
       PrefsKeys.legendSort: false,
       PrefsKeys.legendSortReversed: false,
       PrefsKeys.legendRoleFilter: false,
+      PrefsKeys.recapTiles: false,
       // Legacy migration-only key; build() derives the per-mode keys from it.
       PrefsKeys.mapNotifyMinutes: false,
     };

@@ -10,6 +10,8 @@ import 'package:apexlytics/screens/home/server_status_page.dart';
 import 'package:apexlytics/services/proxy_health.dart';
 import 'package:apexlytics/screens/ranked/ranked_compare_tab.dart';
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
+import 'package:apexlytics/screens/ranked/ranked_recap_screen.dart';
+import 'package:apexlytics/screens/ranked/ranked_recap_share_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_pick_rate_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_session_detail_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_time_breakdown_screen.dart';
@@ -33,6 +35,7 @@ import 'package:apexlytics/widgets/graph_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -70,7 +73,11 @@ void main() {
   void expectNoOverflow() =>
       expect(errors.where((e) => e.contains('overflowed')), isEmpty);
 
-  Future<void> pump(WidgetTester tester, Widget child) async {
+  Future<void> pump(
+    WidgetTester tester,
+    Widget child, {
+    List<Override> overrides = const [],
+  }) async {
     tester.view.physicalSize = const Size(320, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -81,6 +88,7 @@ void main() {
           proxyCheckerProvider.overrideWithValue(
             (_) async => (state: ProxyState.online, latency: Duration.zero),
           ),
+          ...overrides,
         ],
         child: MaterialApp(
           builder: (context, app) => MediaQuery(
@@ -166,6 +174,57 @@ void main() {
                 damage: 1200,
               ),
           ]),
+        ),
+      ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the Recap page', (tester) async {
+    await pump(
+      tester,
+      SizedBox(
+        height: 800,
+        child: RankedRecapScreen(
+          matches: [
+            for (var i = 0; i < 4; i++)
+              buildMatch(
+                legend: 'Mad Maggie',
+                start: 1782090000 + i * 1500,
+                rp: 20,
+                kills: 3,
+                damage: 1200,
+              ),
+          ],
+          scope: 'S30 Split 2',
+          playerName: 'A Rather Long Player Name',
+        ),
+      ),
+    );
+    expectNoOverflow();
+  });
+
+  testWidgets('the Recap card page', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    await pump(
+      tester,
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      SizedBox(
+        height: 800,
+        child: RankedRecapShareScreen(
+          recap: splitRecap([
+            for (var i = 0; i < 4; i++)
+              buildMatch(
+                legend: 'Mad Maggie',
+                start: 1782090000 + i * 1500,
+                rp: 20,
+                kills: 3,
+                damage: 1200,
+              ),
+          ]),
+          scope: 'S30 Split 2',
+          playerName: 'A Rather Long Player Name',
         ),
       ),
     );

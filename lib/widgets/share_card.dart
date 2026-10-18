@@ -219,11 +219,11 @@ class ShareTile extends StatelessWidget {
   }
 }
 
-/// Previews a shareable card on screen and shares it as an image. [cardBuilder]
-/// gets whether the player's name should appear; the choice is off for nobody
+/// A card's preview with the name switch and the Share button (Save image where
+/// a file can't be shared), for a screen to put wherever it likes.
+/// [cardBuilder] gets whether the player's name should appear; the choice is on
 /// by default, and a card never carries a UID.
-class ShareCardScreen extends StatefulWidget {
-  final String title;
+class ShareCardPanel extends StatefulWidget {
   final Widget Function(bool showName) cardBuilder;
 
   /// Offered when the card can carry the player's name.
@@ -236,20 +236,24 @@ class ShareCardScreen extends StatefulWidget {
   /// share a file. Resolves to the path saved to, or null when cancelled.
   final Future<String?> Function(GlobalKey key)? onSave;
 
-  const ShareCardScreen({
+  /// Anything to put between the preview and the name switch, such as the
+  /// choice of what goes on the card.
+  final Widget? controls;
+
+  const ShareCardPanel({
     super.key,
-    required this.title,
     required this.cardBuilder,
     this.offerNameToggle = true,
     this.onShare,
     this.onSave,
+    this.controls,
   });
 
   @override
-  State<ShareCardScreen> createState() => _ShareCardScreenState();
+  State<ShareCardPanel> createState() => _ShareCardPanelState();
 }
 
-class _ShareCardScreenState extends State<ShareCardScreen> {
+class _ShareCardPanelState extends State<ShareCardPanel> {
   final _boundary = GlobalKey();
   bool _showName = true;
   bool _sharing = false;
@@ -285,43 +289,81 @@ class _ShareCardScreenState extends State<ShareCardScreen> {
   @override
   Widget build(BuildContext context) {
     final canShare = canShareFiles;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Scaled down on a narrow screen; the shared image is the card at its
+        // own size either way.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: RepaintBoundary(
+            key: _boundary,
+            // The card looks the same whatever text size the phone uses.
+            child: MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.noScaling),
+              child: widget.cardBuilder(_showName),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppTheme.md),
+        if (widget.controls != null) ...[
+          widget.controls!,
+          const SizedBox(height: AppTheme.sm),
+        ],
+        if (widget.offerNameToggle)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show my name'),
+            subtitle: const Text(
+              'Your player ID is never included.',
+              style: AppTheme.caption,
+            ),
+            value: _showName,
+            onChanged: (v) => setState(() => _showName = v),
+          ),
+        FilledButton.icon(
+          onPressed: _sharing ? null : (canShare ? _share : _save),
+          icon: Icon(canShare ? Icons.ios_share : Icons.save_alt, size: 18),
+          label: Text(canShare ? 'Share' : 'Save image'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Previews a shareable card on its own screen and shares it as an image: a
+/// [ShareCardPanel] under [title]. See the panel for the parameters.
+class ShareCardScreen extends StatelessWidget {
+  final String title;
+  final Widget Function(bool showName) cardBuilder;
+  final bool offerNameToggle;
+  final Future<bool> Function(GlobalKey key)? onShare;
+  final Future<String?> Function(GlobalKey key)? onSave;
+
+  const ShareCardScreen({
+    super.key,
+    required this.title,
+    required this.cardBuilder,
+    this.offerNameToggle = true,
+    this.onShare,
+    this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(title: Text(title)),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppTheme.md),
           children: [
-            // Scaled down on a narrow screen; the shared image is the card at
-            // its own size either way.
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: RepaintBoundary(
-                key: _boundary,
-                // The card looks the same whatever text size the phone uses.
-                child: MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(textScaler: TextScaler.noScaling),
-                  child: widget.cardBuilder(_showName),
-                ),
-              ),
-            ),
-            const SizedBox(height: AppTheme.md),
-            if (widget.offerNameToggle)
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Show my name'),
-                subtitle: const Text(
-                  'Your player ID is never included.',
-                  style: AppTheme.caption,
-                ),
-                value: _showName,
-                onChanged: (v) => setState(() => _showName = v),
-              ),
-            FilledButton.icon(
-              onPressed: _sharing ? null : (canShare ? _share : _save),
-              icon: Icon(canShare ? Icons.ios_share : Icons.save_alt, size: 18),
-              label: Text(canShare ? 'Share' : 'Save image'),
+            ShareCardPanel(
+              cardBuilder: cardBuilder,
+              offerNameToggle: offerNameToggle,
+              onShare: onShare,
+              onSave: onSave,
             ),
           ],
         ),

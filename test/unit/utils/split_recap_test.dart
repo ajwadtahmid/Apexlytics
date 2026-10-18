@@ -120,4 +120,61 @@ void main() {
     expect(r.bestSession, isNull);
     expect(r.peakRp, 0);
   });
+
+  test('win rate is wins over wins plus losses', () {
+    final r = splitRecap(games);
+
+    // Two wins and four losses.
+    expect(r.winRate, closeTo(2 / 6, 1e-9));
+  });
+
+  test('a game that moved no RP is neither a win nor a loss', () {
+    final r = splitRecap([
+      buildMatch(start: t0, rp: 20, cumulativeRp: 1020),
+      buildMatch(start: t0 + 1500, rp: 0, cumulativeRp: 1020),
+    ]);
+
+    expect(r.winRate, 1);
+  });
+
+  test('win rate is unknown with no wins or losses', () {
+    expect(splitRecap(const []).winRate, isNull);
+    expect(
+      splitRecap([buildMatch(start: t0, rp: 0, cumulativeRp: 1000)]).winRate,
+      isNull,
+    );
+  });
+
+  test('RP per game is the net over the games, and 0 with none', () {
+    expect(splitRecap(games).avgRpPerGame, closeTo(-10 / 6, 1e-9));
+    expect(splitRecap(const []).avgRpPerGame, 0);
+  });
+
+  test('counts the games that reported kills', () {
+    final r = splitRecap([
+      buildMatch(start: t0, rp: 20, cumulativeRp: 1020, kills: 3),
+      buildMatch(start: t0 + 1500, rp: 20, cumulativeRp: 1040),
+    ]);
+
+    expect(r.killsGames, 1);
+    expect(r.totalKills, 3);
+    expect(splitRecap([buildMatch(start: t0, rp: 5)]).killsGames, 0);
+  });
+
+  test('totals the damage, and counts the games that reported it', () {
+    final r = splitRecap([
+      buildMatch(start: t0, rp: 20, cumulativeRp: 1020, damage: 500),
+      buildMatch(start: t0 + 1500, rp: 20, cumulativeRp: 1040, damage: 700),
+      buildMatch(start: t0 + 3000, rp: 20, cumulativeRp: 1060),
+    ]);
+
+    expect(r.totalDamage, 1200);
+    expect(r.damageGames, 2);
+  });
+
+  test('no game reporting damage leaves it unknown, not zero', () {
+    final r = splitRecap([buildMatch(start: t0, rp: 5)]);
+
+    expect(r.damageGames, 0);
+  });
 }

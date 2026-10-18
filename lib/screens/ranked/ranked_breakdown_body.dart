@@ -733,7 +733,9 @@ class _OverviewTab extends StatelessWidget {
                 Expanded(
                   child: RankedRecapEntry(
                     matches: matches,
-                    scope: recapScopeLabel(data.view),
+                    // The week is said under the RP, so not here as well.
+                    scope: recapScopeLabel(data.view, week: false),
+                    periodPhrase: recapPeriodPhrase(data.view),
                     playerName: stats.name,
                     isPredator:
                         isCurrentSplit &&

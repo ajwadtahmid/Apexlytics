@@ -3,18 +3,25 @@ import '../../models/ranked_match.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/ranked/split_recap.dart';
 import '../../widgets/nav_entry_card.dart';
-import '../../widgets/share_card.dart';
-import 'widgets/ranked_share_cards.dart';
+import 'ranked_recap_screen.dart';
 
-/// The split (and week, when one is picked) on screen, for a card's title.
-String recapScopeLabel(RankedView view) {
+/// The split (and week, when one is picked and [week] is true) on screen, for a
+/// card's title.
+String recapScopeLabel(RankedView view, {bool week = true}) {
   final split = view.splits
       .where((s) => s.id == view.effectiveSplitId)
       .map((s) => s.displayName)
       .firstOrNull;
   final base = split ?? 'Ranked';
-  return view.weekIndex >= 0 ? '$base Week ${view.weekIndex + 1}' : base;
+  return week && view.weekIndex >= 0
+      ? '$base Week ${view.weekIndex + 1}'
+      : base;
 }
+
+/// Where the RP netted was made: "in Week 3" when a week is picked, otherwise
+/// "this split".
+String recapPeriodPhrase(RankedView view) =>
+    view.weekIndex >= 0 ? 'in Week ${view.weekIndex + 1}' : 'this split';
 
 /// A tappable row that opens the recap of the period on screen as a shareable
 /// card. Hidden when there are no games to recap.
@@ -26,12 +33,17 @@ class RankedRecapEntry extends StatelessWidget {
   /// Whether the player is Apex Predator at the end of this period. Only known
   /// for the live period; a past one can't be told from today's cutoff.
   final bool isPredator;
+
+  /// See [recapPeriodPhrase].
+  final String periodPhrase;
+
   const RankedRecapEntry({
     super.key,
     required this.matches,
     required this.scope,
     required this.playerName,
     this.isPredator = false,
+    this.periodPhrase = 'this split',
   });
 
   @override
@@ -46,14 +58,12 @@ class RankedRecapEntry extends StatelessWidget {
             )
           : () => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => ShareCardScreen(
-                  title: 'Recap',
-                  cardBuilder: (showName) => RecapShareCard(
-                    recap: recap,
-                    scope: scope,
-                    playerName: showName ? playerName : null,
-                    isPredator: isPredator,
-                  ),
+                builder: (_) => RankedRecapScreen(
+                  matches: matches,
+                  scope: scope,
+                  playerName: playerName,
+                  isPredator: isPredator,
+                  periodPhrase: periodPhrase,
                 ),
               ),
             ),
