@@ -262,6 +262,89 @@ void main() {
     });
   });
 
+  group('the card of all records', () {
+    const tiles = [
+      (Icons.bolt, 'Best game', '+40 RP'),
+      (Icons.sports_kabaddi, 'Most kills', '14'),
+      (Icons.timeline, 'Best session', '+70 RP'),
+      (Icons.schedule, 'Longest session', '2h 15m'),
+    ];
+
+    testWidgets('shows each record as a tile, under the scope', (tester) async {
+      await pump(
+        tester,
+        const Center(
+          child: RecordsShareCard(scope: 'S30 Split 2', tiles: tiles),
+        ),
+      );
+
+      expect(find.text('S30 Split 2 records'), findsOneWidget);
+      for (final label in [
+        'BEST GAME',
+        'MOST KILLS',
+        'BEST SESSION',
+        'LONGEST SESSION',
+      ]) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+      for (final value in ['+40 RP', '14', '+70 RP', '2h 15m']) {
+        expect(find.text(value), findsOneWidget, reason: value);
+      }
+    });
+
+    testWidgets('names the player only when given, and never a UID', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const Center(
+          child: RecordsShareCard(
+            scope: 'Ranked',
+            tiles: tiles,
+            playerName: 'Reptar',
+          ),
+        ),
+      );
+      expect(find.text('Reptar'), findsOneWidget);
+      expect(find.text('Ranked records'), findsOneWidget);
+
+      await pump(
+        tester,
+        const Center(
+          child: RecordsShareCard(scope: 'Ranked', tiles: tiles),
+        ),
+      );
+      expect(find.text('Reptar'), findsNothing);
+      expect(find.textContaining('uid'), findsNothing);
+    });
+
+    testWidgets('fits its tiles on the card with eight of them', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const Center(
+          child: RecordsShareCard(
+            scope: 'S30 Split 2',
+            playerName: 'A Rather Long Player Name',
+            tiles: [
+              (Icons.bolt, 'Best game', '+40 RP'),
+              (Icons.sports_kabaddi, 'Most kills', '14'),
+              (Icons.local_fire_department, 'Most damage', '2,840'),
+              (Icons.timeline, 'Best session', '+70 RP'),
+              (Icons.calendar_today_outlined, 'Best day', '+110 RP'),
+              (Icons.schedule, 'Longest session', '2h 15m'),
+              (Icons.trending_up, 'Comeback', '+45 RP'),
+              (Icons.military_tech, 'Win streak', '8 games'),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('the streak card', () {
     // Five wins on three legends, Axle most.
     final streak = [
@@ -346,6 +429,9 @@ void main() {
   });
 
   group('the share screen', () {
+    setUp(() => debugCanShareFiles = true);
+    tearDown(() => debugCanShareFiles = null);
+
     testWidgets('the name toggle hides the name, and Share captures the card', (
       tester,
     ) async {
@@ -392,6 +478,126 @@ void main() {
       await tester.pump();
 
       expect(find.text("Couldn't share the card."), findsOneWidget);
+    });
+  });
+
+  group('the share screen where a file cannot be shared', () {
+    setUp(() => debugCanShareFiles = false);
+    tearDown(() => debugCanShareFiles = null);
+
+    Widget screen({Future<String?> Function(GlobalKey key)? onSave}) =>
+        ShareCardScreen(
+          title: 'Most Kills',
+          cardBuilder: (show) => RecordShareCard(
+            record: 'Most Kills',
+            value: '14',
+            playerName: show ? 'Reptar' : null,
+          ),
+          onSave: onSave,
+        );
+
+    testWidgets('offers Save image, not Share', (tester) async {
+      await pump(tester, screen());
+
+      expect(find.text('Save image'), findsOneWidget);
+      expect(find.text('Share'), findsNothing);
+    });
+
+    testWidgets('saves the card and says where', (tester) async {
+      GlobalKey? captured;
+      await pump(
+        tester,
+        screen(
+          onSave: (key) async {
+            captured = key;
+            return '/tmp/apexlytics_card.png';
+          },
+        ),
+      );
+
+      await tester.tap(find.text('Save image'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(captured, isNotNull);
+      expect(find.text('Saved to /tmp/apexlytics_card.png'), findsOneWidget);
+    });
+
+    testWidgets('says nothing when the save dialog is cancelled', (
+      tester,
+    ) async {
+      await pump(tester, screen(onSave: (_) async => null));
+
+      await tester.tap(find.text('Save image'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a failed save says so instead of crashing', (tester) async {
+      await pump(
+        tester,
+        screen(onSave: (_) async => throw Exception('disk full')),
+      );
+
+      await tester.tap(find.text('Save image'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text("Couldn't save the card."), findsOneWidget);
+    });
+
+    testWidgets('keeps the name toggle', (tester) async {
+      await pump(tester, screen());
+      expect(find.text('Reptar'), findsOneWidget);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+
+      expect(find.text('Reptar'), findsNothing);
+    });
+  });
+
+  group('saving the image to a file', () {
+    final png = Uint8List.fromList([137, 80, 78, 71, 1, 2, 3]);
+
+    test('writes it where the user chose and says where', () async {
+      final dir = await Directory.systemTemp.createTemp('apexlytics_save_');
+      addTearDown(() => dir.delete(recursive: true));
+      String? suggested;
+
+      final saved = await saveImageFile(
+        png,
+        pickPath: (name) async {
+          suggested = name;
+          return '${dir.path}${Platform.pathSeparator}chosen.png';
+        },
+      );
+
+      expect(suggested, 'apexlytics_card.png');
+      expect(saved, '${dir.path}${Platform.pathSeparator}chosen.png');
+      expect(await File(saved!).readAsBytes(), png);
+    });
+
+    test('writes nothing when the user cancels', () async {
+      final saved = await saveImageFile(png, pickPath: (_) async => null);
+
+      expect(saved, isNull);
+    });
+  });
+
+  group('whether a file can be shared', () {
+    tearDown(() => debugCanShareFiles = null);
+
+    test('is no on Linux and yes elsewhere, unless a test says otherwise', () {
+      debugCanShareFiles = null;
+      expect(canShareFiles, !Platform.isLinux);
+
+      debugCanShareFiles = true;
+      expect(canShareFiles, isTrue);
+      debugCanShareFiles = false;
+      expect(canShareFiles, isFalse);
     });
   });
 

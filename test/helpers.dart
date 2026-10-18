@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:apexlytics/models/player_stats.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
+import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
+import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -34,6 +36,15 @@ Future<(ProviderContainer, SharedPreferences)> prefsContainer({
   addTearDown(container.dispose);
   return (container, prefs);
 }
+
+/// Stands in for the player's best games over every split, which the Records
+/// page reads from the store: [best] when given, no games otherwise.
+Override allTimeBestOverride([PersonalBestGames? best]) =>
+    rankedAllTimeBestProvider.overrideWith(
+      (ref, uid) async =>
+          best ??
+          (bestRpGame: null, bestKillsGame: null, bestDamageGame: null),
+    );
 
 /// Builds a [RankedMatch] in the shape upstream's `/games` serves, for tests.
 /// [start] is Unix seconds; the match ends [length] seconds later. A null

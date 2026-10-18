@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:file_selector/file_selector.dart' as file_selector;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
@@ -52,6 +53,44 @@ Future<bool> shareImageFile(
     }
   }
 }
+
+/// Whether the platform's share can send a file. It can't on Linux, where
+/// share_plus only shares text, so a card is saved to a file there instead.
+bool get canShareFiles => debugCanShareFiles ?? !Platform.isLinux;
+
+/// Overrides [canShareFiles] in tests, which run on whatever host they are on.
+@visibleForTesting
+bool? debugCanShareFiles;
+
+/// Asks where to put [png] and writes it there. Resolves to the path saved to,
+/// or null when the user cancelled. [pickPath] is a test seam in place of the
+/// system save dialog; it is given the suggested file name.
+Future<String?> saveImageFile(
+  Uint8List png, {
+  String name = 'apexlytics_card.png',
+  Future<String?> Function(String suggestedName)? pickPath,
+}) async {
+  final path = await (pickPath ?? _pickSavePath)(name);
+  if (path == null) return null;
+  await File(path).writeAsBytes(png);
+  return path;
+}
+
+Future<String?> _pickSavePath(String suggestedName) async {
+  final location = await file_selector.getSaveLocation(
+    suggestedName: suggestedName,
+    acceptedTypeGroups: const [
+      file_selector.XTypeGroup(label: 'PNG image', extensions: ['png']),
+    ],
+  );
+  return location?.path;
+}
+
+/// Captures [key] and saves it as an image file.
+Future<String?> saveBoundary(
+  GlobalKey key, {
+  Future<String?> Function(String suggestedName)? pickPath,
+}) async => saveImageFile(await captureBoundaryAsPng(key), pickPath: pickPath);
 
 /// Captures [key] and shares it as an image.
 Future<bool> shareBoundary(

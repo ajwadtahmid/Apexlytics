@@ -748,6 +748,8 @@ class _OverviewTab extends StatelessWidget {
                     matches: matches,
                     sessions: data.sessions,
                     live: data.rpScope.live,
+                    onRefresh: onRefresh,
+                    scope: recapScopeLabel(data.view),
                   ),
                 ),
               ],

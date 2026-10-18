@@ -22,10 +22,15 @@ class RankedSessionDetailScreen extends StatefulWidget {
   final RankedSession session;
   final Future<void> Function() onRefresh;
 
+  /// Told of a correction made on this page, for whoever opened it to keep
+  /// its own figures in step.
+  final ValueChanged<RankedMatch>? onMatchUpdated;
+
   const RankedSessionDetailScreen({
     super.key,
     required this.session,
     required this.onRefresh,
+    this.onMatchUpdated,
   });
 
   @override
@@ -49,6 +54,7 @@ class _RankedSessionDetailScreenState extends State<RankedSessionDetailScreen> {
       final rebuilt = sessionize(_matches);
       if (rebuilt.length == 1) _session = rebuilt.single;
     });
+    widget.onMatchUpdated?.call(updated);
   }
 
   @override

@@ -140,12 +140,13 @@ void main() {
     expectNoOverflow();
   });
 
-  testWidgets('the Records & Share page', (tester) async {
+  testWidgets('the Personal Records page', (tester) async {
     await pump(
       tester,
       SizedBox(
         height: 800,
         child: RankedPersonalRecordsScreen(
+          onRefresh: () async {},
           stats: buildStats(),
           matches: [
             for (var i = 0; i < 4; i++)
@@ -498,7 +499,7 @@ void main() {
     expectNoOverflow();
   });
 
-  testWidgets('the Recap and Records & Share entries side by side', (
+  testWidgets('the Recap and Personal Records entries side by side', (
     tester,
   ) async {
     final games = [
@@ -523,6 +524,7 @@ void main() {
                 stats: buildStats(),
                 matches: games,
                 sessions: const [],
+                onRefresh: () async {},
               ),
             ),
           ],

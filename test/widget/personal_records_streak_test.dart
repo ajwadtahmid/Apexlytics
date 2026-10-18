@@ -1,5 +1,6 @@
 import 'package:apexlytics/screens/ranked/ranked_personal_records_screen.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
+import 'package:apexlytics/utils/share_image.dart';
 import 'package:apexlytics/utils/theme.dart';
 import 'package:apexlytics/widgets/share_card.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers.dart';
 
 void main() {
+  // The buttons read Share where the platform can share a file; tests run on
+  // whatever host they are on, so pin it.
+  setUp(() => debugCanShareFiles = true);
+  tearDown(() => debugCanShareFiles = null);
+
   // Three wins in a row, ending the scope.
   final matches = [
     buildMatch(start: 1782090000 + 3 * 1000, rp: 10),
@@ -22,12 +28,14 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [allTimeBestOverride()],
         child: MaterialApp(
           home: RankedPersonalRecordsScreen(
             stats: buildStats(name: 'Reptar'),
             matches: matches,
             sessions: sessionize(matches),
             live: live,
+            onRefresh: () async {},
           ),
         ),
       ),
@@ -35,13 +43,15 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('the screen is Records & Share, with no separate share section '
+  testWidgets('the screen is Personal Records, with no separate share section '
       'and no comparison', (tester) async {
     await pump(tester, live: true);
 
-    expect(find.text('Records & Share'), findsOneWidget);
+    expect(find.text('Personal Records'), findsOneWidget);
     expect(find.text('Share my profile'), findsNothing);
-    expect(find.text('Share'), findsNothing);
+    // Each record here has its own labelled button (best game, session,
+    // longest session and streak), and there is no other share section.
+    expect(find.text('Share'), findsNWidgets(4));
     expect(find.text('Comparison'), findsNothing);
     expect(find.text('Legends'), findsNothing);
   });
@@ -68,11 +78,13 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         ProviderScope(
+          overrides: [allTimeBestOverride()],
           child: MaterialApp(
             home: RankedPersonalRecordsScreen(
               stats: buildStats(name: 'Reptar'),
               matches: played,
               sessions: sessionize(played),
+              onRefresh: () async {},
             ),
           ),
         ),
@@ -99,6 +111,8 @@ void main() {
       (tester) async {
         await pumpPlayed(tester);
 
+        // All four games are one session on one day, so the day isn't shown
+        // again beside it.
         expect(find.text('+70 RP'), findsOneWidget);
         expect(find.text('4 games · 10 kills · 3,000 dmg'), findsOneWidget);
       },

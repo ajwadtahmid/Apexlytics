@@ -31,6 +31,10 @@ class RankedEntityHistoryScreen extends StatefulWidget {
   /// Null for Lifetime: break rows are then hidden.
   final List<RankedMatch>? sessionPool;
 
+  /// Told of a correction made on this page, for whoever opened it to keep
+  /// its own figures in step.
+  final ValueChanged<RankedMatch>? onMatchUpdated;
+
   const RankedEntityHistoryScreen({
     super.key,
     required this.title,
@@ -40,6 +44,7 @@ class RankedEntityHistoryScreen extends StatefulWidget {
     this.groupLabel = '',
     this.grouping,
     this.sessionPool,
+    this.onMatchUpdated,
   });
 
   @override
@@ -70,6 +75,7 @@ class _RankedEntityHistoryScreenState extends State<RankedEntityHistoryScreen> {
           if (m.id == updated.id) updated else m,
       ];
     });
+    widget.onMatchUpdated?.call(updated);
   }
 
   @override

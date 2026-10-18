@@ -141,6 +141,46 @@ class RecapShareCard extends StatelessWidget {
   }
 }
 
+/// All of a period's records on one card, as the same two-column tiles the recap
+/// uses: [tiles] are an icon, a label and a figure each, for [scope] ("S30
+/// Split 2"). [legend] fades its portrait in behind. The player's name appears
+/// only when [playerName] is given; a UID never does.
+class RecordsShareCard extends StatelessWidget {
+  final String scope;
+  final List<(IconData icon, String label, String value)> tiles;
+  final String? legend;
+  final String? playerName;
+  const RecordsShareCard({
+    super.key,
+    required this.scope,
+    required this.tiles,
+    this.legend,
+    this.playerName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ShareCardFrame(
+      label: '$scope records',
+      name: playerName,
+      legend: legend,
+      child: Column(
+        children: [
+          const Spacer(),
+          Wrap(
+            spacing: AppTheme.sm,
+            runSpacing: AppTheme.sm,
+            children: [
+              for (final (icon, label, value) in tiles)
+                ShareTile(icon: icon, label: label, value: value),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// One personal record as a card: its name, the figure in large orange type
 /// with its unit, a chip putting it in context, and the numbers around it. A
 /// UID never appears; the name only when given. [legend] fades its portrait in

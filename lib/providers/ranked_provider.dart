@@ -423,6 +423,15 @@ final rankedPersonalBestProvider = FutureProvider.autoDispose
       return store.personalBestGamesFor(uid);
     });
 
+/// The player's best games over every split, for the Records page to set a
+/// split's records against. Reads the store only, with no sync first: the page
+/// is opened from a split that has already loaded, and a page of records should
+/// never cost a request.
+final rankedAllTimeBestProvider = FutureProvider.autoDispose
+    .family<PersonalBestGames, String>((ref, uid) {
+      return ref.watch(rankedHistoryStoreProvider).personalBestGamesFor(uid);
+    });
+
 /// Every aggregate the split-comparison tab needs for one split, bundled the
 /// same way [RankedLifetimeAggregates] bundles Lifetime's — all SQL, no match
 /// hydration, so comparing two arbitrary splits costs the same regardless of
@@ -482,6 +491,7 @@ void invalidatePlayerDerivedProviders(WidgetRef ref) {
   ref.invalidate(rankedSplitViewProvider);
   ref.invalidate(rankedLifetimeAggregatesProvider);
   ref.invalidate(rankedPersonalBestProvider);
+  ref.invalidate(rankedAllTimeBestProvider);
   ref.invalidate(rankedSplitDetailProvider);
   ref.invalidate(gamesEligibilityProvider);
   ref.invalidate(rankedSeasonsProvider);
@@ -513,4 +523,5 @@ void invalidateMatchDerivedProviders(WidgetRef ref) {
   ref.invalidate(rankedLifetimeAggregatesProvider);
   ref.invalidate(rankedSplitDetailProvider);
   ref.invalidate(rankedPersonalBestProvider);
+  ref.invalidate(rankedAllTimeBestProvider);
 }

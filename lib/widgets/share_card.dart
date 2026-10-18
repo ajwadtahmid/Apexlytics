@@ -232,12 +232,17 @@ class ShareCardScreen extends StatefulWidget {
   /// A test seam in place of the system share sheet.
   final Future<bool> Function(GlobalKey key)? onShare;
 
+  /// A test seam in place of the save dialog, used where the platform can't
+  /// share a file. Resolves to the path saved to, or null when cancelled.
+  final Future<String?> Function(GlobalKey key)? onSave;
+
   const ShareCardScreen({
     super.key,
     required this.title,
     required this.cardBuilder,
     this.offerNameToggle = true,
     this.onShare,
+    this.onSave,
   });
 
   @override
@@ -262,8 +267,24 @@ class _ShareCardScreenState extends State<ShareCardScreen> {
     }
   }
 
+  /// Where sharing a file isn't possible: asks where to keep the image instead.
+  Future<void> _save() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      final path = await (widget.onSave ?? saveBoundary)(_boundary);
+      if (path != null && mounted) context.showMessage('Saved to $path');
+    } catch (e, st) {
+      log.w('Saving the card failed', error: e, stackTrace: st);
+      if (mounted) context.showMessage("Couldn't save the card.");
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canShare = canShareFiles;
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: SafeArea(
@@ -298,9 +319,9 @@ class _ShareCardScreenState extends State<ShareCardScreen> {
                 onChanged: (v) => setState(() => _showName = v),
               ),
             FilledButton.icon(
-              onPressed: _sharing ? null : _share,
-              icon: const Icon(Icons.ios_share, size: 18),
-              label: const Text('Share'),
+              onPressed: _sharing ? null : (canShare ? _share : _save),
+              icon: Icon(canShare ? Icons.ios_share : Icons.save_alt, size: 18),
+              label: Text(canShare ? 'Share' : 'Save image'),
             ),
           ],
         ),
