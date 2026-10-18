@@ -83,4 +83,96 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   });
+  group('the alert bell', () {
+    MapMode mode(String map) =>
+        MapMode(map: map, remainingSecs: 1800, durationMins: 60, asset: '');
+
+    final rotation = MapRotation(
+      battleRoyaleCurrent: mode('Olympus'),
+      battleRoyaleNext: mode("World's Edge"),
+      rankedCurrent: mode('Kings Canyon'),
+      rankedNext: mode('Olympus'),
+    );
+
+    Future<void> pump(
+      WidgetTester tester, {
+      bool Function(String)? active,
+      ValueChanged<String>? onTap,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: MapRotationCard(
+                rotation: rotation,
+                alertActive: active,
+                onAlertTap: onTap,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('is not there unless the card is given something to do', (
+      tester,
+    ) async {
+      await pump(tester);
+
+      expect(find.byIcon(Icons.notifications_none_outlined), findsNothing);
+      expect(find.byIcon(Icons.notifications_active), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('is outlined while the mode has no alert, filled once it has', (
+      tester,
+    ) async {
+      await pump(tester, active: (m) => m == 'Pubs', onTap: (_) {});
+
+      // Ranked is first, and has none.
+      expect(find.byIcon(Icons.notifications_none_outlined), findsOneWidget);
+
+      await tester.tap(find.text('Pubs'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byIcon(Icons.notifications_active), findsOneWidget);
+      expect(find.byIcon(Icons.notifications_none_outlined), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('names the mode on screen when tapped', (tester) async {
+      final tapped = <String>[];
+      await pump(tester, onTap: tapped.add);
+
+      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
+      await tester.tap(find.text('Pubs'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
+
+      expect(tapped, ['Ranked', 'Pubs']);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('says what it does, and its state, to a screen reader', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await pump(tester, active: (m) => m == 'Pubs', onTap: (_) {});
+
+      expect(
+        find.bySemanticsLabel('Alert me before the Ranked map changes'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Pubs'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.bySemanticsLabel('Pubs alerts are on. Tap to change.'),
+        findsOneWidget,
+      );
+      handle.dispose();
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
 }

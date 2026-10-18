@@ -78,6 +78,17 @@ void main() {
       expect(find.text('Removed Bravo from favorites'), findsOneWidget);
     });
 
+    testWidgets('the note goes away by itself, Undo or not', (t) async {
+      await pumpPane(t);
+      await swipeAway(t, 'Bravo');
+      expect(find.text('Removed Bravo from favorites'), findsOneWidget);
+
+      await t.pump(const Duration(seconds: 6));
+      await t.pumpAndSettle();
+
+      expect(find.text('Removed Bravo from favorites'), findsNothing);
+    });
+
     testWidgets('Undo puts it back where it was', (t) async {
       final container = await pumpPane(t);
       await swipeAway(t, 'Bravo');

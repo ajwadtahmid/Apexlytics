@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/map_rotation.dart';
 import '../../providers/map_provider.dart';
+import '../../providers/navigation_provider.dart';
 import '../../utils/api_cache.dart' show ApiResult;
 import '../../providers/news_provider.dart';
 import '../../providers/predator_provider.dart';
@@ -13,9 +14,11 @@ import '../../services/map_notification_service.dart';
 import '../../utils/app_logger.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/formatting/map_alerts_utils.dart';
+import '../../utils/map_alert_actions.dart';
 import '../../utils/navigation_utils.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
+import '../settings/map_alerts_sheet.dart';
 import 'news_page.dart';
 import 'server_status_page.dart';
 import 'widgets/map_card_skeleton.dart';
@@ -133,11 +136,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     super.dispose();
   }
 
+  /// The bell on the map card. Off: turns that mode's alert on and says so,
+  /// with a way to adjust it. On: opens the alerts sheet.
+  Future<void> _onAlertTap(String label) async {
+    final mode = MapAlertMode.fromLabel(label);
+    if (mode == null) return;
+    if (ref.read(playerSettingsProvider).alertActive(mode)) {
+      showMapAlertsSheet(context);
+      return;
+    }
+    final granted = await turnOnMapAlert(context, ref, mode);
+    if (!mounted || !granted) return;
+    final minutes = ref.read(playerSettingsProvider).alertMinutes(mode);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${mode.label} alerts on, $minutes min before.'),
+          // Long enough to reach for Change; a snackbar with an action would
+          // otherwise stay until dismissed.
+          persist: false,
+          duration: const Duration(seconds: 15),
+          action: SnackBarAction(
+            label: 'Change',
+            textColor: AppTheme.accent,
+            onPressed: () => showMapAlertsSheet(context),
+          ),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final playerName = ref.watch(
       playerSettingsProvider.select(
         (s) => s.name.isNotEmpty ? s.name : 'Guest',
+      ),
+    );
+    final hasPlayer = ref.watch(
+      playerSettingsProvider.select((s) => s.name.isNotEmpty),
+    );
+    // Which alerts are on, as a record (it compares by value) so Home only
+    // rebuilds when one flips.
+    final alertsOn = ref.watch(
+      playerSettingsProvider.select(
+        (s) => (
+          ranked: s.alertActive(MapAlertMode.ranked),
+          pubs: s.alertActive(MapAlertMode.pubs),
+          wildcard: s.alertActive(MapAlertMode.wildcard),
+          mixtape: s.alertActive(MapAlertMode.mixtape),
+        ),
       ),
     );
     final mapAsync = ref.watch(mapRotationProvider);
@@ -194,11 +242,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               const LowPowerWarning(dismissible: true),
               const SizedBox(height: AppTheme.xl),
 
+              // ── Set up a player ──────────────────────────────────
+              if (!hasPlayer) ...[
+                SummaryCard(
+                  leading: const Icon(
+                    Icons.person_add_alt_1_outlined,
+                    color: AppTheme.accent,
+                    size: 22,
+                  ),
+                  title: 'Set up your player',
+                  subtitle: 'Add your account to see your stats',
+                  onTap: () => ref
+                      .read(currentTabProvider.notifier)
+                      .setTab(AppTab.stats),
+                ),
+                const SizedBox(height: AppTheme.md),
+              ],
+
               // ── Map rotation ─────────────────────────────────────
               mapAsync.when(
                 data: (result) => MapRotationCard(
                   rotation: result.data,
                   onExpired: () => ref.invalidate(mapRotationProvider),
+                  alertActive: (label) => switch (MapAlertMode.fromLabel(label)) {
+                    MapAlertMode.ranked => alertsOn.ranked,
+                    MapAlertMode.pubs => alertsOn.pubs,
+                    MapAlertMode.wildcard => alertsOn.wildcard,
+                    MapAlertMode.mixtape => alertsOn.mixtape,
+                    null => false,
+                  },
+                  onAlertTap: _onAlertTap,
                 ),
                 loading: () => const MapCardSkeleton(),
                 error: (e, _) => ErrorCard(

@@ -95,6 +95,8 @@ class FavoritesPane extends ConsumerWidget {
       ..showSnackBar(
         SnackBar(
           content: Text('Removed ${player.query} from favorites'),
+          // A snackbar with an action otherwise stays until dismissed.
+          persist: false,
           action: SnackBarAction(
             label: 'Undo',
             textColor: AppTheme.accent,

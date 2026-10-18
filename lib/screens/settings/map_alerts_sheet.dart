@@ -4,11 +4,9 @@ import '../../constants/map_constants.dart';
 import '../../models/seasonal_maps.dart';
 import '../../providers/map_provider.dart';
 import '../../providers/settings_provider.dart';
-import '../../services/background_service.dart';
-import '../../services/map_notification_service.dart';
 import '../../services/notification_service.dart';
-import '../../utils/app_logger.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/map_alert_actions.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/error_card.dart';
@@ -24,8 +22,6 @@ void showMapAlertsSheet(BuildContext context) {
     builder: (_) => const _MapAlertsSheetContent(),
   );
 }
-
-enum _NotifMode { pubs, ranked, wildcard, mixtape }
 
 class _MapAlertsSheetContent extends ConsumerStatefulWidget {
   const _MapAlertsSheetContent();
@@ -52,8 +48,6 @@ class _MapAlertsSheetContentState
 
   static const _battleRoyaleOptions = [0, 5, 15, 30];
   static const _otherModesOptions = [0, 5, 10, 15];
-  static const _kDefaultBattleRoyaleMinutes = 15;
-  static const _kDefaultOtherModesMinutes = 10;
 
   @override
   void initState() {
@@ -136,18 +130,18 @@ class _MapAlertsSheetContentState
     _ => '$minutes min before',
   };
 
-  Future<void> _pickTiming(BuildContext context, _NotifMode mode) async {
+  Future<void> _pickTiming(BuildContext context, MapAlertMode mode) async {
     final settings = ref.read(playerSettingsProvider);
     final current = switch (mode) {
-      _NotifMode.ranked => settings.rankedNotifyMinutesBefore,
-      _NotifMode.pubs => settings.pubsNotifyMinutesBefore,
-      _NotifMode.wildcard => settings.wildcardNotifyMinutesBefore,
-      _NotifMode.mixtape => settings.mixtapeNotifyMinutesBefore,
+      MapAlertMode.ranked => settings.rankedNotifyMinutesBefore,
+      MapAlertMode.pubs => settings.pubsNotifyMinutesBefore,
+      MapAlertMode.wildcard => settings.wildcardNotifyMinutesBefore,
+      MapAlertMode.mixtape => settings.mixtapeNotifyMinutesBefore,
     };
 
     final options = switch (mode) {
-      _NotifMode.ranked || _NotifMode.pubs => _battleRoyaleOptions,
-      _NotifMode.wildcard || _NotifMode.mixtape => _otherModesOptions,
+      MapAlertMode.ranked || MapAlertMode.pubs => _battleRoyaleOptions,
+      MapAlertMode.wildcard || MapAlertMode.mixtape => _otherModesOptions,
     };
 
     final currentIndex = options.indexOf(current);
@@ -170,13 +164,13 @@ class _MapAlertsSheetContentState
               }
               final notifier = ref.read(playerSettingsProvider.notifier);
               switch (mode) {
-                case _NotifMode.ranked:
+                case MapAlertMode.ranked:
                   await notifier.setRankedNotifyMinutesBefore(minutes);
-                case _NotifMode.pubs:
+                case MapAlertMode.pubs:
                   await notifier.setPubsNotifyMinutesBefore(minutes);
-                case _NotifMode.wildcard:
+                case MapAlertMode.wildcard:
                   await notifier.setWildcardNotifyMinutesBefore(minutes);
-                case _NotifMode.mixtape:
+                case MapAlertMode.mixtape:
                   await notifier.setMixtapeNotifyMinutesBefore(minutes);
               }
               await _reschedule();
@@ -206,100 +200,31 @@ class _MapAlertsSheetContentState
 
   Future<void> _toggleMode(
     BuildContext context,
-    _NotifMode mode,
+    MapAlertMode mode,
     bool enabled,
   ) async {
-    final settings = ref.read(playerSettingsProvider);
-    final previouslyEnabled = switch (mode) {
-      _NotifMode.ranked => settings.notifyRankedMapRotation,
-      _NotifMode.pubs => settings.notifyPubsMapRotation,
-      _NotifMode.wildcard => settings.notifyWildcardMapRotation,
-      _NotifMode.mixtape => settings.notifyMixtapeMapRotation,
-    };
-
-    final notifier = ref.read(playerSettingsProvider.notifier);
+    final previouslyEnabled = ref
+        .read(playerSettingsProvider)
+        .alertEnabled(mode);
 
     if (enabled && !previouslyEnabled) {
-      // Set default timing BEFORE toggling the mode so the settings listener
-      // never sees mode=ON with timing=0 (which would trigger cancelAll).
-      final currentTiming = switch (mode) {
-        _NotifMode.ranked => settings.rankedNotifyMinutesBefore,
-        _NotifMode.pubs => settings.pubsNotifyMinutesBefore,
-        _NotifMode.wildcard => settings.wildcardNotifyMinutesBefore,
-        _NotifMode.mixtape => settings.mixtapeNotifyMinutesBefore,
-      };
-      if (currentTiming == 0) {
-        final defaultMinutes = switch (mode) {
-          _NotifMode.ranked || _NotifMode.pubs => _kDefaultBattleRoyaleMinutes,
-          _NotifMode.wildcard ||
-          _NotifMode.mixtape => _kDefaultOtherModesMinutes,
-        };
-        switch (mode) {
-          case _NotifMode.ranked:
-            await notifier.setRankedNotifyMinutesBefore(defaultMinutes);
-          case _NotifMode.pubs:
-            await notifier.setPubsNotifyMinutesBefore(defaultMinutes);
-          case _NotifMode.wildcard:
-            await notifier.setWildcardNotifyMinutesBefore(defaultMinutes);
-          case _NotifMode.mixtape:
-            await notifier.setMixtapeNotifyMinutesBefore(defaultMinutes);
-        }
-      }
-
-      final granted = await NotificationService.requestPermissions();
-      if (!context.mounted) return;
-      if (!granted) {
-        context.showMessage(
-          'Enable notifications in system settings to receive alerts',
-        );
-      }
+      await turnOnMapAlert(context, ref, mode);
+      return;
     }
 
+    final notifier = ref.read(playerSettingsProvider.notifier);
     switch (mode) {
-      case _NotifMode.pubs:
+      case MapAlertMode.pubs:
         await notifier.setNotifyPubsMapRotation(enabled);
-      case _NotifMode.ranked:
+      case MapAlertMode.ranked:
         await notifier.setNotifyRankedMapRotation(enabled);
-      case _NotifMode.wildcard:
+      case MapAlertMode.wildcard:
         await notifier.setNotifyWildcardMapRotation(enabled);
-      case _NotifMode.mixtape:
+      case MapAlertMode.mixtape:
         await notifier.setNotifyMixtapeMapRotation(enabled);
     }
 
-    if (enabled && !previouslyEnabled) {
-      await _reschedule();
-      if (!context.mounted) return;
-      if (Theme.of(context).platform == TargetPlatform.iOS) {
-        final available = await BackgroundService.isAvailable();
-        if (!available && context.mounted) {
-          showDialog<void>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: AppTheme.surface,
-              title: const Text('Background Refresh Disabled'),
-              content: const Text(
-                'Notifications will only fire while the app is open.\n\n'
-                'To get alerts when the app is closed, enable Background App '
-                'Refresh in:\niOS Settings → General → Background App Refresh '
-                '→ Apexlytics',
-                style: TextStyle(color: AppTheme.muted, height: 1.5),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(color: AppTheme.accent),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-      }
-    } else if (!enabled) {
-      await _cancelIfAllOff();
-    }
+    if (!enabled) await _cancelIfAllOff();
   }
 
   Future<void> _cancelIfAllOff() async {
@@ -309,7 +234,7 @@ class _MapAlertsSheetContentState
   }
 
   Future<void> _toggleMap(
-    _NotifMode mode,
+    MapAlertMode mode,
     String modeLabel,
     String mapName,
     Set<String> notifySet,
@@ -357,7 +282,7 @@ class _MapAlertsSheetContentState
             .toSet() ??
         {};
     await _toggleMap(
-      _NotifMode.ranked,
+      MapAlertMode.ranked,
       'Ranked',
       mapName,
       _rankedNotify,
@@ -379,7 +304,7 @@ class _MapAlertsSheetContentState
             .toSet() ??
         {};
     await _toggleMap(
-      _NotifMode.pubs,
+      MapAlertMode.pubs,
       'Pubs',
       mapName,
       _pubsNotify,
@@ -390,18 +315,7 @@ class _MapAlertsSheetContentState
     );
   }
 
-  // Delegates to the same scheduling call Home uses, instead of rebuilding
-  // scheduleAll's argument list here — a second copy previously omitted
-  // rankedSequence/pubsSequence, so alerts used generic copy instead of
-  // naming the upcoming map.
-  Future<void> _reschedule() async {
-    try {
-      final result = await ref.read(mapRotationProvider.future);
-      MapNotificationService.schedule(ref, result.data);
-    } catch (e) {
-      log.w('Notification reschedule failed', error: e);
-    }
-  }
+  Future<void> _reschedule() => rescheduleMapAlerts(ref);
 
   @override
   Widget build(BuildContext context) {
@@ -486,12 +400,12 @@ class _MapAlertsSheetContentState
                     label: 'Ranked',
                     enabled: notifyRanked,
                     onTap: () =>
-                        _toggleMode(context, _NotifMode.ranked, !notifyRanked),
+                        _toggleMode(context, MapAlertMode.ranked, !notifyRanked),
                   ),
                   if (notifyRanked) ...[
                     MapTimingTile(
                       label: _timingLabel(rankedMinutesBefore),
-                      onTap: () => _pickTiming(context, _NotifMode.ranked),
+                      onTap: () => _pickTiming(context, MapAlertMode.ranked),
                     ),
                     ..._visibleNames(
                       seasonalMaps.ranked,
@@ -528,12 +442,12 @@ class _MapAlertsSheetContentState
                     label: 'Pubs',
                     enabled: notifyPubs,
                     onTap: () =>
-                        _toggleMode(context, _NotifMode.pubs, !notifyPubs),
+                        _toggleMode(context, MapAlertMode.pubs, !notifyPubs),
                   ),
                   if (notifyPubs) ...[
                     MapTimingTile(
                       label: _timingLabel(pubsMinutesBefore),
-                      onTap: () => _pickTiming(context, _NotifMode.pubs),
+                      onTap: () => _pickTiming(context, MapAlertMode.pubs),
                     ),
                     ..._visibleNames(
                       seasonalMaps.pubs,
@@ -571,14 +485,14 @@ class _MapAlertsSheetContentState
                     enabled: notifyWildcard,
                     onTap: () => _toggleMode(
                       context,
-                      _NotifMode.wildcard,
+                      MapAlertMode.wildcard,
                       !notifyWildcard,
                     ),
                   ),
                   if (notifyWildcard) ...[
                     MapTimingTile(
                       label: _timingLabel(wildcardMinutesBefore),
-                      onTap: () => _pickTiming(context, _NotifMode.wildcard),
+                      onTap: () => _pickTiming(context, MapAlertMode.wildcard),
                     ),
                   ],
 
@@ -591,14 +505,14 @@ class _MapAlertsSheetContentState
                     enabled: notifyMixtape,
                     onTap: () => _toggleMode(
                       context,
-                      _NotifMode.mixtape,
+                      MapAlertMode.mixtape,
                       !notifyMixtape,
                     ),
                   ),
                   if (notifyMixtape) ...[
                     MapTimingTile(
                       label: _timingLabel(mixtapeMinutesBefore),
-                      onTap: () => _pickTiming(context, _NotifMode.mixtape),
+                      onTap: () => _pickTiming(context, MapAlertMode.mixtape),
                     ),
                   ],
                 ],

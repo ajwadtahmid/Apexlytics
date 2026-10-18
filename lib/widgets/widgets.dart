@@ -23,6 +23,7 @@ export 'server_summary_card.dart';
 export 'segmented_capsule.dart';
 export 'setting_row.dart';
 export 'low_power_warning.dart';
+export 'info_sheet.dart';
 export 'sheet_handle.dart';
 export 'shimmer.dart';
 export 'stale_banner.dart';

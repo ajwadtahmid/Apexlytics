@@ -32,11 +32,22 @@ String? formatNextMapEnd({
 /// with a live countdown. Owns its own mode-selection state since switching
 /// modes is purely a display concern, not something the rest of Home cares
 /// about.
+///
+/// With [onAlertTap], the map shows a bell for the mode on screen: filled when
+/// [alertActive] says that mode's alert is on. Both take the mode's label.
 class MapRotationCard extends StatefulWidget {
   final MapRotation rotation;
   final VoidCallback? onExpired;
+  final bool Function(String mode)? alertActive;
+  final ValueChanged<String>? onAlertTap;
 
-  const MapRotationCard({super.key, required this.rotation, this.onExpired});
+  const MapRotationCard({
+    super.key,
+    required this.rotation,
+    this.onExpired,
+    this.alertActive,
+    this.onAlertTap,
+  });
 
   @override
   State<MapRotationCard> createState() => _MapRotationCardState();
@@ -83,7 +94,14 @@ class _MapRotationCardState extends State<MapRotationCard> {
           onSelect: (i) => setState(() => _modeIndex = i),
         ),
         const SizedBox(height: AppTheme.md),
-        _MapCard(mode: modes[idx], onExpired: widget.onExpired),
+        _MapCard(
+          mode: modes[idx],
+          onExpired: widget.onExpired,
+          alertActive: widget.alertActive?.call(modes[idx].label) ?? false,
+          onAlertTap: widget.onAlertTap == null
+              ? null
+              : () => widget.onAlertTap!(modes[idx].label),
+        ),
       ],
     );
   }
@@ -156,7 +174,14 @@ const _kCountdownTickInterval = Duration(seconds: 1);
 class _MapCard extends StatefulWidget {
   final _ModeData mode;
   final VoidCallback? onExpired;
-  const _MapCard({required this.mode, this.onExpired});
+  final bool alertActive;
+  final VoidCallback? onAlertTap;
+  const _MapCard({
+    required this.mode,
+    this.onExpired,
+    this.alertActive = false,
+    this.onAlertTap,
+  });
 
   @override
   State<_MapCard> createState() => _MapCardState();
@@ -254,7 +279,21 @@ class _MapCardState extends State<_MapCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          MapHeroImage(mapName: current.map, assetUrl: current.asset),
+          Stack(
+            children: [
+              MapHeroImage(mapName: current.map, assetUrl: current.asset),
+              if (widget.onAlertTap != null)
+                Positioned(
+                  top: AppTheme.sm,
+                  right: AppTheme.sm,
+                  child: _AlertBell(
+                    mode: widget.mode.label,
+                    active: widget.alertActive,
+                    onTap: widget.onAlertTap!,
+                  ),
+                ),
+            ],
+          ),
           Padding(
             padding: const EdgeInsets.all(AppTheme.md),
             child: Column(
@@ -311,6 +350,57 @@ class _MapCardState extends State<_MapCard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Alert bell ────────────────────────────────────────────────────────────────
+
+/// A round bell over the map: outlined to set an alert for [mode], filled and
+/// orange once one is set.
+class _AlertBell extends StatelessWidget {
+  final String mode;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _AlertBell({
+    required this.mode,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = active
+        ? '$mode alerts are on. Tap to change.'
+        : 'Alert me before the $mode map changes';
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        onTap: onTap,
+        child: Material(
+          color: Colors.black54,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(
+                active
+                    ? Icons.notifications_active
+                    : Icons.notifications_none_outlined,
+                color: active ? AppTheme.accent : Colors.white,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
