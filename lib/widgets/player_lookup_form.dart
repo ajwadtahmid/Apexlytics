@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../constants/api_constants.dart';
 import '../constants/ui_strings.dart';
 import '../providers/api_provider.dart';
 import '../providers/settings_provider.dart';
 import '../utils/error_messages.dart';
 import '../utils/formatting/search_utils.dart';
-import '../utils/lookup_drafts.dart';
+import '../utils/lookup_form_state.dart';
 import '../utils/theme.dart';
 import '../utils/uid_warning_dialog.dart';
-import 'platform_picker.dart';
-import 'uid_search_toggle.dart';
+import 'lookup_card.dart';
+import 'uid_search_toggle.dart' show isDigitsOnly;
 
 /// Shared player-lookup form used in the initial setup view and profile manager.
 /// [onPlayerFound] — if supplied, called instead of the default `setPlayer` call,
@@ -41,101 +40,44 @@ class PlayerLookupForm extends ConsumerStatefulWidget {
 }
 
 class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
-  final _controller = TextEditingController();
-  final _drafts = LookupDrafts();
-  String _platform = ApiConstants.defaultPlatform;
+  late final LookupFormState _lookup;
   bool _loading = false;
   String? _error;
-
-  /// A non-error heads-up (mode switched, refused toggle, throttled tap), in the accent colour.
-  String? _notice;
-  bool _searchByUid = false;
-
-  /// UID search is on only because Switch is selected; leaving Switch turns it off again.
-  /// If it was already on, it stays on.
-  bool _uidForcedBySwitch = false;
 
   @override
   void initState() {
     super.initState();
-    // Only an edit starts filled in; adding starts blank.
-    final name = widget.initialName;
-    if (name != null) {
-      _platform = widget.initialPlatform ?? ApiConstants.defaultPlatform;
-      _drafts.stash(uid: false, text: name);
-      _drafts.stash(uid: true, text: widget.initialUid ?? '');
-    }
-    // Opened on Switch (editing one): UID search is forced, so leaving Switch returns to name.
-    _searchByUid = _uidForcedBySwitch = ApiConstants.isUidOnly(_platform);
-    setFieldText(_controller, _drafts.draftFor(uid: _searchByUid));
+    _lookup = LookupFormState(
+      beforeUidMode: () => showUidWarningIfNeeded(context, ref),
+      name: widget.initialName,
+      platform: widget.initialPlatform,
+      uid: widget.initialUid,
+    )..addListener(_clearError);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _lookup.dispose();
     super.dispose();
   }
 
-  Future<void> _toggleUidSearch(bool value) async {
-    if (value == _searchByUid) return;
-    if (!value && ApiConstants.isUidOnly(_platform)) {
-      // Switch is UID-only.
-      setState(() {
-        _error = null;
-        _notice = switchNeedsUidWarning;
-      });
-      return;
-    }
-    await _setSearchByUid(value);
-  }
-
-  /// Switches the field between its name and UID drafts.
-  Future<void> _setSearchByUid(bool value) async {
-    if (value && !_searchByUid) {
-      await showUidWarningIfNeeded(context, ref);
-    }
-    if (!mounted) return;
-    setState(() {
-      setFieldText(
-        _controller,
-        _drafts.swapTo(uid: value, current: _controller.text),
-      );
-      _searchByUid = value;
-      _error = null;
-      _notice = null;
-    });
-  }
-
-  Future<void> _selectPlatform(String platform) async {
-    setState(() {
-      _platform = platform;
-      _error = null;
-      _notice = null;
-    });
-    if (ApiConstants.isUidOnly(platform)) {
-      if (_searchByUid) return;
-      _uidForcedBySwitch = true;
-      await _setSearchByUid(true);
-      if (mounted) setState(() => _notice = switchAutoUidNotice);
-    } else if (_uidForcedBySwitch) {
-      // Leaving Switch: restore the toggle.
-      _uidForcedBySwitch = false;
-      await _setSearchByUid(false);
-    }
+  /// A change of mode or platform makes an old error stale.
+  void _clearError() {
+    if (_error != null) setState(() => _error = null);
   }
 
   Future<void> _submit() async {
     if (_loading) return;
-    final query = _controller.text.trim();
+    final query = _lookup.controller.text.trim();
+    final byUid = _lookup.byUid;
+    final platform = _lookup.platform;
     if (query.isEmpty) {
       setState(
-        () => _error = _searchByUid
-            ? 'Enter a player UID.'
-            : 'Enter a player name.',
+        () => _error = byUid ? 'Enter a player UID.' : 'Enter a player name.',
       );
       return;
     }
-    if (_searchByUid && !isDigitsOnly(query)) {
+    if (byUid && !isDigitsOnly(query)) {
       // Formatters should already guarantee this — belt and suspenders.
       setState(() => _error = 'UID must contain digits only.');
       return;
@@ -143,30 +85,28 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
     // The same key the favorites and result-page refreshes fire under, so all
     // three share one cooldown window per player.
     final cooldown = ref.read(refreshCooldownProvider);
-    final cooldownKey = playerRefreshKey(_platform, query);
+    final cooldownKey = playerRefreshKey(platform, query);
     if (!cooldown.tryFire(cooldownKey)) {
-      setState(() {
-        _error = null;
-        _notice = lookupCooldownNotice;
-      });
+      setState(() => _error = null);
+      _lookup.showNotice(lookupCooldownNotice);
       return;
     }
     setState(() {
       _loading = true;
       _error = null;
-      _notice = null;
     });
+    _lookup.clearNotice();
     try {
       final service = ref.read(playerServiceProvider);
       final stats =
-          (_searchByUid
-                  ? await service.getPlayerStatsByUid(query, _platform)
-                  : await service.getPlayerStats(query, _platform))
+          (byUid
+                  ? await service.getPlayerStatsByUid(query, platform)
+                  : await service.getPlayerStats(query, platform))
               .data;
       // A 200 with no player would save an "Unknown" profile with no UID.
       if (stats.uid.isEmpty) {
         throw AppException(
-          _searchByUid
+          byUid
               ? 'Player not found. Check the UID and platform.'
               : 'Player not found. Check the name and platform.',
         );
@@ -175,11 +115,11 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
       // moved on (it may now be editing another profile).
       if (!mounted) return;
       if (widget.onPlayerFound != null) {
-        await widget.onPlayerFound!(stats.name, stats.uid, _platform);
+        await widget.onPlayerFound!(stats.name, stats.uid, platform);
       } else {
         await ref
             .read(playerSettingsProvider.notifier)
-            .setPlayer(stats.name, stats.uid, _platform);
+            .setPlayer(stats.name, stats.uid, platform);
       }
       widget.onSuccess?.call();
     } catch (e) {
@@ -198,92 +138,13 @@ class _PlayerLookupFormState extends ConsumerState<PlayerLookupForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _controller,
-          onSubmitted: (_) => _submit(),
-          // Clear an old error or notice once the user types.
-          onChanged: (_) {
-            if (_error != null || _notice != null) {
-              setState(() {
-                _error = null;
-                _notice = null;
-              });
-            }
-          },
-          textInputAction: TextInputAction.done,
-          keyboardType: _searchByUid
-              ? TextInputType.number
-              : TextInputType.text,
-          inputFormatters: _searchByUid ? uidOnlyInputFormatters : null,
-          style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: InputDecoration(
-            hintText: _searchByUid ? 'Numeric UID' : 'In-game name',
-            prefixIcon: Icon(
-              _searchByUid ? Icons.numbers : Icons.person_outline,
-              color: AppTheme.muted,
-            ),
-          ),
+        LookupCard(
+          state: _lookup,
+          onSubmit: _submit,
+          error: _error,
+          // Clear an old error once the user types.
+          onChanged: _clearError,
         ),
-        const SizedBox(height: AppTheme.md),
-        PlatformPicker(
-          selected: _platform,
-          onChanged: _selectPlatform,
-          expanded: true,
-        ),
-        const SizedBox(height: AppTheme.sm),
-        UidSearchToggle(value: _searchByUid, onChanged: _toggleUidSearch),
-        UidSuggestion(
-          controller: _controller,
-          searchByUid: _searchByUid,
-          onUseUid: () => _toggleUidSearch(true),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: AppTheme.sm),
-          Container(
-            padding: const EdgeInsets.all(AppTheme.sm),
-            decoration: BoxDecoration(
-              color: AppTheme.red.withAlpha(30),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.error_outline, color: AppTheme.red, size: 16),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: AppTheme.red, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        if (_notice != null) ...[
-          const SizedBox(height: AppTheme.sm),
-          Container(
-            padding: const EdgeInsets.all(AppTheme.sm),
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withAlpha(30),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline, color: AppTheme.accent, size: 16),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    _notice!,
-                    style: const TextStyle(
-                      color: AppTheme.accent,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
         const SizedBox(height: AppTheme.lg),
         ElevatedButton(
           onPressed: _loading ? null : _submit,

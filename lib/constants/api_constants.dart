@@ -72,6 +72,14 @@ class ApiConstants {
     'SWITCH': 'Nintendo Switch',
   };
 
+  /// Labels short enough for four to share a row.
+  static const Map<String, String> platformShortLabels = {
+    'PC': 'PC',
+    'PS4': 'PS',
+    'X1': 'Xbox',
+    'SWITCH': 'Switch',
+  };
+
   /// Returns the human-readable label for [platform], falling back to the
   /// raw platform code if no label is defined.
   static String labelFor(String platform) =>

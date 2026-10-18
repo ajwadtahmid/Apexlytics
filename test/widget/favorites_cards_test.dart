@@ -45,8 +45,14 @@ void main() {
       '{"query":"Charlie","platform":"X1","uid":"3"},'
       '{"query":"Delta","platform":"PC","uid":"4"}]';
 
-  Future<ProviderContainer> pumpPane(WidgetTester t) async {
-    SharedPreferences.setMockInitialValues({'search_favorites': saved});
+  Future<ProviderContainer> pumpPane(
+    WidgetTester t, {
+    String recents = '[]',
+  }) async {
+    SharedPreferences.setMockInitialValues({
+      'search_favorites': saved,
+      'recent_searches': recents,
+    });
     final container = ProviderContainer(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(
@@ -90,6 +96,10 @@ void main() {
     }
     return container;
   }
+
+  List<String> names(ProviderContainer c) => [
+    for (final f in c.read(searchStateProvider).favorites) f.query,
+  ];
 
   /// The colour of the presence dot on the card of the favorite named [name].
   Color dotOf(WidgetTester t, String name) {
@@ -165,6 +175,75 @@ void main() {
     expect(tops, [...tops]..sort());
     // A card is taller than a plain row of text, with a gap between them.
     expect(tops[1] - tops[0], greaterThan(56));
+  });
+
+  group('recent lookups', () {
+    const recents =
+        '[{"query":"Echo","platform":"PS4","uid":"7"},'
+        '{"query":"Foxtrot","platform":"PC","uid":"8"}]';
+
+    testWidgets('are the same cards as favorites, with a star', (t) async {
+      await pumpPane(t, recents: recents);
+
+      for (final name in ['Echo', 'Foxtrot']) {
+        final card = find.ancestor(
+          of: find.text(name),
+          matching: find.byType(InkWell),
+        );
+        expect(
+          find.descendant(of: card.first, matching: find.byType(StatusDot)),
+          findsOneWidget,
+          reason: name,
+        );
+        expect(
+          find.descendant(
+            of: card.first,
+            matching: find.byTooltip('Add to favorites'),
+          ),
+          findsOneWidget,
+          reason: name,
+        );
+      }
+      expect(find.text('PlayStation'), findsOneWidget);
+      // A favorite has no star of its own.
+      expect(find.byTooltip('Add to favorites'), findsNWidgets(2));
+      // Same width as a favorite's card.
+      final favorite = t.getSize(
+        find
+            .ancestor(of: find.text('Alpha'), matching: find.byType(Material))
+            .first,
+      );
+      final recent = t.getSize(
+        find
+            .ancestor(of: find.text('Echo'), matching: find.byType(Material))
+            .first,
+      );
+      expect(recent.width, favorite.width);
+    });
+
+    testWidgets('the star saves one, which then shows as a favorite', (
+      t,
+    ) async {
+      final container = await pumpPane(t, recents: recents);
+
+      await t.tap(find.byTooltip('Add to favorites').first);
+      await t.pump();
+
+      expect(names(container).first, 'Echo');
+      expect(find.byTooltip('Add to favorites'), findsOneWidget);
+    });
+
+    testWidgets('are not swiped away like favorites', (t) async {
+      final container = await pumpPane(t, recents: recents);
+
+      await t.drag(find.text('Foxtrot'), const Offset(-600, 0));
+      await t.pumpAndSettle();
+
+      expect(container.read(searchStateProvider).recents.map((r) => r.query), [
+        'Echo',
+        'Foxtrot',
+      ]);
+    });
   });
 
   group('the section headers', () {

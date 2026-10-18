@@ -11,6 +11,8 @@ export 'legend_asset_image.dart';
 export 'legend_trackers_sheet.dart';
 export 'legend_stats_section.dart';
 export 'nav_entry_card.dart';
+export 'lookup_card.dart';
+export 'pill_segments.dart';
 export 'platform_picker.dart';
 export 'player_info_card.dart';
 export 'player_lookup_form.dart';

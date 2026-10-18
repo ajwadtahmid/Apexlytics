@@ -23,7 +23,20 @@ class SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12, left: AppTheme.xs),
       child: trailing == null
           ? text
-          : Row(children: [text, const Spacer(), trailing!]),
+          // The label shrinks, rather than pushing the trailing widget out, at
+          // large text sizes.
+          : Row(
+              children: [
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: text,
+                  ),
+                ),
+                trailing!,
+              ],
+            ),
     );
   }
 

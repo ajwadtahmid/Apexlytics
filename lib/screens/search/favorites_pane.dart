@@ -192,7 +192,7 @@ class FavoritesPane extends ConsumerWidget {
                   direction: DismissDirection.endToStart,
                   background: const _RemoveBackground(),
                   onDismissed: (_) => _remove(context, ref, r),
-                  child: _FavoriteTile(
+                  child: _PlayerCard(
                     playerRef: r,
                     onTap: () => onPick(r),
                     onLongPress: () => _showMenu(context, ref, r),
@@ -210,10 +210,13 @@ class FavoritesPane extends ConsumerWidget {
                   ref.read(searchStateProvider.notifier).clearRecents(),
             ),
             ...recents.map(
-              (r) => _RecentTile(
-                playerRef: r,
-                onTap: () => onPick(r),
-                onFavorite: () => _addFavorite(context, ref, r),
+              (r) => Padding(
+                padding: const EdgeInsets.only(bottom: AppTheme.sm),
+                child: _PlayerCard(
+                  playerRef: r,
+                  onTap: () => onPick(r),
+                  onFavorite: () => _addFavorite(context, ref, r),
+                ),
               ),
             ),
           ],
@@ -257,36 +260,6 @@ class _ListHeader extends StatelessWidget {
   }
 }
 
-class _RecentTile extends StatelessWidget {
-  final PlayerRef playerRef;
-  final VoidCallback onTap;
-  final VoidCallback onFavorite;
-  const _RecentTile({
-    required this.playerRef,
-    required this.onTap,
-    required this.onFavorite,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.history, size: 18, color: AppTheme.muted),
-      title: Text(playerRef.query),
-      subtitle: Text(
-        ApiConstants.labelFor(playerRef.platform),
-        style: AppTheme.caption,
-      ),
-      trailing: IconButton(
-        icon: const Icon(Icons.star_border, color: AppTheme.accent),
-        tooltip: 'Add to favorites',
-        onPressed: onFavorite,
-      ),
-      onTap: onTap,
-    );
-  }
-}
-
 /// What shows behind a favorite as it is swiped away.
 class _RemoveBackground extends StatelessWidget {
   const _RemoveBackground();
@@ -305,15 +278,21 @@ class _RemoveBackground extends StatelessWidget {
   }
 }
 
-class _FavoriteTile extends ConsumerWidget {
+/// A player as a card: rank badge, name, platform and rank, RP. A favorite is
+/// the same card as a recent lookup; the recent one has a star to save it.
+class _PlayerCard extends ConsumerWidget {
   final PlayerRef playerRef;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
 
-  const _FavoriteTile({
+  /// When set, a star at the end of the card that saves the player.
+  final VoidCallback? onFavorite;
+
+  const _PlayerCard({
     required this.playerRef,
     required this.onTap,
-    required this.onLongPress,
+    this.onLongPress,
+    this.onFavorite,
   });
 
   String _sessionKey() {
@@ -425,6 +404,15 @@ class _FavoriteTile extends ConsumerWidget {
                     ),
                     const Text('RP', style: AppTheme.caption),
                   ],
+                ),
+              ],
+              if (onFavorite != null) ...[
+                const SizedBox(width: AppTheme.xs),
+                IconButton(
+                  icon: const Icon(Icons.star_border, color: AppTheme.accent),
+                  tooltip: 'Add to favorites',
+                  onPressed: onFavorite,
+                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ],

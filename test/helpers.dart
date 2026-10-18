@@ -7,6 +7,7 @@ import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
+import 'package:apexlytics/widgets/lookup_card.dart' show LookupModePicker;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -183,3 +184,19 @@ class FakeHttpAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+/// Taps the other half of a lookup card's Name | UID capsule, whichever is not
+/// chosen, then lets its animation finish.
+Future<void> toggleUidMode(WidgetTester t) async {
+  final picker = find.byType(LookupModePicker);
+  final byUid = t.widget<LookupModePicker>(picker).byUid;
+  await t.tap(
+    find.descendant(of: picker, matching: find.text(byUid ? 'Name' : 'UID')),
+  );
+  await t.pump();
+  await t.pump(const Duration(milliseconds: 300));
+}
+
+/// Whether a lookup card is searching by UID.
+bool uidModeOn(WidgetTester t) =>
+    t.widget<LookupModePicker>(find.byType(LookupModePicker)).byUid;

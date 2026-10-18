@@ -149,7 +149,7 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.byType(Switch));
+      await toggleUidMode(tester);
       await tester.pump();
 
       await tester.enterText(find.byType(TextField), 'abc123');
@@ -177,14 +177,14 @@ void main() {
         await tester.pump();
         expect(find.text('Aceu'), findsOneWidget);
 
-        await tester.tap(find.byType(Switch));
+        await toggleUidMode(tester);
         await tester.pump();
 
         var field = tester.widget<TextField>(find.byType(TextField));
         expect(field.controller!.text, isEmpty);
         expect(find.text('UID must contain digits only.'), findsNothing);
 
-        await tester.tap(find.byType(Switch));
+        await toggleUidMode(tester);
         await tester.pump();
 
         field = tester.widget<TextField>(find.byType(TextField));
@@ -275,7 +275,7 @@ void main() {
       );
       await tester.pump();
 
-      await tester.tap(find.byType(Switch));
+      await toggleUidMode(tester);
       await tester.pump();
 
       await tester.enterText(find.byType(TextField), 'abc123');
@@ -311,7 +311,7 @@ void main() {
       await tester.enterText(find.byType(TextField), 'Aceu');
       await tester.pump();
 
-      await tester.tap(find.byType(Switch));
+      await toggleUidMode(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
@@ -319,7 +319,7 @@ void main() {
       expect(field.controller!.text, isEmpty);
       expect(find.text('UID must contain digits only.'), findsNothing);
 
-      await tester.tap(find.byType(Switch));
+      await toggleUidMode(tester);
       await tester.pump();
 
       field = tester.widget<TextField>(find.byType(TextField));

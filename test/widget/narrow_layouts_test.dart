@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:apexlytics/utils/theme.dart';
-import 'package:apexlytics/widgets/uid_search_toggle.dart';
+import 'package:apexlytics/utils/lookup_form_state.dart';
+import 'package:apexlytics/widgets/lookup_card.dart';
 
 void main() {
   Future<void> pumpAt(
@@ -21,28 +22,49 @@ void main() {
             textScaler: TextScaler.linear(textScale),
           ),
           child: Scaffold(
-            body: Padding(padding: const EdgeInsets.all(16), child: child),
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: child,
+            ),
           ),
         ),
       ),
     );
   }
 
-  group('UidSearchToggle', () {
+  group('LookupCard', () {
     for (final (width, scale) in [(320.0, 1.3), (320.0, 2.0), (360.0, 1.5)]) {
-      testWidgets('fits at ${width.toInt()} dp with text ×$scale', (
-        tester,
-      ) async {
-        await pumpAt(
-          tester,
-          UidSearchToggle(value: false, onChanged: (_) {}),
-          size: Size(width, 640),
-          textScale: scale,
-        );
+      for (final byUid in [false, true]) {
+        testWidgets('fits at ${width.toInt()} dp with text ×$scale, '
+            '${byUid ? 'by UID' : 'by name'}', (tester) async {
+          final state = LookupFormState(
+            name: 'Aceu',
+            uid: '1001',
+            platform: byUid ? 'SWITCH' : 'PC',
+          );
+          addTearDown(state.dispose);
+          await pumpAt(
+            tester,
+            LookupCard(
+              state: state,
+              onSubmit: () {},
+              arrowSubmits: true,
+              error: 'Player not found. Check the name and platform.',
+            ),
+            size: Size(width, 640),
+            textScale: scale,
+          );
 
-        expect(tester.takeException(), isNull);
-        expect(find.text('(Find your UID)'), findsOneWidget);
-      });
+          expect(tester.takeException(), isNull);
+          for (final label in ['PC', 'PS', 'Xbox', 'Switch']) {
+            expect(find.text(label), findsOneWidget, reason: label);
+          }
+          expect(
+            find.text('Find your UID'),
+            byUid ? findsOneWidget : findsNothing,
+          );
+        });
+      }
     }
   });
 

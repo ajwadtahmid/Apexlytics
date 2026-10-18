@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../constants/api_constants.dart';
 import '../utils/theme.dart';
-import '../utils/navigation_utils.dart';
 
 /// Apply to a [TextField.inputFormatters] whenever UID search mode is active,
 /// so a mistyped character or a pasted name never reaches the network as a
@@ -27,11 +26,15 @@ class UidSuggestion extends StatelessWidget {
   final bool searchByUid;
   final VoidCallback onUseUid;
 
+  /// Shown, in name mode, while the text doesn't look like a UID.
+  final Widget? otherwise;
+
   const UidSuggestion({
     super.key,
     required this.controller,
     required this.searchByUid,
     required this.onUseUid,
+    this.otherwise,
   });
 
   @override
@@ -41,7 +44,7 @@ class UidSuggestion extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         if (!looksLikeUid(controller.text.trim())) {
-          return const SizedBox.shrink();
+          return otherwise ?? const SizedBox.shrink();
         }
         return Padding(
           padding: const EdgeInsets.only(top: AppTheme.sm),
@@ -70,58 +73,6 @@ class UidSuggestion extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// A row with an icon, "Search by UID" label, and a Switch.
-/// Used in both the Search bar and the Stats player-lookup form.
-class UidSearchToggle extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const UidSearchToggle({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
-
-  Future<void> _openLink(BuildContext context) =>
-      openExternalLink(context, Uri.parse(ApiConstants.alsProfileSearchUrl));
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(Icons.numbers, size: 16, color: AppTheme.muted),
-        const SizedBox(width: AppTheme.sm),
-        Expanded(
-          // Wraps, rather than a Row, so a narrow screen or larger text moves
-          // "(Find your UID)" to a second line instead of pushing it off.
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text(
-                'Search by UID ',
-                style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
-              ),
-              InkWell(
-                onTap: () => _openLink(context),
-                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                child: const Text(
-                  '(Find your UID)',
-                  style: TextStyle(fontSize: 13, color: AppTheme.accent),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: AppTheme.accent,
-        ),
-      ],
     );
   }
 }

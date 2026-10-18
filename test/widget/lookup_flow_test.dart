@@ -8,6 +8,7 @@ import 'package:apexlytics/screens/stats/stats_screen.dart';
 import 'package:apexlytics/services/api_service.dart';
 import 'package:apexlytics/utils/formatting/search_utils.dart';
 import 'package:apexlytics/utils/storage/api_cache_store.dart';
+import 'package:apexlytics/widgets/lookup_card.dart' show LookupModePicker;
 import 'package:apexlytics/widgets/player_lookup_form.dart';
 import 'package:apexlytics/widgets/profile_manager_sheet.dart';
 import 'package:dio/dio.dart';
@@ -107,7 +108,6 @@ void main() {
   String fieldText(WidgetTester t) =>
       t.widget<TextField>(find.byType(TextField).first).controller!.text;
 
-  bool uidSwitchOn(WidgetTester t) => t.widget<Switch>(find.byType(Switch)).value;
 
   Future<void> pickPlatform(WidgetTester t, String label) async {
     await t.tap(find.text(label));
@@ -162,7 +162,7 @@ void main() {
         const StatsScreen(),
         FakeHttpAdapter({'/player/uid': <String, Object?>{}}),
       );
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       await t.enterText(find.byType(TextField), '1234567890');
       await t.tap(find.text('Find My Player'));
@@ -176,6 +176,34 @@ void main() {
     });
   });
 
+  group('Search at large text', () {
+    for (final scale in [1.5, 2.0]) {
+      testWidgets('fits a phone with text ×$scale', (t) async {
+        t.view.physicalSize = const Size(360, 740);
+        t.view.devicePixelRatio = 1;
+        addTearDown(t.view.reset);
+        await boot(
+          t,
+          MediaQuery(
+            data: MediaQueryData(
+              size: const Size(360, 740),
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: const SearchScreen(),
+          ),
+          FakeHttpAdapter(),
+          prefs: {
+            'search_favorites': '[{"query":"Alpha","platform":"PC","uid":"1"}]',
+          },
+        );
+        await t.pump(const Duration(milliseconds: 300));
+
+        expect(t.takeException(), isNull);
+        expect(find.text('Alpha'), findsOneWidget);
+      });
+    }
+  });
+
   group('retrying', () {
     testWidgets('a retry right after a failed lookup goes through', (t) async {
       final adapter = FakeHttpAdapter(); // every route answers 404
@@ -186,6 +214,8 @@ void main() {
       await settle(t);
       expect(adapter.paths, ['/player']);
 
+      // The error has made the form taller; bring the button back into view.
+      await t.ensureVisible(find.text('Find My Player'));
       await t.tap(find.text('Find My Player'));
       await t.pump();
       await settle(t);
@@ -219,17 +249,17 @@ void main() {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), 'Aceu');
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       expect(fieldText(t), isEmpty);
       expect(find.text('UID must contain digits only.'), findsNothing);
 
       await t.enterText(find.byType(TextField), '12345');
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       expect(fieldText(t), 'Aceu');
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       expect(fieldText(t), '12345');
     });
@@ -240,10 +270,10 @@ void main() {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), '1012345678');
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), '1012345678');
     });
 
@@ -252,10 +282,10 @@ void main() {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), 'Aceu123');
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), isEmpty);
     });
 
@@ -264,17 +294,17 @@ void main() {
     ) async {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), '1012345678');
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       expect(fieldText(t), '1012345678');
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       await t.enterText(find.byType(TextField), 'Aceu1012345678');
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), isEmpty);
     });
 
@@ -282,7 +312,7 @@ void main() {
       await boot(t, const SearchScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), 'Aceu123');
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
 
       expect(fieldText(t), isEmpty);
@@ -305,7 +335,7 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), '1012345678');
       expect(find.text(hint), findsNothing);
     });
@@ -321,7 +351,7 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), '1012345678');
     });
   });
@@ -331,9 +361,9 @@ void main() {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), 'Aceu');
 
-      await pickPlatform(t, 'Nintendo Switch');
+      await pickPlatform(t, 'Switch');
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), isEmpty, reason: 'the UID draft, not the name');
       expect(find.text(_switchUidNotice), findsOneWidget);
     });
@@ -342,12 +372,12 @@ void main() {
       t,
     ) async {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
-      await pickPlatform(t, 'Nintendo Switch');
+      await pickPlatform(t, 'Switch');
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(find.text(_switchWarning), findsOneWidget);
     });
 
@@ -355,53 +385,53 @@ void main() {
         'the name typed earlier', (t) async {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), 'Aceu');
-      await pickPlatform(t, 'Nintendo Switch');
-      expect(uidSwitchOn(t), isTrue);
+      await pickPlatform(t, 'Switch');
+      expect(uidModeOn(t), isTrue);
 
       await pickPlatform(t, 'PC');
 
-      expect(uidSwitchOn(t), isFalse);
+      expect(uidModeOn(t), isFalse);
       expect(fieldText(t), 'Aceu');
       expect(find.text(_switchUidNotice), findsNothing);
       // And it's free to use again.
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
     });
 
     testWidgets('leaving Switch leaves a toggle that was already on, on', (
       t,
     ) async {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
-      await t.tap(find.byType(Switch)); // on, by choice
+      await toggleUidMode(t); // on, by choice
       await t.pump();
       await t.enterText(find.byType(TextField), '12345');
 
-      await pickPlatform(t, 'Nintendo Switch');
-      expect(uidSwitchOn(t), isTrue);
+      await pickPlatform(t, 'Switch');
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), '12345');
 
-      for (final other in ['PlayStation', 'Xbox']) {
+      for (final other in ['PS', 'Xbox']) {
         await pickPlatform(t, other);
-        expect(uidSwitchOn(t), isTrue, reason: other);
+        expect(uidModeOn(t), isTrue, reason: other);
         expect(fieldText(t), '12345', reason: other);
-        await pickPlatform(t, 'Nintendo Switch');
+        await pickPlatform(t, 'Switch');
       }
     });
 
     testWidgets('each visit to Switch restores on its own way out', (t) async {
       await boot(t, const StatsScreen(), FakeHttpAdapter());
 
-      await pickPlatform(t, 'Nintendo Switch');
+      await pickPlatform(t, 'Switch');
       await pickPlatform(t, 'Xbox');
-      expect(uidSwitchOn(t), isFalse);
+      expect(uidModeOn(t), isFalse);
 
       // Now turn it on by hand, then visit Switch: it must stay on after.
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
-      await pickPlatform(t, 'Nintendo Switch');
+      await pickPlatform(t, 'Switch');
       await pickPlatform(t, 'PC');
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
     });
   });
 
@@ -560,12 +590,12 @@ void main() {
         FakeHttpAdapter(),
       );
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), '1099');
 
       // Switch forced UID search on, so moving off it returns to the name.
       await pickPlatform(t, 'PC');
-      expect(uidSwitchOn(t), isFalse);
+      expect(uidModeOn(t), isFalse);
       expect(fieldText(t), 'SwitchGuy');
     });
   });
@@ -575,15 +605,15 @@ void main() {
         'refuses to turn off', (t) async {
       await boot(t, const SearchScreen(), FakeHttpAdapter());
 
-      await pickPlatform(t, 'Nintendo Switch');
-      expect(uidSwitchOn(t), isTrue);
+      await pickPlatform(t, 'Switch');
+      expect(uidModeOn(t), isTrue);
       expect(find.text(_switchUidNotice), findsOneWidget);
 
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       // The first snackbar has to finish hiding before the next one shows.
       await t.pump(const Duration(seconds: 1));
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
       expect(find.text(_switchWarning), findsOneWidget);
     });
 
@@ -591,25 +621,25 @@ void main() {
       await boot(t, const SearchScreen(), FakeHttpAdapter());
       await t.enterText(find.byType(TextField), 'Aceu');
 
-      await pickPlatform(t, 'Nintendo Switch');
-      expect(uidSwitchOn(t), isTrue);
+      await pickPlatform(t, 'Switch');
+      expect(uidModeOn(t), isTrue);
       expect(fieldText(t), isEmpty);
 
       await pickPlatform(t, 'PC');
-      expect(uidSwitchOn(t), isFalse);
+      expect(uidModeOn(t), isFalse);
       expect(fieldText(t), 'Aceu');
     });
 
     testWidgets('a toggle that was on stays on after Switch', (t) async {
       await boot(t, const SearchScreen(), FakeHttpAdapter());
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
 
-      await pickPlatform(t, 'Nintendo Switch');
+      await pickPlatform(t, 'Switch');
       await pickPlatform(t, 'Xbox');
 
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
     });
 
     testWidgets('picking a favourite while the bar is in UID mode puts the bar '
@@ -623,10 +653,10 @@ void main() {
               '[{"query":"Aceu","platform":"PC","uid":"1001","byUid":false}]',
         },
       );
-      await t.tap(find.byType(Switch));
+      await toggleUidMode(t);
       await t.pump();
       await t.pump(const Duration(milliseconds: 300));
-      expect(uidSwitchOn(t), isTrue);
+      expect(uidModeOn(t), isTrue);
 
       await t.tap(find.text('Aceu'));
       await t.pump();
@@ -638,7 +668,7 @@ void main() {
         'Aceu',
       );
       expect(
-        t.widget<Switch>(find.byType(Switch, skipOffstage: false)).value,
+        t.widget<LookupModePicker>(find.byType(LookupModePicker, skipOffstage: false)).byUid,
         isFalse,
       );
     });
