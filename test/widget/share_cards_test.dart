@@ -300,7 +300,8 @@ void main() {
           body: RecapShareCard(recap: recap, scope: 'x'),
         ),
       );
-      expect(badge(tester), 'assets/ranks/diamond.webp');
+      // The match's own image is diamond4: that division's badge.
+      expect(badge(tester), 'assets/ranks/diamond_4.webp');
     });
   });
 

@@ -10,13 +10,14 @@ class RankDivision {
 
   String get label => division != null ? '$tier $division' : tier;
 
-  /// The bundled badge for this tier, or null when none is bundled (Rookie).
+  /// The bundled badge for this rung, or null when none is bundled (Rookie).
   /// Callers show no badge for null; they don't each pick their own stand-in.
-  String? get assetPath {
-    final name = tier.toLowerCase().replaceAll(' ', '_');
-    return kBundledRankTiers.contains(name) ? 'assets/ranks/$name.webp' : null;
-  }
+  /// A tier with divisions shows its own division's badge; Master has none.
+  String? get assetPath =>
+      rankBadgePath(tier.toLowerCase(), division: _divisionNumbers[division]);
 }
+
+const _divisionNumbers = {'I': 1, 'II': 2, 'III': 3, 'IV': 4};
 
 /// Tiers with badge art in `assets/ranks/<tier>.webp`. Rookie has none.
 const kBundledRankTiers = {
@@ -27,6 +28,25 @@ const kBundledRankTiers = {
   'diamond',
   'master',
 };
+
+/// Tiers whose badges carry the division, in `assets/ranks/<tier>_<n>.webp`.
+/// Master has a single badge, and Apex Predator sits outside the ladder.
+const kDivisionBadgeTiers = {'bronze', 'silver', 'gold', 'platinum', 'diamond'};
+
+/// The bundled badge for [tier] (lower case, e.g. `platinum`) at [division]
+/// 1–4, or null for a tier with no art. A tier with divisions falls back to its
+/// plain badge when the division is missing or out of range.
+String? rankBadgePath(String tier, {int? division}) {
+  if (!kBundledRankTiers.contains(tier)) return null;
+  final divided =
+      kDivisionBadgeTiers.contains(tier) &&
+      division != null &&
+      division >= 1 &&
+      division <= 4;
+  return divided
+      ? 'assets/ranks/${tier}_$division.webp'
+      : 'assets/ranks/$tier.webp';
+}
 
 /// The Apex Predator badge, which sits outside the ladder.
 const kPredatorBadgeAsset = 'assets/ranks/apex_predator.webp';

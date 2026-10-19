@@ -59,19 +59,21 @@ String? rankAssetPathByTier(bool isPredator, int tierIndex) {
 }
 
 /// The bundled badge for a rank image URL (`…/platinum3.png`), or null for an unbundled
-/// tier or unusable URL. Only the file name is read, so nothing is fetched; the division
-/// is dropped.
+/// tier or unusable URL. Only the file name is read, so nothing is fetched. The trailing
+/// number is the division, which picks that division's badge.
 String? rankAssetPathFromImageUrl(String url) {
   final segments = Uri.tryParse(url)?.pathSegments ?? const <String>[];
   if (segments.isEmpty) return null;
   final file = segments.last;
   final dot = file.lastIndexOf('.');
+  final name = (dot > 0 ? file.substring(0, dot) : file).toLowerCase();
   // `platinum3.png` → `platinum`; `apex_predator.png` → `apexpredator`.
-  final tier = (dot > 0 ? file.substring(0, dot) : file)
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z]'), '');
+  final tier = name.replaceAll(RegExp(r'[^a-z]'), '');
   if (tier == 'apexpredator' || tier == 'predator') {
     return kPredatorBadgeAsset;
   }
-  return kBundledRankTiers.contains(tier) ? 'assets/ranks/$tier.webp' : null;
+  final division = int.tryParse(
+    RegExp(r'\d+').firstMatch(name)?.group(0) ?? '',
+  );
+  return rankBadgePath(tier, division: division);
 }

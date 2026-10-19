@@ -96,6 +96,30 @@ void main() {
       expect(File(kPredatorBadgeAsset).existsSync(), isTrue);
     });
 
+    test('each rung shows its own division, and Master its single badge', () {
+      final gold2 = kRankLadder.firstWhere(
+        (d) => d.tier == 'Gold' && d.division == 'II',
+      );
+      expect(gold2.assetPath, 'assets/ranks/gold_2.webp');
+      final master = kRankLadder.firstWhere((d) => d.tier == 'Master');
+      expect(master.assetPath, 'assets/ranks/master.webp');
+      // Every division of every tier is a different, real file.
+      final paths = [
+        for (final d in kRankLadder)
+          if (d.assetPath != null) d.assetPath,
+      ];
+      expect(paths.toSet().length, paths.length);
+    });
+
+    test('a division badge is picked only for tiers that have them', () {
+      expect(rankBadgePath('master', division: 2), 'assets/ranks/master.webp');
+      expect(rankBadgePath('rookie', division: 2), isNull);
+      expect(
+        rankBadgePath('diamond', division: 5),
+        'assets/ranks/diamond.webp',
+      );
+    });
+
     test('Rookie has no badge, and nothing else is missing one', () {
       for (final d in kRankLadder) {
         expect(d.assetPath == null, d.tier == 'Rookie', reason: d.label);
@@ -164,19 +188,39 @@ void main() {
   });
 
   group('rankAssetPathFromImageUrl', () {
-    test('maps every division of a tier onto that tier\'s bundled badge', () {
+    test('maps each division of a tier onto that division\'s badge', () {
       for (final n in [1, 2, 3, 4]) {
         expect(
           rankAssetPathFromImageUrl(
             'https://api.apexlegendsstatus.com/assets/ranks/platinum$n.png',
           ),
-          'assets/ranks/platinum.webp',
+          'assets/ranks/platinum_$n.webp',
         );
       }
       expect(
         rankAssetPathFromImageUrl('https://x.example/ranks/Diamond4.png'),
-        'assets/ranks/diamond.webp',
+        'assets/ranks/diamond_4.webp',
       );
+    });
+
+    test('Master has no divisions, so any number gives its one badge', () {
+      for (final name in ['master', 'master1', 'master4']) {
+        expect(
+          rankAssetPathFromImageUrl('https://x.example/ranks/$name.png'),
+          'assets/ranks/master.webp',
+          reason: name,
+        );
+      }
+    });
+
+    test('a missing or out-of-range division gives the plain tier badge', () {
+      for (final name in ['gold', 'gold0', 'gold5', 'gold12']) {
+        expect(
+          rankAssetPathFromImageUrl('https://x.example/ranks/$name.png'),
+          'assets/ranks/gold.webp',
+          reason: name,
+        );
+      }
     });
 
     test('reads the legacy host the same way — only the file name matters', () {
@@ -184,12 +228,16 @@ void main() {
         rankAssetPathFromImageUrl(
           'https://api.mozambiquehe.re/assets/ranks/gold2.png',
         ),
-        'assets/ranks/gold.webp',
+        'assets/ranks/gold_2.webp',
       );
     });
 
     test('recognises the predator badge however it is spelled', () {
-      for (final name in ['apex_predator.png', 'apexpredator.png', 'predator.png']) {
+      for (final name in [
+        'apex_predator.png',
+        'apexpredator.png',
+        'predator.png',
+      ]) {
         expect(
           rankAssetPathFromImageUrl('https://x.example/ranks/$name'),
           'assets/ranks/apex_predator.webp',
@@ -199,14 +247,28 @@ void main() {
     });
 
     test('every path it returns is a real bundled badge', () {
-      for (final tier in ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master']) {
-        final path = rankAssetPathFromImageUrl('https://x.example/ranks/${tier}1.png')!;
-        expect(File(path).existsSync(), isTrue, reason: path);
+      for (final tier in [
+        'bronze',
+        'silver',
+        'gold',
+        'platinum',
+        'diamond',
+        'master',
+      ]) {
+        for (final n in [1, 2, 3, 4]) {
+          final path = rankAssetPathFromImageUrl(
+            'https://x.example/ranks/$tier$n.png',
+          )!;
+          expect(File(path).existsSync(), isTrue, reason: path);
+        }
       }
     });
 
     test('is null for a tier with no bundled badge, or no usable URL', () {
-      expect(rankAssetPathFromImageUrl('https://x.example/ranks/rookie2.png'), isNull);
+      expect(
+        rankAssetPathFromImageUrl('https://x.example/ranks/rookie2.png'),
+        isNull,
+      );
       expect(rankAssetPathFromImageUrl(''), isNull);
       expect(rankAssetPathFromImageUrl('not a url'), isNull);
       expect(rankAssetPathFromImageUrl('https://x.example/'), isNull);
