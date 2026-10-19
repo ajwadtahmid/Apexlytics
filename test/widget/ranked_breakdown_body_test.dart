@@ -524,14 +524,14 @@ void main() {
     }
 
     bool selected(WidgetTester tester, String label) {
-      final index = ['Overview', 'Legends', 'Maps', 'History'].indexOf(label);
+      final index = ['Overview', 'Legends', 'Maps', 'Games'].indexOf(label);
       return DefaultTabController.of(
             tester.element(find.byType(TabBar)),
           ).index ==
           index;
     }
 
-    for (final tab in ['Legends', 'Maps', 'History']) {
+    for (final tab in ['Legends', 'Maps', 'Games']) {
       testWidgets('returns to Overview from $tab', (tester) async {
         final container = await showSplit(tester);
         await tester.tap(find.text(tab));

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show IconData, Icons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Stable tab identities. The app tracks the selected tab by identity, never by
@@ -8,12 +9,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// and the Settings picker read them). A stored value is saved in settings and
 /// backups: never renumber one.
 enum AppTab {
-  home('Home', 0),
-  stats('Stats', 1),
-  search('Search', 2),
-  settings('Settings', 3);
+  home('Home', 0, Icons.home_outlined, Icons.home),
+  stats('Stats', 1, Icons.bar_chart_outlined, Icons.bar_chart),
+  search('Search', 2, Icons.search_outlined, Icons.search),
+  settings('Settings', 3, Icons.settings_outlined, Icons.settings);
 
-  const AppTab(this.label, this.storedValue);
+  const AppTab(this.label, this.storedValue, this.icon, this.activeIcon);
+
+  /// The nav bar icon, and the filled one while the tab is selected. The
+  /// orientation tour shows the same one, so a slide matches its tab.
+  final IconData icon;
+  final IconData activeIcon;
 
   /// The name shown in the nav bar and in the "Default tab" picker.
   final String label;

@@ -453,7 +453,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
 
     return _tabShell(
       'split',
-      const ['Overview', 'Legends', 'Maps', 'History'],
+      const ['Overview', 'Legends', 'Maps', 'Games'],
       [
         _OverviewTab(
           uid: widget.uid,

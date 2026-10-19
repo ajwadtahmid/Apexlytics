@@ -156,28 +156,11 @@ class _AppShellState extends ConsumerState<_AppShell>
     return KeyedSubtree(key: ValueKey(tab), child: screen);
   }
 
-  BottomNavigationBarItem _navItemFor(AppTab tab) => switch (tab) {
-    AppTab.home => BottomNavigationBarItem(
-      icon: const Icon(Icons.home_outlined),
-      activeIcon: const Icon(Icons.home),
-      label: AppTab.home.label,
-    ),
-    AppTab.stats => BottomNavigationBarItem(
-      icon: const Icon(Icons.bar_chart_outlined),
-      activeIcon: const Icon(Icons.bar_chart),
-      label: AppTab.stats.label,
-    ),
-    AppTab.search => BottomNavigationBarItem(
-      icon: const Icon(Icons.search_outlined),
-      activeIcon: const Icon(Icons.search),
-      label: AppTab.search.label,
-    ),
-    AppTab.settings => BottomNavigationBarItem(
-      icon: const Icon(Icons.settings_outlined),
-      activeIcon: const Icon(Icons.settings),
-      label: AppTab.settings.label,
-    ),
-  };
+  BottomNavigationBarItem _navItemFor(AppTab tab) => BottomNavigationBarItem(
+    icon: Icon(tab.icon),
+    activeIcon: Icon(tab.activeIcon),
+    label: tab.label,
+  );
 
   /// Fires API requests in priority order on launch:
   ///   Phase 1 — Map rotation + Seasonal maps + Stats in parallel (highest priority)

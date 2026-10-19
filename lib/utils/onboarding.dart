@@ -9,11 +9,12 @@ import '../screens/onboarding/onboarding_screen.dart';
 /// Current orientation-tour revision. Bump this when the tour changes enough to
 /// re-show it to existing users as a "what's new" pass — [showOnboardingIfNeeded]
 /// compares it against the stored [PrefsKeys.onboardingVersion].
-const int kOnboardingVersion = 2;
+const int kOnboardingVersion = 3;
 
 /// Shows the orientation tour on first launch (or after [kOnboardingVersion] is
-/// bumped). Marks it seen, then drops the user on Stats so setting up an
-/// account is the next thing they see.
+/// bumped). Marks it seen. With no player set up yet, it ends on "Set up my
+/// profile" and drops the user on Stats, where that is done; someone who
+/// already has one just finishes and stays where they are.
 Future<void> showOnboardingIfNeeded(BuildContext context, WidgetRef ref) async {
   final prefs = ref.read(sharedPreferencesProvider);
   final seen = prefs.getInt(PrefsKeys.onboardingVersion) ?? 0;
@@ -21,10 +22,12 @@ Future<void> showOnboardingIfNeeded(BuildContext context, WidgetRef ref) async {
   if (!context.mounted) return;
 
   final navigator = Navigator.of(context);
+  final needsProfile = !ref.read(playerSettingsProvider).isPlayerSet;
   await navigator.push(
     MaterialPageRoute<void>(
       fullscreenDialog: true,
       builder: (_) => OnboardingScreen(
+        finishLabel: needsProfile ? 'Set up my profile' : 'Done',
         onDone: () async {
           await prefs.setInt(PrefsKeys.onboardingVersion, kOnboardingVersion);
           navigator.pop();
@@ -40,7 +43,7 @@ Future<void> showOnboardingIfNeeded(BuildContext context, WidgetRef ref) async {
   }
 
   // Land on Stats so the profile-setup form is the first thing they reach.
-  ref.read(currentTabProvider.notifier).setTab(AppTab.stats);
+  if (needsProfile) ref.read(currentTabProvider.notifier).setTab(AppTab.stats);
 }
 
 /// Replays the tour from Settings. Just pops when finished — no tab change, so
@@ -51,7 +54,10 @@ Future<void> openOnboarding(BuildContext context) async {
   await navigator.push(
     MaterialPageRoute<void>(
       fullscreenDialog: true,
-      builder: (_) => OnboardingScreen(onDone: () async => navigator.pop()),
+      builder: (_) => OnboardingScreen(
+        finishLabel: 'Done',
+        onDone: () async => navigator.pop(),
+      ),
     ),
   );
 }
