@@ -99,22 +99,39 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Player Stats**: Rank, RP, current legend, equipped trackers, and weekly RP gain tracking. Supports search by name or numeric UID.
 - **RP Progression Graph**: Interactive chart of RP gained per match, built from your match history, with session filtering and split/week navigation. A snapshot-based RP graph is also available.
-- **Ranked Breakdown**: Full ranked deep-dive: match history with per-match correction, an RP chart, per-map and per-legend breakdown tables, a combined Legend × Map matrix, pick-rate analysis, session summaries, records (best RP/kills/damage games and win streaks), performance trends with session sparklines, time-of-day/day-of-week charts, and side-by-side comparisons of two splits, two legends or two maps, a recap of the period, and shareable image cards (profile, best session, best game) that never include your player ID. Refreshes automatically while the app is open; the interval is a setting, and it shortens to 5 minutes while a match is being recorded. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking starts.
-- **Legend Stats**: Kill counts and tracker values per legend, merged across sessions and sorted by most-played.
+- **Ranked Breakdown** (the Stats tab): a full ranked deep-dive built from the matches Apexlytics records for you, with a split and week picker. Its four tabs:
+  - **Overview**: your account, the chosen split or week (summary, RP chart and stats), highlights such as your best and worst legends, and a "Dig deeper" grid that opens the pages below. A first-run preview shows what it will look like while you wait for a first game.
+  - **Legends** and **Maps**: per-legend and per-map breakdown tables.
+  - **Games**: your match history, with per-match corrections and the option to exclude a game from every calculation.
+- **Dig deeper pages**:
+  - **All Trackers**: every legend's trackers, with filter and sort.
+  - **Legend × Map**: a matrix of legend and map results, with an All row and column and sorting.
+  - **Pick Rate**: a chart and a sortable table of how often each legend is picked, linked to that legend's history.
+  - **Performance Trends**: how you are trending, with session sparklines, time-of-day and day-of-week charts, and a choice of how far back to look.
+  - **Compare**: two splits, two legends or two maps side by side.
+  - **Sessions**: your play sessions, with a detail page for each.
+  - **Recap**: a recap of the period with a journey chart, and a shareable image card with a tile picker.
+  - **Personal Records**: best RP, kills and damage games, win streaks and an all-time best; open any record to see the game.
+  - Shareable cards never include your player ID.
+- **Ranked tracking**: Refreshes automatically while the app is open; the interval is a setting, and it shortens to 5 minutes while a match is being recorded. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking starts.
+- **Legend Stats**: Kill counts and tracker values per legend, merged across sessions and sorted by most-played. The All Trackers page filters and sorts every legend's trackers.
 - **Gun Stats**: Detailed weapon performance including kills, damage, and damage per kill.
 - **Map Rotations**: Live countdown for Ranked, Pubs, Mixtape, and Wildcard. Shows current map, time remaining, and what loads next. Switches automatically when the rotation changes.
-- **Predator Cutoff**: Current minimum RP to reach Apex Predator on PC, PlayStation, Xbox, and Switch.
+- **Predator Cutoff**: Current minimum RP to reach Apex Predator on PC, PlayStation, Xbox, and Switch. Your saved player's platform is highlighted, and the Home tile shows its cutoff.
 - **Server Status**: Health of Origin Login, EA Accounts, Nova Fusion, and Apex Crossplay. Drill down to see per-region latency in milliseconds, color-coded green/orange/red.
 - **Latest News**: Links to the official Apex news page.
 - **Player Compare**: Side-by-side comparison of ranked stats or per-legend trackers with any searched player.
-- **Favorites**: Star players to pin them to the search screen for one-tap access.
+- **Search & Favorites**: Look up any player by name or numeric UID, on any platform, from the Search tab. Star players to keep them as favorite cards, and see your recent searches. Swipe or long-press a favorite to remove it (with Undo) or open it on apexlegendsstatus.com. If a name isn't found, retry it on another platform in one tap.
 - **Multiple Player Profiles**: Manage and quickly switch between different player profiles. Perfect for tracking friends, alternate accounts, or monitoring competition.
-- **Map Rotation Alerts**: Get notified before the map changes in-game: 5, 15, or 30 minutes for Ranked and Pubs, and 5, 10, or 15 minutes for Mixtape and Wildcard. Choose which modes and maps to be notified about. Notifications include the exact map change time and date.
+- **Map Rotation Alerts**: Get notified before the map changes in-game: 5, 15, or 30 minutes for Ranked and Pubs, and 5, 10, or 15 minutes for Mixtape and Wildcard. Choose which modes and maps to be notified about. Notifications include the exact map change time and date. Tap the bell on the Home map card to turn an alert on with one tap, and send a test alert from the alerts sheet to check that notifications reach you.
 - **Selective Mode Tracking**: Choose which modes to monitor: Ranked, Pubs, Mixtape, Wildcard.
 - **Background Notifications**: Alerts are batch-scheduled ahead of time and fire even when the app is closed (via background fetch on iOS/Android).
 - **View Cached Stats Offline**: All player stats are cached locally on your device. Search for a player online, and their stats remain accessible even without internet, perfect for checking during downtime.
 - **No account required**: Data is fetched using your public in-game name or UID.
-- **Data Backup & Restore**: Export your player profiles, favorites, and tracked data as a backup file. Restore from backup anytime to recover your data or switch devices seamlessly.
+- **Data Backup & Restore**: Export your player profiles, favorites, and tracked data as a backup file. Restore from backup anytime to recover your data or switch devices seamlessly. Settings reminds you to back up once 15 days have passed and new matches have been recorded.
+- **Settings**: Pick your default tab, how often stats refresh (down to manual only), and whether to keep the screen on while you play.
+- **Guided tour & set-up**: A short first-run tour explains each tab, and Home offers a "Set up your player" tile until a profile is saved.
+- **Report a bug**: Settings can open a prefilled GitHub issue or email with diagnostics and a recent log attached, with player names and IDs removed. Nothing is sent until you send it.
 - **Dark theme**: Designed for low-light gaming sessions.
 
 ---
@@ -230,6 +247,7 @@ All requests must include the `x-client-token` header with your `CLIENT_TOKEN` v
   - which player IDs each device has synced (1 hour) and how many distinct devices asked for a player (30 minutes). Devices are identified only by a keyed hash, never stored as IP addresses.
 
   Server logs are deleted after 30 days.
+- **Bug reports you send.** Settings → Report a bug opens a prefilled GitHub issue or email draft. It holds the app version, OS, language and time zone, a few settings and counts (such as how many profiles and games are saved, never their names or IDs) and the latest lines of the app's in-memory activity log, with player IDs, saved player names, email addresses, file-path account names and player-carrying URL parameters removed. You can read and edit it first, and nothing is sent unless you send it. A GitHub report is a public issue.
 - **Crash reports (Android and iOS only).** When the app crashes or hits an error, a report is sent to [Sentry](https://sentry.io) so it can be fixed: the error, the app version and the device model/OS. The app attaches no IP address or account, and strips player IDs and the data excerpts some errors carry before a report leaves the device. Crashes in the phone's native layer are reported by Sentry's own software, which that scrubbing can't reach, so those reports may carry an anonymous per-installation or per-device identifier (not linked to your name, an account or any player ID).
 - **A few images come from the data provider.** Legend art, rank badges, weapons and every Battle Royale map ship inside the app. Map art for Mixtape (and any map added before an app update bundles it) and images in news items are loaded from the data provider's servers, which can see your IP address and which image was requested — not who you are or any player you looked up.
 - **Stored on your device.** Your profiles, favorites, match history, RP history and cached responses live on your device, and the app never uploads them. They leave it in two ways, both under your control: when you export a backup (you choose where it goes), and, on iOS, as part of your device's own iCloud or computer backups, which include app data by default (you can turn that off for individual apps in your backup settings). Android excludes the app from cloud backups. On some phones, Android's device-to-device transfer (setting up a new phone from an old one) may still copy the app's data, including profiles and match history, to your new phone; it goes only to your own new device.
@@ -243,7 +261,7 @@ Data is sourced from [apexlegendsstatus.com](https://apexlegendsstatus.com) and 
 Have a question or found a bug? Let us know:
 
 - **Email**: [support@ajwadtahmid.com](mailto:support@ajwadtahmid.com)
-- **Bug reports & features**: [GitHub Issues](https://github.com/ajwadtahmid/Apexlytics/issues)
+- **Bug reports & features**: In the app, Settings → Report a bug (GitHub or Email) opens a message with diagnostics and a recent log filled in. You can also open a [GitHub Issue](https://github.com/ajwadtahmid/Apexlytics/issues) directly.
 - **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/Apexlytics/discussions)
 
 ---
@@ -297,7 +315,7 @@ No. Just search for any public player by name or UID.
 - **Legend stats**: Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
 - **Predator cutoff**: Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.
 - **Offline player search**: If a player hasn't been searched before, their data won't be cached and you'll need internet to look them up.
-- **Desktop crash reporting**: Crash reports are only sent on Android and iOS. Desktop builds (Linux, Windows, macOS) don't report crashes automatically, since Sentry's crash handler can't reliably run there; desktop issues rely on user-submitted [bug reports](https://github.com/ajwadtahmid/Apexlytics/issues).
+- **Desktop crash reporting**: Crash reports are only sent on Android and iOS. Desktop builds (Linux, Windows, macOS) don't report crashes automatically, since Sentry's crash handler can't reliably run there; desktop issues rely on user-submitted bug reports, which Settings → Report a bug fills in with diagnostics and a recent log.
 
 ---
 
