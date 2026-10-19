@@ -569,4 +569,209 @@ void main() {
       expect(selected(tester, 'Overview'), isTrue);
     });
   });
+  group('the Overview headings', () {
+    const uid = 'uid123';
+    const splitId = 'br_ranked_s29_s1';
+
+    Future<void> showOverview(WidgetTester tester) async {
+      // Tall enough that the whole list is built.
+      tester.view.physicalSize = const Size(800, 5000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 10});
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.synced,
+          splits: const [
+            RankedSplitBucket(id: splitId, displayName: 'S29 Split 1'),
+          ],
+          splitMatches: [matchWith(uid: uid, cumulativeRp: 1000)],
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    double top(WidgetTester tester, String label) =>
+        tester.getTopLeft(find.text(label)).dy;
+
+    testWidgets('split the page into account, split, highlights and tools, '
+        'in that order', (tester) async {
+      await showOverview(tester);
+
+      final tops = [
+        for (final h in ['Your account', 'This split', 'Highlights', 'Dig deeper'])
+          top(tester, h),
+      ];
+
+      expect(tops, [...tops]..sort());
+      expect(tops.toSet(), hasLength(4));
+    });
+
+    testWidgets('put the tiles under Dig deeper, and the RP chart under the '
+        'split heading', (tester) async {
+      await showOverview(tester);
+
+      for (final tile in ['Sessions', 'Compare', 'Recap']) {
+        expect(
+          top(tester, tile),
+          greaterThan(top(tester, 'Dig deeper')),
+          reason: tile,
+        );
+      }
+      expect(top(tester, 'This split'), lessThan(top(tester, 'Highlights')));
+      expect(find.text('This week'), findsNothing);
+    });
+
+    testWidgets('are on Overview only', (tester) async {
+      await showOverview(tester);
+
+      await tester.tap(find.text('Legends'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Your account'), findsNothing);
+      expect(find.text('Dig deeper'), findsNothing);
+    });
+  });
+  group('the first-run state', () {
+    const preview = 'WHAT YOU WILL SEE HERE';
+
+    Future<void> showEmpty(
+      WidgetTester tester, {
+      required RankedSyncOutcome outcome,
+      int refreshMinutes = 10,
+      GamesEligibility? eligibility = (eligible: true, pollCount: 5),
+    }) async {
+      final prefs = await prefsWith({
+        PrefsKeys.statsRefreshMinutes: refreshMinutes,
+      });
+      await tester.pumpWidget(
+        app(prefs: prefs, outcome: outcome, eligibility: eligibility),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('previews the page while waiting for a first game', (
+      tester,
+    ) async {
+      await showEmpty(tester, outcome: RankedSyncOutcome.synced);
+
+      expect(find.text('Warming up'), findsOneWidget);
+      expect(find.text(preview), findsOneWidget);
+      expect(find.text('RP this split'), findsOneWidget);
+      expect(find.text('Win rate'), findsOneWidget);
+    });
+
+    testWidgets('previews it before recording has started', (tester) async {
+      await showEmpty(
+        tester,
+        outcome: RankedSyncOutcome.notTracked,
+        refreshMinutes: 0,
+      );
+
+      expect(find.text('Ready to record'), findsOneWidget);
+      expect(find.text(preview), findsOneWidget);
+      expect(find.text('Start recording'), findsOneWidget);
+    });
+
+    testWidgets('previews it while the server has not seen the profile', (
+      tester,
+    ) async {
+      await showEmpty(
+        tester,
+        outcome: RankedSyncOutcome.cooldown,
+        eligibility: (eligible: false, pollCount: 0),
+      );
+
+      expect(find.text('Not being tracked yet'), findsOneWidget);
+      expect(find.text(preview), findsOneWidget);
+    });
+
+    for (final (outcome, title) in [
+      (RankedSyncOutcome.queued, 'Server busy'),
+      (RankedSyncOutcome.busy, 'Busy for a moment'),
+      (RankedSyncOutcome.offline, 'Offline'),
+      (RankedSyncOutcome.requestError, "Can't sync right now"),
+    ]) {
+      testWidgets('leaves the preview out when the problem is "$title"', (
+        tester,
+      ) async {
+        await showEmpty(tester, outcome: outcome);
+
+        expect(find.text(title), findsOneWidget);
+        expect(find.text(preview), findsNothing);
+      });
+    }
+
+    testWidgets('lists the steps: profile, trackers, keep open, play', (
+      tester,
+    ) async {
+      await showEmpty(tester, outcome: RankedSyncOutcome.synced);
+
+      final steps = [
+        'Profile linked',
+        'Equip Kills and Damage trackers',
+        'App is polling (keep it open)',
+        'Finish a ranked match',
+      ];
+      double top(String s) => tester.getTopLeft(find.text(s)).dy;
+      for (final s in steps) {
+        expect(find.text(s), findsOneWidget, reason: s);
+      }
+      for (var i = 1; i < steps.length; i++) {
+        expect(top(steps[i - 1]), lessThan(top(steps[i])), reason: steps[i]);
+      }
+    });
+
+    testWidgets('the trackers step is a suggestion, not a status', (
+      tester,
+    ) async {
+      await showEmpty(tester, outcome: RankedSyncOutcome.synced);
+
+      expect(find.byIcon(Icons.tune), findsOneWidget);
+      // Profile linked and polling are done, finishing a match is next; the
+      // trackers step claims none of that.
+      expect(find.byIcon(Icons.check_circle), findsNWidgets(2));
+      expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+    });
+
+    testWidgets('the preview is decoration: shapes and dashes, no figures', (
+      tester,
+    ) async {
+      await showEmpty(tester, outcome: RankedSyncOutcome.synced);
+
+      expect(
+        find.ancestor(
+          of: find.text('RP this split'),
+          matching: find.byType(ExcludeSemantics),
+        ),
+        findsWidgets,
+      );
+      expect(find.text('—'), findsNWidgets(3));
+    });
+
+    testWidgets('fits a short screen at large text, and scrolls to the '
+        'buttons', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final prefs = await prefsWith({PrefsKeys.statsRefreshMinutes: 0});
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: Size(360, 640),
+            textScaler: TextScaler.linear(1.5),
+          ),
+          child: app(prefs: prefs, outcome: RankedSyncOutcome.notTracked),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Start recording'));
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

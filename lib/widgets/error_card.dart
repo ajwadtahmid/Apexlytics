@@ -42,6 +42,10 @@ class ErrorCard extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  /// Optional content above the icon, such as a preview of what the screen
+  /// will show. [fullScreen] only.
+  final Widget? header;
+
   /// Optional extra content below the message. [fullScreen] only.
   final Widget? extra;
 
@@ -66,6 +70,7 @@ class ErrorCard extends StatelessWidget {
     this.onRetry,
     this.actionLabel,
     this.onAction,
+    this.header,
     this.extra,
     this.secondaryActionLabel,
     this.secondaryActionIcon,
@@ -205,6 +210,7 @@ class ErrorCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (header != null) ...[header!, const SizedBox(height: AppTheme.lg)],
           Icon(
             _resolvedIcon,
             color: _resolvedIconColor,

@@ -34,6 +34,8 @@ import 'widgets/ranked_rp_chart.dart';
 import 'widgets/ranked_stats_card.dart';
 import 'widgets/ranked_summary_header.dart';
 import '../../widgets/player_info_card.dart';
+import '../../widgets/surface_card.dart';
+import '../../widgets/setting_row.dart' show SectionLabel;
 
 /// The ranked-breakdown content — tabs, highlights, and every drill-down —
 /// embedded as the lower portion of the Stats tab, below the shared
@@ -218,6 +220,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
         message:
             'Only matches played from now on can be recorded — earlier ones '
             'are not recoverable.',
+        header: const _FirstRunPreview(),
         extra: steps,
         actionLabel: 'Start recording',
         onAction: _startRecording,
@@ -256,6 +259,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
               'Tracking has paused. Keep Apexlytics open while you play so '
                   'matches keep being recorded.',
           },
+          header: const _FirstRunPreview(),
           extra: steps,
           onRetry: _refresh,
           onLearnMore: onLearnMore,
@@ -298,11 +302,22 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
       ),
     };
 
+    // Waiting on a first match is the first-run case, so it shows the preview;
+    // a busy server or a failed request is a different problem and does not.
+    final waitingForFirstGame = switch (outcome) {
+      RankedSyncOutcome.queued ||
+      RankedSyncOutcome.busy ||
+      RankedSyncOutcome.offline ||
+      RankedSyncOutcome.requestError => false,
+      _ => true,
+    };
+
     return ErrorCard(
       fullScreen: true,
       icon: icon,
       title: title,
       message: statusNote,
+      header: waitingForFirstGame ? const _FirstRunPreview() : null,
       extra: steps,
       onRetry: _refresh,
       onLearnMore: onLearnMore,
@@ -504,10 +519,19 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
           child: ListView(
             padding: const EdgeInsets.all(AppTheme.md),
             children: [
+              const SectionLabel(
+                label: 'Your account',
+                icon: Icons.person_outline,
+              ),
               PlayerInfoCard(stats: widget.stats),
-              const SizedBox(height: AppTheme.md),
+              const SizedBox(height: AppTheme.lg),
+              const SectionLabel(
+                label: 'All time',
+                icon: Icons.leaderboard_outlined,
+              ),
               RankedStatsCard(summary: agg.summary),
-              const SizedBox(height: AppTheme.md),
+              const SizedBox(height: AppTheme.lg),
+              const SectionLabel(label: 'Highlights', icon: Icons.star_outline),
               RankedOverviewHighlights(
                 legends: agg.legends,
                 maps: agg.maps,
@@ -517,7 +541,11 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
                     store.matchesForMap(widget.uid, mapKey),
                 onRefresh: _refresh,
               ),
-              const SizedBox(height: AppTheme.md),
+              const SizedBox(height: AppTheme.lg),
+              const SectionLabel(
+                label: 'Dig deeper',
+                icon: Icons.explore_outlined,
+              ),
               IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -624,8 +652,13 @@ class _OverviewTab extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppTheme.md),
         children: [
+          const SectionLabel(label: 'Your account', icon: Icons.person_outline),
           PlayerInfoCard(stats: stats),
-          const SizedBox(height: AppTheme.md),
+          const SizedBox(height: AppTheme.lg),
+          SectionLabel(
+            label: data.view.weekIndex >= 0 ? 'This week' : 'This split',
+            icon: Icons.leaderboard_outlined,
+          ),
           RankedSummaryHeader(
             summary: summary,
             uid: uid,
@@ -649,7 +682,8 @@ class _OverviewTab extends StatelessWidget {
           ),
           const SizedBox(height: AppTheme.md),
           RankedStatsCard(summary: summary),
-          const SizedBox(height: AppTheme.md),
+          const SizedBox(height: AppTheme.lg),
+          const SectionLabel(label: 'Highlights', icon: Icons.star_outline),
           RankedOverviewHighlights(
             legends: legends,
             maps: maps,
@@ -659,7 +693,8 @@ class _OverviewTab extends StatelessWidget {
             // The split's full history, for sessions on the drill-down pages.
             sessionPool: data.view.history,
           ),
-          const SizedBox(height: AppTheme.md),
+          const SizedBox(height: AppTheme.lg),
+          const SectionLabel(label: 'Dig deeper', icon: Icons.explore_outlined),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -767,7 +802,14 @@ class _OverviewTab extends StatelessWidget {
   }
 }
 
-enum _StepStatus { done, active, pending }
+enum _StepStatus {
+  done,
+  active,
+  pending,
+
+  /// Worth doing, but nothing here can tell whether it has been.
+  tip,
+}
 
 /// The 3-step path from an empty breakdown to a populated one, shared across
 /// every empty-state title/message so "what's actually happening" reads the
@@ -786,6 +828,7 @@ class _TrackingSteps extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _StepRow('Profile linked', _StepStatus.done),
+          const _StepRow('Equip Kills and Damage trackers', _StepStatus.tip),
           _StepRow(
             'App is polling (keep it open)',
             recording ? _StepStatus.done : _StepStatus.active,
@@ -812,6 +855,7 @@ class _StepRow extends StatelessWidget {
       _StepStatus.done => (Icons.check_circle, AppTheme.green),
       _StepStatus.active => (Icons.radio_button_checked, AppTheme.accent),
       _StepStatus.pending => (Icons.radio_button_unchecked, AppTheme.muted),
+      _StepStatus.tip => (Icons.tune, AppTheme.muted),
     };
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -820,16 +864,19 @@ class _StepRow extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: color),
           const SizedBox(width: AppTheme.sm),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: status == _StepStatus.pending
-                  ? AppTheme.muted
-                  : AppTheme.textPrimary,
-              fontWeight: status == _StepStatus.active
-                  ? FontWeight.w600
-                  : FontWeight.normal,
+          // Wraps rather than runs off a narrow screen or large text.
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: status == _StepStatus.pending
+                    ? AppTheme.muted
+                    : AppTheme.textPrimary,
+                fontWeight: status == _StepStatus.active
+                    ? FontWeight.w600
+                    : FontWeight.normal,
+              ),
             ),
           ),
         ],
@@ -947,4 +994,135 @@ class _OverviewOnReselect extends ConsumerWidget {
     });
     return child;
   }
+}
+
+/// A greyed-out sketch of the page, shown while there is nothing to show yet, so
+/// a new player sees what the checklist below is working towards. Purely
+/// decorative: made-up shapes, never numbers.
+class _FirstRunPreview extends StatelessWidget {
+  const _FirstRunPreview();
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: Column(
+        children: [
+          const Text(
+            'WHAT YOU WILL SEE HERE',
+            style: TextStyle(
+              color: AppTheme.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: AppTheme.sm),
+          Opacity(
+            opacity: 0.4,
+            child: SurfaceCard(
+              padding: const EdgeInsets.all(AppTheme.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'RP this split',
+                    style: TextStyle(
+                      color: AppTheme.muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.sm),
+                  SizedBox(
+                    height: 64,
+                    width: double.infinity,
+                    child: CustomPaint(painter: _PreviewLinePainter()),
+                  ),
+                  const SizedBox(height: AppTheme.md),
+                  const Row(
+                    children: [
+                      Expanded(child: _PreviewStat('Games')),
+                      Expanded(child: _PreviewStat('RP per game')),
+                      Expanded(child: _PreviewStat('Win rate')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewStat extends StatelessWidget {
+  final String label;
+  const _PreviewStat(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '—',
+          style: TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(label, style: AppTheme.caption),
+        ),
+      ],
+    );
+  }
+}
+
+/// A climbing line with a soft fill: the shape of an RP chart, with no data.
+class _PreviewLinePainter extends CustomPainter {
+  static const _points = [
+    Offset(0, 0.85),
+    Offset(0.14, 0.7),
+    Offset(0.28, 0.76),
+    Offset(0.43, 0.5),
+    Offset(0.58, 0.58),
+    Offset(0.74, 0.3),
+    Offset(0.88, 0.36),
+    Offset(1, 0.12),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Path();
+    for (final (i, p) in _points.indexed) {
+      final x = p.dx * size.width;
+      final y = p.dy * size.height;
+      i == 0 ? line.moveTo(x, y) : line.lineTo(x, y);
+    }
+    final fill = Path.from(line)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()..color = AppTheme.accent.withValues(alpha: 0.18),
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = AppTheme.accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PreviewLinePainter old) => false;
 }
