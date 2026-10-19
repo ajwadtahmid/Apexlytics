@@ -69,3 +69,6 @@ android/app/release.keystore
 .secrets/
 secrets/
 .gradle/local.properties
+
+# Local assistant notes, not for the repo
+CLAUDE.local.md

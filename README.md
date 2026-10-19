@@ -102,7 +102,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **Ranked Breakdown** (the Stats tab): a full ranked deep-dive built from the matches Apexlytics records for you, with a split and week picker. Its four tabs:
   - **Overview**: your account, the chosen split or week (summary, RP chart and stats), highlights such as your best and worst legends, and a "Dig deeper" grid that opens the pages below. A first-run preview shows what it will look like while you wait for a first game.
   - **Legends** and **Maps**: per-legend and per-map breakdown tables.
-  - **Games**: your match history, with per-match corrections and the option to exclude a game from every calculation.
+  - **Games**: your match history, with per-match corrections. Filter it by legend, map, date and RP change; long-press a game to select several and exclude or include them from every calculation at once.
 - **Dig deeper pages**:
   - **All Trackers**: every legend's trackers, with filter and sort.
   - **Legend × Map**: a matrix of legend and map results, with an All row and column and sorting.
@@ -118,7 +118,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **Gun Stats**: Detailed weapon performance including kills, damage, and damage per kill.
 - **Map Rotations**: Live countdown for Ranked, Pubs, Mixtape, and Wildcard. Shows current map, time remaining, and what loads next. Switches automatically when the rotation changes.
 - **Predator Cutoff**: Current minimum RP to reach Apex Predator on PC, PlayStation, Xbox, and Switch. Your saved player's platform is highlighted, and the Home tile shows its cutoff.
-- **Server Status**: Health of Origin Login, EA Accounts, Nova Fusion, and Apex Crossplay. Drill down to see per-region latency in milliseconds, color-coded green/orange/red.
+- **Server Status**: Health of Origin Login, EA Accounts, Nova Fusion, and Apex Crossplay. Drill down to see per-region latency in milliseconds, color-coded green/orange/red. An "Apexlytics Servers" card shows whether the app's own primary and backup servers are up, with their response times.
 - **Latest News**: Links to the official Apex news page.
 - **Player Compare**: Side-by-side comparison of ranked stats or per-legend trackers with any searched player.
 - **Search & Favorites**: Look up any player by name or numeric UID, on any platform, from the Search tab. Star players to keep them as favorite cards, and see your recent searches. Swipe or long-press a favorite to remove it (with Undo) or open it on apexlegendsstatus.com. If a name isn't found, retry it on another platform in one tap.
@@ -164,6 +164,11 @@ data soon.
 
 Tracking is forward-only: only matches played after you start tracking are
 recorded, so earlier matches can't be pulled in retroactively.
+
+On iPhone, **Low Power Mode** stops Keep screen on from working: the screen
+still locks after about 30 seconds and tracking pauses with it. Apexlytics
+shows a notice in Settings and a banner on Home and Stats while it's on, so
+turn Low Power Mode off for a long session.
 
 ---
 
@@ -226,14 +231,19 @@ dart run build_runner build --delete-conflicting-outputs
 Your proxy server must implement these endpoints:
 
 - **`GET /maprotation`**: Returns current and next map rotations for Ranked, Pubs, Mixtape, and Wildcards
-- **`GET /player/:platform/:playerName`**: Returns player stats (rank, RP, legend data, trackers)
+- **`GET /maps`**: Returns the Ranked and Pubs map pool for the season (an empty list is accepted)
+- **`GET /player?player=<name>&platform=<platform>`**: Returns player stats (rank, RP, legend data, trackers) by in-game name
+- **`GET /player/uid?uid=<uid>&platform=<platform>`**: The same by numeric UID, which the app prefers for saved profiles
 - **`GET /predator`**: Returns current Apex Predator RP cutoff per platform
 - **`GET /servers`**: Returns server status (login, EA accounts, crossplay health)
-- **`GET /news`**: Returns official Apex Legends news feed
+- **`GET /news`**: Returns the news feed. An empty list is fine: the app always shows a pinned link to the official news page
 - **`GET /games`**: Returns ranked match history for a UID (used by Ranked Breakdown). Budgeted upstream; returns `202` with a `status`/`retryAfterSeconds` body when the request is queued or the player isn't being tracked yet, instead of `200` with match data
 - **`GET /games/eligibility`**: Returns whether match history is currently accruing for a UID, without spending a `/games` request
+- **`GET /games/capacity`**: Returns the hourly `/games` budget (`maxPerHour`, `used`, `free`, `windowResetsAt`, `waitlistDepth`, `locked`). Optional: the app falls back to generic wording without it
+- **`GET /healthz`**: Public liveness check, answered without a token. The Server Status page calls it on the primary and backup servers directly
+- **`GET /owner/verify`**: Optional. Only the app's owner mode calls it; leave it out otherwise
 
-All requests must include the `x-client-token` header with your `CLIENT_TOKEN` value.
+All requests except `/healthz` must include the `x-client-token` header with your `CLIENT_TOKEN` value.
 
 
 ## Data & Privacy
@@ -311,6 +321,7 @@ No. Just search for any public player by name or UID.
 ## Known Limitations
 
 - **RP snapshots**: Only tracks if app is open and sync is completed. RP gains when app is closed are not captured.
+- **Low Power Mode (iOS)**: Keep screen on can't hold the screen awake while Low Power Mode is on, so tracking can pause when the screen locks. The app warns you while it's on.
 - **Ranked Breakdown tracking**: Only records matches while Apexlytics (or your profile page on apexlegendsstatus.com) is open, and only from the point tracking starts; earlier matches can't be recovered. A shared API budget across all users can briefly delay a new profile's tracking with a "Server busy" state. See the [Ranked Breakdown Guide](#ranked-breakdown-guide).
 - **Legend stats**: Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
 - **Predator cutoff**: Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.
