@@ -210,68 +210,6 @@ class _CompactLegend extends StatelessWidget {
               ),
               const SizedBox(width: AppTheme.sm),
               Expanded(
-                // Same top and bottom inset as the pill column, so the name sits
-                // on the pill's line and the stats at the card's lower edge.
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppTheme.sm),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // As tall as the pill, so the two centre on one line.
-                      SizedBox(
-                        height: pillHeight,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            breakdown.legend,
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          children: [
-                            _HighlightStat(
-                              label: 'Total RP',
-                              value: formatSignedInt(breakdown.totalRp),
-                              color: AppTheme.signColor(breakdown.totalRp >= 0),
-                              compact: true,
-                            ),
-                            _HighlightStat(
-                              label: 'Avg Kills',
-                              value: formatAvgKills(breakdown.avgKills),
-                              compact: true,
-                            ),
-                            _HighlightStat(
-                              label: 'Avg Dmg',
-                              value: formatAvgDamage(breakdown.avgDamage),
-                              compact: true,
-                            ),
-                            _HighlightStat(
-                              label: 'Games',
-                              value: '${breakdown.games}',
-                              compact: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppTheme.sm),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: constraints.maxWidth * 0.4,
-                ),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
                     0,
@@ -280,18 +218,80 @@ class _CompactLegend extends StatelessWidget {
                     AppTheme.sm,
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      // The ranking metric, so the pill and the order agree.
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: RpPill.perGame(avgRp: breakdown.avgRpPerGame),
+                      // The name and the pill share the top line, so the stats
+                      // below get the card's whole width to themselves.
+                      ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: pillHeight),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                breakdown.legend,
+                                style: const TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: AppTheme.sm),
+                            // The ranking metric, so the pill and the order
+                            // agree. Capped so it can't squeeze the name.
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: constraints.maxWidth * 0.4,
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: RpPill.perGame(
+                                  avgRp: breakdown.avgRpPerGame,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 18,
-                        color: AppTheme.muted,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                children: [
+                                  _HighlightStat(
+                                    label: 'Total RP',
+                                    value: formatSignedInt(breakdown.totalRp),
+                                    color: AppTheme.signColor(
+                                      breakdown.totalRp >= 0,
+                                    ),
+                                  ),
+                                  _HighlightStat(
+                                    label: 'Avg Kills',
+                                    value: formatAvgKills(breakdown.avgKills),
+                                  ),
+                                  _HighlightStat(
+                                    label: 'Avg Dmg',
+                                    value: formatAvgDamage(breakdown.avgDamage),
+                                  ),
+                                  _HighlightStat(
+                                    label: 'Games',
+                                    value: '${breakdown.games}',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right,
+                            size: 18,
+                            color: AppTheme.muted,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -437,14 +437,12 @@ class _HighlightStat extends StatelessWidget {
   final String value;
   final Color? color;
   final bool onImage; // white text over map art vs. themed text on a plain card
-  final bool compact; // smaller text for the legend row vs. the map banner
 
   const _HighlightStat({
     required this.label,
     required this.value,
     this.color,
     this.onImage = false,
-    this.compact = false,
   });
 
   @override
@@ -452,7 +450,7 @@ class _HighlightStat extends StatelessWidget {
     final labelColor = onImage ? Colors.white60 : AppTheme.muted;
     final valueColor = color ?? (onImage ? Colors.white : AppTheme.textPrimary);
     return Padding(
-      padding: EdgeInsets.only(right: compact ? AppTheme.sm : AppTheme.md),
+      padding: const EdgeInsets.only(right: AppTheme.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -470,7 +468,7 @@ class _HighlightStat extends StatelessWidget {
             value,
             style: TextStyle(
               color: valueColor,
-              fontSize: compact ? 12 : 14,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
