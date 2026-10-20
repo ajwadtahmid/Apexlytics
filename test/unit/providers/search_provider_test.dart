@@ -8,6 +8,8 @@ import 'package:apexlytics/providers/search_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/utils/error_messages.dart' show AppException;
 
+import '../../helpers.dart';
+
 void main() {
   late SharedPreferences prefs;
 
@@ -348,6 +350,178 @@ void main() {
       final state = container.read(searchStateProvider);
       expect(state.favorites, isEmpty);
       expect(state.recents, [player(1)]);
+    });
+  });
+  group('favorite snapshots', () {
+    late ProviderContainer container;
+    late SearchNotifier notifier;
+
+    const alpha = PlayerRef(query: 'Alpha', platform: 'PC', uid: '1');
+
+    PlayerSnapshot? kept(String uid) => container
+        .read(searchStateProvider)
+        .favorites
+        .firstWhere((f) => f.uid == uid)
+        .snapshot;
+
+    setUp(() {
+      container = ProviderContainer(
+        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      );
+      addTearDown(container.dispose);
+      notifier = container.read(searchStateProvider.notifier);
+    });
+
+    test('round-trip through the saved JSON', () {
+      final ref = alpha.withSnapshot(
+        PlayerSnapshot(
+          name: 'Alpha',
+          rank: 'Master',
+          rankScore: 52671,
+          savedAt: DateTime.fromMillisecondsSinceEpoch(1700000000000),
+        ),
+      );
+
+      final back = PlayerRef.fromJson(
+        jsonDecode(jsonEncode(ref.toJson())) as Map<String, dynamic>,
+      );
+
+      expect(back.snapshot, ref.snapshot);
+    });
+
+    test('a favorite saved without one still loads, with none', () {
+      final ref = PlayerRef.fromJson({
+        'query': 'Alpha',
+        'platform': 'PC',
+        'uid': '1',
+      });
+
+      expect(ref.snapshot, isNull);
+      expect(ref.toJson().containsKey('snapshot'), isFalse);
+    });
+
+    test('a damaged one reads as none instead of dropping the favorite', () {
+      for (final bad in <Object?>[
+        'text',
+        {'name': 'Alpha'},
+        {'name': 'Alpha', 'rank': 'Gold', 'rp': 'x', 'at': 1},
+      ]) {
+        final ref = PlayerRef.fromJson({
+          'query': 'Alpha',
+          'platform': 'PC',
+          'uid': '1',
+          'snapshot': bad,
+        });
+        expect(ref.query, 'Alpha', reason: '$bad');
+        expect(ref.snapshot, isNull, reason: '$bad');
+      }
+    });
+
+    test('a lookup of a favorite is kept, and saved', () async {
+      await notifier.toggleFavorite(alpha);
+
+      await notifier.updateSnapshot(
+        'PC',
+        buildStats(name: 'Alpha', uid: '1', rank: 'Diamond', rankScore: 11000),
+      );
+
+      final snapshot = kept('1')!;
+      expect(snapshot.rank, 'Diamond');
+      expect(snapshot.rankScore, 11000);
+      final saved =
+          jsonDecode(prefs.getString(PrefsKeys.searchFavorites)!) as List;
+      expect(
+        PlayerRef.fromJson(saved.single as Map<String, dynamic>).snapshot,
+        snapshot,
+      );
+    });
+
+    test(
+      'is told to listeners, though the favorite is the same player',
+      () async {
+        await notifier.toggleFavorite(alpha);
+        final before = container.read(searchStateProvider);
+
+        await notifier.updateSnapshot(
+          'PC',
+          buildStats(name: 'Alpha', uid: '1'),
+        );
+
+        expect(container.read(searchStateProvider), isNot(before));
+      },
+    );
+
+    test('a player who is not a favorite is not stored', () async {
+      await notifier.toggleFavorite(alpha);
+
+      await notifier.updateSnapshot('PC', buildStats(name: 'Zed', uid: '9'));
+
+      expect(
+        prefs.getString(PrefsKeys.searchFavorites),
+        isNot(contains('Zed')),
+      );
+      expect(kept('1'), isNull);
+    });
+
+    test('a recent lookup is not given one', () async {
+      await notifier.recordRecent(alpha);
+
+      await notifier.updateSnapshot('PC', buildStats(name: 'Alpha', uid: '1'));
+
+      expect(
+        container.read(searchStateProvider).recents.single.snapshot,
+        isNull,
+      );
+    });
+
+    test('an older reading never replaces a newer one', () async {
+      await notifier.toggleFavorite(alpha);
+      final now = DateTime.now();
+      await notifier.updateSnapshot(
+        'PC',
+        buildStats(name: 'Alpha', uid: '1', rankScore: 5000),
+        at: now,
+      );
+
+      await notifier.updateSnapshot(
+        'PC',
+        buildStats(name: 'Alpha', uid: '1', rankScore: 4000),
+        at: now.subtract(const Duration(days: 2)),
+      );
+
+      expect(kept('1')!.rankScore, 5000);
+
+      await notifier.updateSnapshot(
+        'PC',
+        buildStats(name: 'Alpha', uid: '1', rankScore: 6000),
+        at: now.add(const Duration(minutes: 1)),
+      );
+
+      expect(kept('1')!.rankScore, 6000);
+    });
+
+    test('is found by name for a favorite saved before it had a UID', () async {
+      await notifier.toggleFavorite(
+        const PlayerRef(query: 'alpha', platform: 'PC'),
+      );
+
+      await notifier.updateSnapshot('PC', buildStats(name: 'Alpha', uid: '1'));
+
+      expect(
+        container.read(searchStateProvider).favorites.single.snapshot,
+        isNotNull,
+      );
+    });
+
+    test('survives the name being brought up to date', () async {
+      await notifier.toggleFavorite(alpha);
+      await notifier.updateSnapshot('PC', buildStats(name: 'Alpha', uid: '1'));
+
+      await notifier.syncDisplayName('1', 'AlphaRenamed');
+
+      final favorite = container.read(searchStateProvider).favorites.single;
+      expect(favorite.query, 'AlphaRenamed');
+      expect(favorite.snapshot, isNotNull);
     });
   });
 }

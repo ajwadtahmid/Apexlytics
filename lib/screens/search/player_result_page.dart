@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,10 +57,16 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
         searchByUid: widget.searchByUid,
       )),
       (_, next) {
-        // Only a lookup that found someone, so a typo never lands in the list.
-        if (_recorded) return;
         if (next case AsyncData<ApiResult<PlayerStats>>(:final value)) {
+          // Only a lookup that found someone, so a typo never lands in the list.
           if (value.data.uid.isEmpty) return;
+          // A favorite's card keeps the newest figures seen, on every load.
+          unawaited(
+            ref
+                .read(searchStateProvider.notifier)
+                .updateSnapshot(widget.platform, value.data, at: value.staleAt),
+          );
+          if (_recorded) return;
           _recorded = true;
           ref
               .read(searchStateProvider.notifier)
@@ -180,6 +188,10 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
                           platform: widget.platform,
                           uid: stats.uid.isNotEmpty ? stats.uid : null,
                           searchedByUid: widget.searchByUid,
+                          snapshot: PlayerSnapshot.of(
+                            stats,
+                            at: statsAsync.value?.staleAt,
+                          ),
                         ),
                       );
                 } on AppException catch (e) {

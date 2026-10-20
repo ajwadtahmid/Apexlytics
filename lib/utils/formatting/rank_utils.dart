@@ -33,16 +33,25 @@ bool isApexPredatorRp(int rp, int? cutoff) {
 
 /// Returns the display label for [stats.rank], using the Apex Predator
 /// constant when the rank string matches it.
-String rankLabel(PlayerStats stats) => stats.rank == kApexPredatorRank
+String rankLabel(PlayerStats stats) =>
+    rankLabelFor(stats.rank, stats.rankScore);
+
+/// [rankLabel] from a stored rank name and RP, for a player whose full stats
+/// aren't to hand.
+String rankLabelFor(String rank, int rankScore) => rank == kApexPredatorRank
     ? kApexPredatorRank
-    : kRankLadder[rankIndex(stats.rankScore)].label;
+    : kRankLadder[rankIndex(rankScore)].label;
 
 /// Returns the asset path for the rank icon associated with [stats.rank].
 ///
 /// Null when the tier has no bundled art (Rookie): show no badge.
-String? rankAssetPath(PlayerStats stats) {
-  if (stats.rank == kApexPredatorRank) return kPredatorBadgeAsset;
-  return kRankLadder[rankIndex(stats.rankScore)].assetPath;
+String? rankAssetPath(PlayerStats stats) =>
+    rankAssetPathFor(stats.rank, stats.rankScore);
+
+/// [rankAssetPath] from a stored rank name and RP.
+String? rankAssetPathFor(String rank, int rankScore) {
+  if (rank == kApexPredatorRank) return kPredatorBadgeAsset;
+  return kRankLadder[rankIndex(rankScore)].assetPath;
 }
 
 /// Returns the asset path for a rank tier given predator status and rank index.

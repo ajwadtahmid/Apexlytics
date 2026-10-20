@@ -8,10 +8,12 @@ import '../../models/player_stats.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/player_provider.dart';
 import '../../providers/search_provider.dart';
+import '../../utils/api_cache.dart' show ApiResult;
 import '../../utils/error_messages.dart' show AppException;
-import '../../utils/formatting/format.dart' show formatNumber;
+import '../../utils/formatting/format.dart' show formatNumber, timeAgo;
 import '../../utils/formatting/platform_utils.dart' show platformIconFor;
-import '../../utils/formatting/rank_utils.dart' show rankAssetPath, rankLabel;
+import '../../utils/formatting/rank_utils.dart'
+    show rankAssetPathFor, rankLabelFor;
 import '../../utils/formatting/search_utils.dart';
 import '../../utils/navigation_utils.dart' show openExternalLink;
 import '../../utils/notifications.dart';
@@ -71,13 +73,18 @@ class FavoritesPane extends ConsumerWidget {
     }
   }
 
+  /// Saves [player], with whatever its card was showing, so the favorite's
+  /// card has something to show from the start.
   Future<void> _addFavorite(
     BuildContext context,
     WidgetRef ref,
     PlayerRef player,
+    PlayerSnapshot? shown,
   ) async {
     try {
-      await ref.read(searchStateProvider.notifier).toggleFavorite(player);
+      await ref
+          .read(searchStateProvider.notifier)
+          .toggleFavorite(player.withSnapshot(shown));
     } on AppException catch (e) {
       if (context.mounted) context.showMessage(e.message);
     }
@@ -217,7 +224,7 @@ class FavoritesPane extends ConsumerWidget {
                 child: _PlayerCard(
                   playerRef: r,
                   onTap: () => onPick(r),
-                  onFavorite: () => _addFavorite(context, ref, r),
+                  onFavorite: (shown) => _addFavorite(context, ref, r, shown),
                 ),
               ),
             ),
@@ -287,8 +294,9 @@ class _PlayerCard extends ConsumerWidget {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
-  /// When set, a star at the end of the card that saves the player.
-  final VoidCallback? onFavorite;
+  /// When set, a star at the end of the card that saves the player. Told what
+  /// the card is showing of them, if anything.
+  final ValueChanged<PlayerSnapshot?>? onFavorite;
 
   const _PlayerCard({
     required this.playerRef,
@@ -304,15 +312,24 @@ class _PlayerCard extends ConsumerWidget {
     return playerSessionKey(playerRef.platform, playerRef.query);
   }
 
-  /// Returns cached stats or null if not available.
-  PlayerStats? _getCachedStats(WidgetRef ref) {
-    final service = ref.watch(playerServiceProvider);
+  /// The newest the cache or the favorite itself has of the player, however
+  /// old: a card with old figures and their age says more than a blank one.
+  PlayerSnapshot? _lastKnown(WidgetRef ref) {
     final byUid = playerRef.hasUid;
-    final query = byUid ? playerRef.uid! : playerRef.query;
-
-    return service
-        .getCachedStats(query, playerRef.platform, searchByUid: byUid)
-        ?.data;
+    final cached = ref
+        .watch(playerServiceProvider)
+        .getCachedStats(
+          byUid ? playerRef.uid! : playerRef.query,
+          playerRef.platform,
+          searchByUid: byUid,
+          allowStale: true,
+        );
+    final fromCache = cached == null
+        ? null
+        : PlayerSnapshot.of(cached.data, at: cached.staleAt);
+    final kept = playerRef.snapshot;
+    if (fromCache == null || kept == null) return fromCache ?? kept;
+    return kept.savedAt.isAfter(fromCache.savedAt) ? kept : fromCache;
   }
 
   @override
@@ -320,8 +337,8 @@ class _PlayerCard extends ConsumerWidget {
     final synced = ref.watch(sessionRefreshedProvider).contains(_sessionKey());
 
     // What is known of the player, and how far to trust it: this session's
-    // lookup once it has run, otherwise whatever was cached.
-    PlayerStats? stats;
+    // lookup once it has run, otherwise whatever was kept.
+    ApiResult<PlayerStats>? live;
     var failed = false;
     if (synced) {
       final byUid = playerRef.hasUid;
@@ -332,17 +349,19 @@ class _PlayerCard extends ConsumerWidget {
           searchByUid: byUid,
         )),
       );
-      stats = statsAsync.whenOrNull(data: (result) => result.data);
+      live = statsAsync.whenOrNull(data: (result) => result);
       failed = statsAsync.hasError;
-    } else {
-      stats = _getCachedStats(ref);
     }
+    final shown = live != null
+        ? PlayerSnapshot.of(live.data, at: live.staleAt)
+        : _lastKnown(ref);
+    final age = live == null && shown != null ? _ageOf(shown) : null;
 
     // Presence is only known from a lookup made this session.
     final dot = failed
         ? AppTheme.red
-        : synced && stats != null
-        ? playerPresenceColor(stats)
+        : live != null
+        ? playerPresenceColor(live.data)
         : AppTheme.muted;
 
     return Material(
@@ -365,7 +384,9 @@ class _PlayerCard extends ConsumerWidget {
           child: Row(
             children: [
               _Avatar(
-                rankAsset: stats == null ? null : rankAssetPath(stats),
+                rankAsset: shown == null
+                    ? null
+                    : rankAssetPathFor(shown.rank, shown.rankScore),
                 presence: dot,
               ),
               const SizedBox(width: AppTheme.md),
@@ -374,7 +395,7 @@ class _PlayerCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      stats?.name ?? playerRef.query,
+                      shown?.name ?? playerRef.query,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -385,19 +406,22 @@ class _PlayerCard extends ConsumerWidget {
                     const SizedBox(height: 2),
                     _Subtitle(
                       platform: playerRef.platform,
-                      rank: stats == null ? null : rankLabel(stats),
+                      rank: shown == null
+                          ? null
+                          : rankLabelFor(shown.rank, shown.rankScore),
+                      age: age,
                       failed: failed,
                     ),
                   ],
                 ),
               ),
-              if (stats != null) ...[
+              if (shown != null) ...[
                 const SizedBox(width: AppTheme.sm),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      formatNumber(stats.rankScore),
+                      formatNumber(shown.rankScore),
                       style: const TextStyle(
                         color: AppTheme.accent,
                         fontWeight: FontWeight.bold,
@@ -413,7 +437,7 @@ class _PlayerCard extends ConsumerWidget {
                 IconButton(
                   icon: const Icon(Icons.star_border, color: AppTheme.accent),
                   tooltip: 'Add to favorites',
-                  onPressed: onFavorite,
+                  onPressed: () => onFavorite!(shown),
                   visualDensity: VisualDensity.compact,
                 ),
               ],
@@ -424,6 +448,12 @@ class _PlayerCard extends ConsumerWidget {
     );
   }
 }
+
+/// How old [shown] is, once that is worth saying: a day or more.
+String? _ageOf(PlayerSnapshot shown) =>
+    DateTime.now().difference(shown.savedAt) >= const Duration(days: 1)
+    ? timeAgo(shown.savedAt)
+    : null;
 
 /// A favorite's rank badge, with its presence dot on the corner. Without a
 /// rank to show (nothing looked up yet), a plain person icon holds the place.
@@ -477,10 +507,14 @@ class _Avatar extends StatelessWidget {
 class _Subtitle extends StatelessWidget {
   final String platform;
   final String? rank;
+
+  /// How old the figures are, when old enough to say.
+  final String? age;
   final bool failed;
   const _Subtitle({
     required this.platform,
     required this.rank,
+    required this.age,
     required this.failed,
   });
 
@@ -495,9 +529,7 @@ class _Subtitle extends StatelessWidget {
           child: Text(
             failed
                 ? 'Failed to load'
-                : rank == null
-                ? ApiConstants.labelFor(platform)
-                : '${ApiConstants.labelFor(platform)} · $rank',
+                : [ApiConstants.labelFor(platform), ?rank, ?age].join(' · '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: failed

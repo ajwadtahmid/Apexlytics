@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/api_provider.dart';
 import '../../providers/player_provider.dart';
+import '../../providers/search_provider.dart';
 import '../../services/player_service.dart';
 import '../app_logger.dart';
 
@@ -66,6 +67,16 @@ Future<bool> refreshAndMarkSynced(
     // The request failed and the service fell back to the cached copy:
     // nothing was fetched, so the player is not synced.
     if (result.staleAt != null) return false;
+
+    // A favorite's card keeps what this lookup found, for when the cache no
+    // longer has it.
+    try {
+      await ref
+          .read(searchStateProvider.notifier)
+          .updateSnapshot(platform, result.data);
+    } catch (e) {
+      log.w('Favorite snapshot not saved', error: e);
+    }
 
     // Mark this player as synced so the favorites list shows live status.
     final stats = ref

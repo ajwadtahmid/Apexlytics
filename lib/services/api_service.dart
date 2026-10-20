@@ -77,13 +77,16 @@ class ApiService {
   ({int entries, int bytes}) get cacheUsage => _cache.usage;
 
   /// Returns cached data synchronously without making a network request.
-  /// Returns null if no valid cache entry exists.
+  /// Returns null if no valid cache entry exists. With [allowStale] an entry
+  /// past its TTL is returned too, for a caller that would rather show old data
+  /// than none.
   ApiResult<Map<String, dynamic>>? loadCached(
     String endpoint, {
     Map<String, dynamic>? params,
+    bool allowStale = false,
   }) {
     final key = _buildCacheKey(endpoint, params);
-    final cached = _cache.load(key);
+    final cached = allowStale ? _cache.loadStale(key) : _cache.load(key);
     if (cached == null) return null;
     // Expose the save timestamp so callers can show "cached X ago" to the user.
     return ApiResult(

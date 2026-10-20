@@ -65,10 +65,12 @@ class PlayerService {
   /// Returns cached stats without a network request, or null if no cache.
   /// When [searchByUid] is true, looks up the UID-based cache endpoint.
   /// When [searchByUid] is false, looks up the name-based cache endpoint.
+  /// An entry past its TTL counts as a miss unless [allowStale] is set.
   ApiResult<PlayerStats>? getCachedStats(
     String query,
     String platform, {
     bool searchByUid = false,
+    bool allowStale = false,
   }) {
     log.d('Cache lookup: byUid=$searchByUid [$platform]');
     final endpoint = searchByUid
@@ -80,7 +82,11 @@ class PlayerService {
         ? {'uid': query, 'platform': platform}
         : {'player': _cacheName(query), 'platform': platform};
 
-    final result = _api.loadCached(endpoint, params: params);
+    final result = _api.loadCached(
+      endpoint,
+      params: params,
+      allowStale: allowStale,
+    );
     if (result == null) {
       log.d('Cache miss');
       return null;

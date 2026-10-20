@@ -92,6 +92,34 @@ void main() {
     expect(api.loadCached('/player/uid', params: {'uid': '1'}), isNull);
   });
 
+  test('loadCached serves an expired entry only when asked to', () async {
+    final store = ApiCacheStore(
+      overridePath:
+          'file:api_service_test_${dbCounter++}?mode=memory&cache=shared',
+    );
+    final old = DateTime.now().subtract(const Duration(hours: 25));
+    await store.upsert(
+      '/player/uid?uid=1',
+      '{"name":"Someone"}',
+      old.millisecondsSinceEpoch,
+    );
+    final api = ApiService(store);
+    // The cache fills from disk in the background.
+    for (var i = 0; i < 100; i++) {
+      if (api.cacheUsage.entries > 0) break;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    expect(api.loadCached('/player/uid', params: {'uid': '1'}), isNull);
+    final stale = api.loadCached(
+      '/player/uid',
+      params: {'uid': '1'},
+      allowStale: true,
+    );
+    expect(stale?.data['name'], 'Someone');
+    expect(stale?.staleAt?.millisecondsSinceEpoch, old.millisecondsSinceEpoch);
+  });
+
   group('falling back to the stale cached copy', () {
     // One ApiService: 200 first (filling the cache), then whatever [next] says.
     Future<ApiService> primed(ResponseBody Function() next) async {

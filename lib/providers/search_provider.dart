@@ -11,8 +11,76 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/api_constants.dart';
 import '../constants/prefs_keys.dart';
+import '../models/player_stats.dart';
 import '../utils/error_messages.dart' show AppException;
 import 'settings_provider.dart';
+
+/// What a favorite's card shows of a player (name, rank and RP) as of the last
+/// time they were looked up. Kept with the favorite so the card still has
+/// something to show once the cached response has expired or been evicted.
+class PlayerSnapshot {
+  final String name;
+  final String rank;
+  final int rankScore;
+  final DateTime savedAt;
+
+  const PlayerSnapshot({
+    required this.name,
+    required this.rank,
+    required this.rankScore,
+    required this.savedAt,
+  });
+
+  /// [at] is when [stats] were fetched; now when omitted. Kept to the
+  /// millisecond, as it is saved, so a snapshot equals its saved copy.
+  factory PlayerSnapshot.of(PlayerStats stats, {DateTime? at}) =>
+      PlayerSnapshot(
+        name: stats.name,
+        rank: stats.rank,
+        rankScore: stats.rankScore,
+        savedAt: DateTime.fromMillisecondsSinceEpoch(
+          (at ?? DateTime.now()).millisecondsSinceEpoch,
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'rank': rank,
+    'rp': rankScore,
+    'at': savedAt.millisecondsSinceEpoch,
+  };
+
+  /// Null for anything that isn't a whole snapshot, so a damaged entry reads
+  /// as having none.
+  static PlayerSnapshot? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final name = json['name'];
+    final rank = json['rank'];
+    final rp = json['rp'];
+    final at = json['at'];
+    if (name is! String || rank is! String || rp is! num || at is! num) {
+      return null;
+    }
+    return PlayerSnapshot(
+      name: name,
+      rank: rank,
+      rankScore: rp.toInt(),
+      savedAt: DateTime.fromMillisecondsSinceEpoch(at.toInt()),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlayerSnapshot &&
+          other.name == name &&
+          other.rank == rank &&
+          other.rankScore == rankScore &&
+          other.savedAt == savedAt;
+
+  @override
+  int get hashCode => Object.hash(name, rank, rankScore, savedAt);
+}
 
 /// A reference to a previously searched player, used as both a favorites entry
 /// and a search parameter. Always prefer UID-based lookups when [hasUid] is true,
@@ -23,12 +91,25 @@ class PlayerRef {
   final String? uid;
   final bool searchedByUid;
 
+  /// The last stats seen for a favorite; null for recents and for favorites
+  /// saved before this was kept.
+  final PlayerSnapshot? snapshot;
+
   const PlayerRef({
     required this.query,
     required this.platform,
     this.uid,
     this.searchedByUid = false,
+    this.snapshot,
   });
+
+  PlayerRef withSnapshot(PlayerSnapshot? snapshot) => PlayerRef(
+    query: query,
+    platform: platform,
+    uid: uid,
+    searchedByUid: searchedByUid,
+    snapshot: snapshot,
+  );
 
   /// True when a UID is available for this player, regardless of how they were
   /// originally searched. Prefer UID-based lookups whenever this is true.
@@ -39,6 +120,7 @@ class PlayerRef {
     'platform': platform,
     'uid': uid,
     if (searchedByUid) 'byUid': true,
+    if (snapshot != null) 'snapshot': snapshot!.toJson(),
   };
 
   factory PlayerRef.fromJson(Map<String, dynamic> json) => PlayerRef(
@@ -46,10 +128,13 @@ class PlayerRef {
     platform: json['platform'] as String? ?? ApiConstants.defaultPlatform,
     uid: json['uid'] as String?,
     searchedByUid: json['byUid'] as bool? ?? false,
+    snapshot: PlayerSnapshot.fromJson(json['snapshot']),
   );
 
-  // searchedByUid is intentionally excluded from equality and hash: two entries for
-  // the same player deduplicate regardless of how they were searched (by name or UID).
+  // searchedByUid and snapshot are intentionally excluded from equality and hash:
+  // two entries for the same player deduplicate regardless of how they were
+  // searched (by name or UID) or what was last seen of them. [SearchState]
+  // compares snapshots itself, so an update still reaches the favorites list.
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -89,12 +174,22 @@ class SearchState {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is SearchState &&
-          listEquals(other.favorites, favorites) &&
+          _sameFavorites(other.favorites, favorites) &&
           listEquals(other.recents, recents);
 
+  static bool _sameFavorites(List<PlayerRef> a, List<PlayerRef> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i] || a[i].snapshot != b[i].snapshot) return false;
+    }
+    return true;
+  }
+
   @override
-  int get hashCode =>
-      Object.hash(Object.hashAll(favorites), Object.hashAll(recents));
+  int get hashCode => Object.hash(
+    Object.hashAll([for (final f in favorites) Object.hash(f, f.snapshot)]),
+    Object.hashAll(recents),
+  );
 }
 
 class SearchNotifier extends Notifier<SearchState> {
@@ -185,12 +280,37 @@ class SearchNotifier extends Notifier<SearchState> {
             platform: f.platform,
             uid: uid,
             searchedByUid: f.searchedByUid,
+            snapshot: f.snapshot,
           );
           changed = true;
         }
       }
     }
     if (!changed) return;
+    await _save(PrefsKeys.searchFavorites, favorites);
+    state = state.copyWith(favorites: favorites);
+  }
+
+  /// Records [stats], fetched at [at] (now when omitted), as what is known of
+  /// the matching favorite. Does nothing when that player isn't a favorite, or
+  /// when a newer snapshot is already kept, so a cached read never replaces a
+  /// live one.
+  Future<void> updateSnapshot(
+    String platform,
+    PlayerStats stats, {
+    DateTime? at,
+  }) async {
+    if (stats.uid.isEmpty) return;
+    final snapshot = PlayerSnapshot.of(stats, at: at);
+    final favorites = List<PlayerRef>.from(state.favorites);
+    final idx = _favoriteIndex(
+      favorites,
+      PlayerRef(query: stats.name, platform: platform, uid: stats.uid),
+    );
+    if (idx < 0) return;
+    final kept = favorites[idx].snapshot;
+    if (kept != null && !snapshot.savedAt.isAfter(kept.savedAt)) return;
+    favorites[idx] = favorites[idx].withSnapshot(snapshot);
     await _save(PrefsKeys.searchFavorites, favorites);
     state = state.copyWith(favorites: favorites);
   }

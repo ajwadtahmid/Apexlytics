@@ -1,5 +1,7 @@
 import 'package:apexlytics/providers/api_provider.dart';
 import 'package:apexlytics/providers/player_provider.dart';
+import 'package:apexlytics/providers/search_provider.dart';
+import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/services/api_service.dart';
 import 'package:apexlytics/services/player_service.dart';
 import 'package:apexlytics/utils/formatting/search_utils.dart';
@@ -8,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers.dart';
 
@@ -140,7 +143,13 @@ void main() {
     late MockPlayerService service;
     late ProviderContainer container;
 
-    setUp(() {
+    setUp(() async {
+      // One favorite, the player these lookups are for.
+      SharedPreferences.setMockInitialValues({
+        'search_favorites':
+            '[{"query":"TestPlayer","platform":"PC","uid":"uid123"}]',
+      });
+      final prefs = await SharedPreferences.getInstance();
       service = MockPlayerService();
       // The cache always answers with its save time, as the real one does.
       when(
@@ -151,7 +160,10 @@ void main() {
         ),
       ).thenReturn(ApiResult(buildStats(rankScore: 1000), staleAt: cachedAt));
       container = ProviderContainer(
-        overrides: [playerServiceProvider.overrideWithValue(service)],
+        overrides: [
+          playerServiceProvider.overrideWithValue(service),
+          sharedPreferencesProvider.overrideWithValue(prefs),
+        ],
       );
       addTearDown(container.dispose);
       // Keep the provider alive across the refresh, as an open result page does.
@@ -160,9 +172,9 @@ void main() {
     });
 
     testWidgets('a live answer replaces the cached, stale one', (tester) async {
-      when(() => service.getPlayerStatsByUid(any(), any())).thenAnswer(
-        (_) async => ApiResult(buildStats(rankScore: 1100)),
-      );
+      when(
+        () => service.getPlayerStatsByUid(any(), any()),
+      ).thenAnswer((_) async => ApiResult(buildStats(rankScore: 1100)));
       final ref = await refFrom(tester, container);
       await tester.runAsync(() async {
         final first = await container.read(searchPlayerProvider(params).future);
@@ -177,6 +189,61 @@ void main() {
       final after = container.read(searchPlayerProvider(params)).requireValue;
       expect(after.staleAt, isNull);
       expect(after.data.rankScore, 1100);
+    });
+
+    testWidgets('a live answer is kept on the favorite, for its card', (
+      tester,
+    ) async {
+      when(() => service.getPlayerStatsByUid(any(), any())).thenAnswer(
+        (_) async => ApiResult(buildStats(rank: 'Diamond', rankScore: 11000)),
+      );
+      final ref = await refFrom(tester, container);
+      await tester.runAsync(() async {
+        await refreshAndMarkSynced(ref, service, 'uid123', 'PC', true);
+      });
+
+      final snapshot = container
+          .read(searchStateProvider)
+          .favorites
+          .single
+          .snapshot;
+      expect(snapshot?.rankScore, 11000);
+      expect(snapshot?.rank, 'Diamond');
+    });
+
+    testWidgets('a stale fallback leaves what the favorite kept alone', (
+      tester,
+    ) async {
+      when(() => service.getPlayerStatsByUid(any(), any())).thenAnswer(
+        (_) async => ApiResult(
+          buildStats(rankScore: 1000),
+          staleAt: DateTime(2026, 10, 1, 10),
+        ),
+      );
+      final ref = await refFrom(tester, container);
+      await tester.runAsync(() async {
+        await refreshAndMarkSynced(ref, service, 'uid123', 'PC', true);
+      });
+
+      expect(
+        container.read(searchStateProvider).favorites.single.snapshot,
+        isNull,
+      );
+    });
+
+    testWidgets('a player who is not a favorite is not saved anywhere', (
+      tester,
+    ) async {
+      await container.read(searchStateProvider.notifier).clearFavorites();
+      when(
+        () => service.getPlayerStatsByUid(any(), any()),
+      ).thenAnswer((_) async => ApiResult(buildStats(rankScore: 1100)));
+      final ref = await refFrom(tester, container);
+      await tester.runAsync(() async {
+        await refreshAndMarkSynced(ref, service, 'uid123', 'PC', true);
+      });
+
+      expect(container.read(searchStateProvider).favorites, isEmpty);
     });
 
     testWidgets('a stale fallback is neither success nor "synced"', (
@@ -204,7 +271,8 @@ void main() {
     testWidgets('a stale fallback stays marked stale', (tester) async {
       final fallbackAt = DateTime(2026, 10, 1, 10);
       when(() => service.getPlayerStatsByUid(any(), any())).thenAnswer(
-        (_) async => ApiResult(buildStats(rankScore: 1000), staleAt: fallbackAt),
+        (_) async =>
+            ApiResult(buildStats(rankScore: 1000), staleAt: fallbackAt),
       );
       final ref = await refFrom(tester, container);
       await tester.runAsync(() async {
