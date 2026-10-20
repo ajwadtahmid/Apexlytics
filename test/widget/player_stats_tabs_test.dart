@@ -1,5 +1,6 @@
 import 'package:apexlytics/constants/legend_constants.dart';
 import 'package:apexlytics/constants/prefs_keys.dart';
+import 'package:apexlytics/constants/stat_icons.dart';
 import 'package:apexlytics/models/player_stats.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/utils/theme.dart';
@@ -291,6 +292,37 @@ void main() {
       expect(top(tester, 'Wraith'), lessThan(top(tester, 'Bangalore')));
       expect(prefs.getString(PrefsKeys.legendSort), 'kills');
     });
+
+    for (final (saved, icon) in [
+      ('kills', StatIcons.totalKills),
+      ('damage', StatIcons.totalDamage),
+      ('wins', StatIcons.wins),
+    ]) {
+      testWidgets('the pill wears the $saved order\'s own icon, and its '
+          'direction', (tester) async {
+        await pump(
+          tester,
+          [withKills('Bangalore', 10), withKills('Wraith', 300)],
+          saved: {PrefsKeys.legendSort: saved},
+        );
+
+        expect(find.byIcon(icon), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+        // The order's icon leads the label; the direction is at the right.
+        final pillLabel = find.descendant(
+          of: find.byType(ControlPill),
+          matching: find.text(saved[0].toUpperCase() + saved.substring(1)),
+        );
+        expect(
+          tester.getTopLeft(find.byIcon(icon)).dx,
+          lessThan(tester.getTopLeft(pillLabel).dx),
+        );
+        expect(
+          tester.getTopLeft(find.byIcon(Icons.arrow_downward)).dx,
+          greaterThan(tester.getTopLeft(pillLabel).dx),
+        );
+      });
+    }
 
     testWidgets('choosing the order in use turns it round', (tester) async {
       await pump(

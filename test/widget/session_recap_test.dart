@@ -1,8 +1,11 @@
+import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/ranked_sessions_screen.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:apexlytics/widgets/rp_pill.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../helpers.dart';
 
@@ -19,11 +22,15 @@ void main() {
     matches: const [],
   );
 
-  Future<void> pump(WidgetTester tester, RankedSession s) => tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(body: SessionRecapBody(session: s)),
-    ),
-  );
+  Future<void> pump(WidgetTester tester, RankedSession s) async =>
+      tester.pumpWidget(
+        ProviderScope(
+          overrides: [await prefsOverride()],
+          child: MaterialApp(
+            home: Scaffold(body: SessionRecapBody(session: s)),
+          ),
+        ),
+      );
 
   testWidgets('kills show no reading when no game reported them', (
     tester,
@@ -68,11 +75,14 @@ void main() {
         ),
     ]).single;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(32),
-            child: SessionRecapBody(session: played),
+      ProviderScope(
+        overrides: [await prefsOverride()],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Padding(
+              padding: const EdgeInsets.all(32),
+              child: SessionRecapBody(session: played),
+            ),
           ),
         ),
       ),
@@ -81,6 +91,37 @@ void main() {
     final name = tester.getTopRight(find.text('Mad Maggie')).dx;
     final pill = tester.getTopLeft(find.byType(RpPill)).dx;
     expect(name, lessThanOrEqualTo(pill));
+  });
+
+  testWidgets('the top legend follows the "rank by" choice', (tester) async {
+    // Wraith earns more a game, Octane more in all; one session.
+    final s = sessionize([
+      for (var i = 0; i < 3; i++)
+        buildMatch(legend: 'Wraith', rp: 10, start: 1782090000 + i * 1500),
+      for (var i = 0; i < 10; i++)
+        buildMatch(legend: 'Octane', rp: 4, start: 1782090000 + (3 + i) * 1500),
+    ]).single;
+
+    for (final (saved, top, other) in [
+      // Total RP, until another is chosen: Octane has earned the most.
+      (<String, Object>{}, 'Octane', 'Wraith'),
+      (<String, Object>{'best_metric': 'rpPerGame'}, 'Wraith', 'Octane'),
+    ]) {
+      SharedPreferences.setMockInitialValues(saved);
+      final prefs = await SharedPreferences.getInstance();
+      await tester.pumpWidget(
+        ProviderScope(
+          key: UniqueKey(),
+          overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+          child: MaterialApp(
+            home: Scaffold(body: SessionRecapBody(session: s)),
+          ),
+        ),
+      );
+
+      expect(find.text(top), findsOneWidget, reason: '$saved');
+      expect(find.text(other), findsNothing, reason: '$saved');
+    }
   });
 
   group('the strip of results', () {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/legend_constants.dart' show legendInfo;
 import '../../constants/map_constants.dart' show battleRoyaleMapInfo;
 import '../../models/ranked_match.dart';
+import '../../providers/best_metric_provider.dart';
 import '../../providers/map_provider.dart';
 import '../../utils/ranked/matrix_totals.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
@@ -122,7 +123,11 @@ class RankedLegendMapMatrixScreen extends ConsumerWidget {
         child: RankedLegendMapMatrixView(
           cells: cells,
           onCellTap: (cell) => _openCell(context, cell),
-          footer: RankedBestLegendPerMap(cells: cells, currentMapName: current),
+          footer: RankedBestLegendPerMap(
+            cells: cells,
+            currentMapName: current,
+            metric: ref.watch(bestMetricProvider),
+          ),
         ),
       ),
     );

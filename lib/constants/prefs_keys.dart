@@ -60,6 +60,10 @@ class PrefsKeys {
   /// Which tiles the recap card shows, as a list of tile names. Device-only:
   /// not backed up.
   static const recapTiles = 'recap_card_tiles';
+
+  /// What makes a legend or map "best" (a `BestMetric` name). Device-only: not
+  /// backed up.
+  static const bestMetric = 'best_metric';
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the

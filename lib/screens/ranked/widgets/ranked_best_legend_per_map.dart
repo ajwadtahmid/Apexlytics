@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart' show mapNameKey;
 import '../../../utils/formatting/format.dart' show formatSigned, plural;
+import '../../../utils/ranked/best_metric.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
+import '../../../widgets/best_metric_picker.dart' show bestMetricColor;
 import '../../../widgets/surface_card.dart';
 
 /// For each map the player has played: their record there and the legends that
@@ -12,15 +14,19 @@ import '../../../widgets/surface_card.dart';
 class RankedBestLegendPerMap extends StatelessWidget {
   final List<LegendMapCell> cells;
   final String? currentMapName;
+
+  /// What makes a legend the best or worst on a map.
+  final BestMetric metric;
   const RankedBestLegendPerMap({
     super.key,
     required this.cells,
     this.currentMapName,
+    this.metric = kDefaultBestMetric,
   });
 
   @override
   Widget build(BuildContext context) {
-    final insights = mapLegendInsights(cells);
+    final insights = mapLegendInsights(cells, metric: metric);
     if (insights.isEmpty) return const SizedBox.shrink();
     final nowKey = currentMapName == null ? null : mapNameKey(currentMapName!);
     final ordered = [
@@ -37,13 +43,18 @@ class RankedBestLegendPerMap extends StatelessWidget {
             style: AppTheme.cardTitle,
           ),
           const SizedBox(height: AppTheme.xs),
-          const Text(
-            'Needs $kMinGamesForInsight or more games on a map.',
+          Text(
+            'By ${metric.phrase}. Needs $kMinGamesForInsight or more games '
+            'on a map.',
             style: AppTheme.captionSmall,
           ),
           const SizedBox(height: AppTheme.sm),
           for (final i in ordered)
-            _MapRow(insight: i, playingNow: mapNameKey(i.mapName) == nowKey),
+            _MapRow(
+              insight: i,
+              metric: metric,
+              playingNow: mapNameKey(i.mapName) == nowKey,
+            ),
         ],
       ),
     );
@@ -52,8 +63,13 @@ class RankedBestLegendPerMap extends StatelessWidget {
 
 class _MapRow extends StatelessWidget {
   final MapLegendInsight insight;
+  final BestMetric metric;
   final bool playingNow;
-  const _MapRow({required this.insight, required this.playingNow});
+  const _MapRow({
+    required this.insight,
+    required this.metric,
+    required this.playingNow,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -107,11 +123,11 @@ class _MapRow extends StatelessWidget {
           ),
           if (best != null) ...[
             const SizedBox(height: 2),
-            _LegendLine('Best', best),
+            _LegendLine('Best', best, metric),
           ],
           if (insight.worst != null) ...[
             const SizedBox(height: 2),
-            _LegendLine('Worst', insight.worst!),
+            _LegendLine('Worst', insight.worst!, metric),
           ] else if (best != null && insight.qualified == 1)
             const Padding(
               padding: EdgeInsets.only(top: 2),
@@ -128,18 +144,20 @@ class _MapRow extends StatelessWidget {
   static String _rate(double v) => formatSigned(v);
 }
 
-/// "Best: Bangalore (+30.0 RP/game, 4 games)", in the colour of its RP.
+/// "Best: Bangalore (+30.0 RP/game, 4 games)", in the colour of its figure.
 class _LegendLine extends StatelessWidget {
   final String label;
   final LegendMapCell cell;
-  const _LegendLine(this.label, this.cell);
+  final BestMetric metric;
+  const _LegendLine(this.label, this.cell, this.metric);
 
   @override
   Widget build(BuildContext context) {
-    final color = AppTheme.signColor(cell.avgRpPerGame >= 0);
+    final value = metric.valueOf(cell)!;
+    final color = bestMetricColor(metric, value);
     return Text(
-      '$label: ${cell.legend} (${formatSigned(cell.avgRpPerGame)} '
-      'RP/game, ${plural(cell.games, 'game')})',
+      '$label: ${cell.legend} (${metric.formatInline(value)}, '
+      '${plural(cell.games, 'game')})',
       style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
     );
   }

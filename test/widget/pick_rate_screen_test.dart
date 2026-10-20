@@ -242,14 +242,35 @@ void main() {
       await selectAlter(tester);
       await tester.pump();
 
+      // By total RP, the default: four games at +10, and four at -20.
       expect(find.text('Best'), findsOneWidget);
       expect(find.text('Olympus'), findsOneWidget);
       expect(
-        find.textContaining('+10.0 RP/game · 4 games', findRichText: true),
+        find.textContaining('+40 RP · 4 games', findRichText: true),
         findsOneWidget,
       );
       expect(find.text('Worst'), findsOneWidget);
       expect(find.text('Kings Canyon'), findsOneWidget);
+      expect(
+        find.textContaining('-80 RP · 4 games', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('writes them by the measure chosen', (tester) async {
+      await pump(
+        tester,
+        alter,
+        matchesFor: lookup,
+        saved: {'best_metric': 'rpPerGame'},
+      );
+      await selectAlter(tester);
+      await tester.pump();
+
+      expect(
+        find.textContaining('+10.0 RP/game · 4 games', findRichText: true),
+        findsOneWidget,
+      );
       expect(
         find.textContaining('-20.0 RP/game · 4 games', findRichText: true),
         findsOneWidget,

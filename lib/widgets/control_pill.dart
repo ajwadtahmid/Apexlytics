@@ -16,6 +16,9 @@ class ControlPill extends StatelessWidget {
   /// Null keeps the plain accent pill.
   final Color? color;
   final String label;
+
+  /// Drawn after the label, such as which way a sort runs. About 13 px square.
+  final Widget? trailing;
   final VoidCallback onTap;
 
   const ControlPill({
@@ -25,6 +28,7 @@ class ControlPill extends StatelessWidget {
     this.leading,
     this.color,
     required this.label,
+    this.trailing,
     required this.onTap,
   });
 
@@ -52,6 +56,7 @@ class ControlPill extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            if (trailing != null) ...[const SizedBox(width: 4), trailing!],
           ],
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/legend_constants.dart';
+import '../constants/stat_icons.dart';
 import '../models/player_stats.dart';
 import '../providers/legend_list_options_provider.dart';
 import '../utils/formatting/format.dart' show timeAgo;
@@ -136,10 +137,16 @@ class _PlayerStatsTabsState extends ConsumerState<PlayerStatsTabs> {
                 ),
                 ControlPill(
                   prefix: 'Sort:',
-                  icon: options.reversed
-                      ? Icons.arrow_upward
-                      : Icons.arrow_downward,
+                  icon: _sortIcon(options.sort),
                   label: options.sort.label,
+                  // Which way round the order runs, at the right.
+                  trailing: Icon(
+                    options.reversed
+                        ? Icons.arrow_upward
+                        : Icons.arrow_downward,
+                    size: 13,
+                    color: AppTheme.accent,
+                  ),
                   onTap: () => _showSortSheet(context),
                 ),
               ],
@@ -166,9 +173,9 @@ void _showSortSheet(BuildContext context) {
 
 IconData _sortIcon(LegendStatSort sort) => switch (sort) {
   LegendStatSort.recent => Icons.access_time,
-  LegendStatSort.kills => Icons.sports_kabaddi,
-  LegendStatSort.damage => Icons.bolt,
-  LegendStatSort.wins => Icons.emoji_events,
+  LegendStatSort.kills => StatIcons.totalKills,
+  LegendStatSort.damage => StatIcons.totalDamage,
+  LegendStatSort.wins => StatIcons.wins,
   LegendStatSort.role => Icons.category,
 };
 

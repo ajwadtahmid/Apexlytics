@@ -84,6 +84,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          await prefsOverride(),
           // Nothing leaves the test.
           proxyCheckerProvider.overrideWithValue(
             (_) async => (state: ProxyState.online, latency: Duration.zero),
@@ -205,11 +206,8 @@ void main() {
   });
 
   testWidgets('the Recap card page', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
     await pump(
       tester,
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       SizedBox(
         height: 800,
         child: RankedRecapShareScreen(

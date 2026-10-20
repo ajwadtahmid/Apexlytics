@@ -53,6 +53,15 @@ Future<(ProviderContainer, SharedPreferences)> prefsContainer({
   return (container, prefs);
 }
 
+/// The saved-choices store, empty, for a widget test that mounts a screen which
+/// reads one (the "rank by" choice, say) without a [prefsContainer].
+Future<Override> prefsOverride() async {
+  SharedPreferences.setMockInitialValues({});
+  return sharedPreferencesProvider.overrideWithValue(
+    await SharedPreferences.getInstance(),
+  );
+}
+
 /// Stands in for the player's best games over every split, which the Records
 /// page reads from the store: [best] when given, no games otherwise.
 Override allTimeBestOverride([PersonalBestGames? best]) =>

@@ -10,6 +10,7 @@ import '../../constants/map_constants.dart';
 import '../../models/ranked_match.dart';
 import '../formatting/rank_utils.dart'
     show isApexPredatorRp, rankIndex, usablePredatorCutoff;
+import 'best_metric.dart';
 
 /// Default gap that separates one play session from the next.
 const Duration kSessionGap = Duration(hours: 2);
@@ -25,6 +26,37 @@ List<RankedMatch> rankedOnly(List<RankedMatch> all) {
   final list = all.where((m) => m.isRanked && m.countsTowardStats).toList()
     ..sort((a, b) => b.endTime.compareTo(a.endTime));
   return list;
+}
+
+/// The totals a ranked group (a legend, a map, a legend on a map) is judged on,
+/// whatever it is a group of. [BestMetric] reads these to rank groups against
+/// each other.
+abstract class RankedTally {
+  final int games;
+  final int totalRp; // Σ rpChange in the group
+
+  /// Games with positive and with negative effective RP.
+  final int wins;
+  final int losses;
+
+  final int totalKills;
+  final int totalDamage;
+
+  /// Games whose kills/damage upstream reported — the divisor for the averages.
+  /// See [RankedSummary.killsGames].
+  final int killsGames;
+  final int damageGames;
+
+  const RankedTally({
+    required this.games,
+    required this.totalRp,
+    required this.wins,
+    required this.losses,
+    required this.totalKills,
+    required this.totalDamage,
+    required this.killsGames,
+    required this.damageGames,
+  });
 }
 
 // ── Shared accumulator ──────────────────────────────────────────────────────
@@ -136,6 +168,12 @@ class RankedAgg {
     mapName: mapName,
     games: games,
     totalRp: rp,
+    wins: wins,
+    losses: losses,
+    totalKills: kills,
+    killsGames: killsGames,
+    totalDamage: damage,
+    damageGames: damageGames,
   );
 }
 
@@ -251,33 +289,21 @@ RankedSummary summarize(
 
 // ── Legend breakdown ────────────────────────────────────────────────────────
 
-class LegendBreakdown {
+class LegendBreakdown extends RankedTally {
   final String legend;
-  final int games;
-  final int totalRp; // Σ rpChange on this legend
-  final int totalKills;
-  final int totalDamage;
-
-  /// Games whose kills/damage upstream reported — the divisor for the averages.
-  /// See [RankedSummary.killsGames].
-  final int killsGames;
-  final int damageGames;
-
   final int totalLengthSecs;
-  final int wins;
-  final int losses;
 
   const LegendBreakdown({
     required this.legend,
-    required this.games,
-    required this.totalRp,
-    required this.totalKills,
-    required this.totalDamage,
-    required this.killsGames,
-    required this.damageGames,
+    required super.games,
+    required super.totalRp,
+    required super.totalKills,
+    required super.totalDamage,
+    required super.killsGames,
+    required super.damageGames,
     required this.totalLengthSecs,
-    required this.wins,
-    required this.losses,
+    required super.wins,
+    required super.losses,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
@@ -327,35 +353,23 @@ int byTotalRpThenName(LegendBreakdown a, LegendBreakdown b) {
 
 // ── Map breakdown ───────────────────────────────────────────────────────────
 
-class MapBreakdown {
+class MapBreakdown extends RankedTally {
   final String mapKey;
   final String displayName;
-  final int games;
-  final int totalRp;
-  final int totalKills;
-  final int totalDamage;
-
-  /// Games whose kills/damage upstream reported — the divisor for the averages.
-  /// See [RankedSummary.killsGames].
-  final int killsGames;
-  final int damageGames;
-
   final int totalLengthSecs;
-  final int wins;
-  final int losses;
 
   const MapBreakdown({
     required this.mapKey,
     required this.displayName,
-    required this.games,
-    required this.totalRp,
-    required this.totalKills,
-    required this.totalDamage,
-    required this.killsGames,
-    required this.damageGames,
+    required super.games,
+    required super.totalRp,
+    required super.totalKills,
+    required super.totalDamage,
+    required super.killsGames,
+    required super.damageGames,
     required this.totalLengthSecs,
-    required this.wins,
-    required this.losses,
+    required super.wins,
+    required super.losses,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
@@ -409,17 +423,23 @@ int byGamesThenName(MapBreakdown a, MapBreakdown b) {
 // aggregate here and nothing else calls it, so it stays a one-function,
 // one-widget feature.
 
-class LegendMapCell {
+class LegendMapCell extends RankedTally {
   final String legend;
   final String mapName;
-  final int games;
-  final int totalRp;
 
+  // Everything but games and RP is left at 0 by a cell made from only those,
+  // such as the grid's totals (see `matrixTotals`), which nothing ranks.
   const LegendMapCell({
     required this.legend,
     required this.mapName,
-    required this.games,
-    required this.totalRp,
+    required super.games,
+    required super.totalRp,
+    super.wins = 0,
+    super.losses = 0,
+    super.totalKills = 0,
+    super.killsGames = 0,
+    super.totalDamage = 0,
+    super.damageGames = 0,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
@@ -480,48 +500,34 @@ class MapLegendInsight {
 }
 
 /// For each map in [cells], the player's record there and their best and worst
-/// legend, most-played map first. Ties on RP per game go to the legend with
-/// more games.
-List<MapLegendInsight> mapLegendInsights(List<LegendMapCell> cells) {
+/// legend under [metric], most-played map first. See [rankByMetric] for how
+/// ties and thin samples are handled.
+List<MapLegendInsight> mapLegendInsights(
+  List<LegendMapCell> cells, {
+  BestMetric metric = kDefaultBestMetric,
+}) {
   final byMap = <String, List<LegendMapCell>>{};
   for (final c in cells) {
     byMap.putIfAbsent(c.mapName, () => []).add(c);
-  }
-  int byRpThenGames(LegendMapCell a, LegendMapCell b) {
-    final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
-    return byRp != 0 ? byRp : b.games.compareTo(a.games);
   }
 
   final insights =
       [
         for (final e in byMap.entries)
           () {
-            final enough = [
-              for (final c in e.value)
-                if (c.games >= kMinGamesForInsight) c,
-            ]..sort(byRpThenGames);
-            final best = enough.firstOrNull;
-            // The lowest RP per game; among equals, the one with more games behind
-            // it. Only worth naming when it really is below the best.
-            final lowest = enough.isEmpty
-                ? null
-                : enough.reduce(
-                    (a, b) => a.avgRpPerGame != b.avgRpPerGame
-                        ? (a.avgRpPerGame < b.avgRpPerGame ? a : b)
-                        : (a.games >= b.games ? a : b),
-                  );
+            final ranked = rankByMetric(
+              e.value,
+              metric,
+              nameOf: (c) => c.legend,
+            );
+            final (:best, :worst) = bestAndWorst(ranked, metric);
             return MapLegendInsight(
               mapName: e.key,
               games: e.value.fold(0, (a, c) => a + c.games),
               totalRp: e.value.fold(0, (a, c) => a + c.totalRp),
               best: best,
-              worst:
-                  enough.length >= 2 &&
-                      lowest != null &&
-                      lowest.avgRpPerGame < best!.avgRpPerGame
-                  ? lowest
-                  : null,
-              qualified: enough.length,
+              worst: worst,
+              qualified: ranked.length,
             );
           }(),
       ]..sort((a, b) {
@@ -576,26 +582,16 @@ class RankedSession {
   /// Wall-clock span of the session (first start → last end).
   Duration get duration => end.difference(start);
 
-  /// Legend with the highest effective RP this session, or null when empty.
-  /// Ties break toward the legend with more games, then alphabetically.
-  String? get bestLegend {
-    if (matches.isEmpty) return null;
-    final rp = <String, int>{};
-    final count = <String, int>{};
-    for (final m in matches) {
-      final legend = canonicalLegendName(m.legend);
-      rp[legend] = (rp[legend] ?? 0) + m.effectiveRpChange;
-      count[legend] = (count[legend] ?? 0) + 1;
-    }
-    final keys = rp.keys.toList()
-      ..sort((a, b) {
-        final byRp = rp[b]!.compareTo(rp[a]!);
-        if (byRp != 0) return byRp;
-        final byGames = count[b]!.compareTo(count[a]!);
-        return byGames != 0 ? byGames : a.compareTo(b);
-      });
-    return keys.first;
-  }
+  /// The legend that did best this session under [metric], or null when none
+  /// has a figure for it (no games, or no kills reported for a kills measure).
+  /// A legend with [kMinGamesForInsight] games or more is preferred, so a single
+  /// game doesn't crown one; failing that the rest are ranked.
+  String? bestLegendBy(BestMetric metric) => rankByMetric(
+    legendBreakdowns(matches),
+    metric,
+    nameOf: (l) => l.legend,
+    softGate: true,
+  ).firstOrNull?.legend;
 }
 
 /// The session each match of [newestFirst] belongs to, as a number that is 0

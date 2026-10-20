@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../constants/stat_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../constants/map_constants.dart';
 import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
+import '../../providers/best_metric_provider.dart';
 import '../../providers/ranked_provider.dart';
 import '../../utils/formatting/format.dart'
     show
@@ -15,6 +17,7 @@ import '../../utils/formatting/format.dart'
         formatSigned,
         formatSignedInt,
         plural;
+import '../../utils/ranked/best_metric.dart';
 import '../../utils/ranked/extra_records.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/share_image.dart' show canShareFiles;
@@ -199,6 +202,7 @@ class _RankedPersonalRecordsScreenState
         : bestDayRecord;
     final longest = longestSession(_sessions);
     final comeback = biggestComeback(_sessions);
+    final metric = ref.watch(bestMetricProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Personal Records')),
@@ -235,20 +239,26 @@ class _RankedPersonalRecordsScreenState
             const SizedBox(height: AppTheme.md),
             _SessionRecordCard(
               session: bestSession,
+              metric: metric,
               playerName: widget.stats.name,
               onOpen: _openSession,
             ),
             const SizedBox(height: AppTheme.md),
             if (day != null) ...[
-              _dayCard(day, widget.stats.name, _openDay),
+              _dayCard(day, metric, widget.stats.name, _openDay),
               const SizedBox(height: AppTheme.md),
             ],
             if (longest != null) ...[
-              _longestSessionCard(longest, widget.stats.name, _openSession),
+              _longestSessionCard(
+                longest,
+                metric,
+                widget.stats.name,
+                _openSession,
+              ),
               const SizedBox(height: AppTheme.md),
             ],
             if (comeback != null) ...[
-              _comebackCard(comeback, widget.stats.name, _openSession),
+              _comebackCard(comeback, metric, widget.stats.name, _openSession),
               const SizedBox(height: AppTheme.md),
             ],
             _StreakCard(
@@ -358,7 +368,7 @@ List<Widget> _recordCards({
 }) {
   return [
     _RecordCard(
-      icon: Icons.bolt,
+      icon: StatIcons.totalRp,
       label: 'Most RP Gained',
       match: bestRpGame,
       playerName: playerName,
@@ -386,7 +396,7 @@ List<Widget> _recordCards({
     ),
     const SizedBox(height: AppTheme.md),
     _RecordCard(
-      icon: Icons.sports_kabaddi,
+      icon: StatIcons.totalKills,
       label: 'Most Kills',
       match: bestKillsGame,
       playerName: playerName,
@@ -418,7 +428,7 @@ List<Widget> _recordCards({
     ),
     const SizedBox(height: AppTheme.md),
     _RecordCard(
-      icon: Icons.local_fire_department,
+      icon: StatIcons.totalDamage,
       label: 'Most Damage',
       match: bestDamageGame,
       playerName: playerName,
@@ -557,16 +567,16 @@ class _RecordCard extends StatelessWidget {
                   (Icons.person_outline, 'Legend', m.legend),
                   (Icons.map_outlined, 'Map', battleRoyaleMapName(m.mapKey)),
                   if (shareDrops != 'RP')
-                    (Icons.bolt, 'RP', formatSignedInt(m.effectiveRpChange)),
+                    (StatIcons.totalRp, 'RP', formatSignedInt(m.effectiveRpChange)),
                   if (shareDrops != 'Kills')
                     (
-                      Icons.sports_kabaddi,
+                      StatIcons.totalKills,
                       'Kills',
                       formatNumberOrNone(m.kills),
                     ),
                   if (shareDrops != 'Damage')
                     (
-                      Icons.local_fire_department,
+                      StatIcons.totalDamage,
                       'Damage',
                       formatNumberOrNone(m.damage),
                     ),
@@ -658,10 +668,14 @@ class _ShareButton extends StatelessWidget {
 /// Tapping it opens the session.
 class _SessionRecordCard extends StatelessWidget {
   final RankedSession? session;
+
+  /// What decides the session's top legend, for its portrait and share card.
+  final BestMetric metric;
   final String? playerName;
   final void Function(RankedSession session) onOpen;
   const _SessionRecordCard({
     required this.session,
+    required this.metric,
     required this.onOpen,
     this.playerName,
   });
@@ -720,23 +734,27 @@ class _SessionRecordCard extends StatelessWidget {
                 unit: 'RP',
                 valueColor: AppTheme.signColor(s.netRp >= 0),
                 detail: formatSessionSpan(s.start, s.end),
-                legend: s.bestLegend,
+                legend: s.bestLegendBy(metric),
                 playerName: name,
                 stats: [
-                  (Icons.sports_esports_outlined, 'Games', '${s.games}'),
-                  (Icons.sports_kabaddi, 'Kills', formatNumberOrNone(kills)),
+                  (StatIcons.games, 'Games', '${s.games}'),
+                  (StatIcons.totalKills, 'Kills', formatNumberOrNone(kills)),
                   (
-                    Icons.local_fire_department,
+                    StatIcons.totalDamage,
                     'Damage',
                     formatNumberOrNone(damage),
                   ),
                   (
-                    Icons.schedule,
+                    StatIcons.time,
                     'Time played',
                     formatDuration(s.duration.inSeconds),
                   ),
-                  if (s.bestLegend != null)
-                    (Icons.person_outline, 'Top legend', s.bestLegend!),
+                  if (s.bestLegendBy(metric) != null)
+                    (
+                      Icons.person_outline,
+                      'Top legend',
+                      s.bestLegendBy(metric)!,
+                    ),
                 ],
               ),
             ),
@@ -898,6 +916,7 @@ String _dayLabel(DateTime day) => DateFormat('EEE, MMM d').format(day);
 /// The day that netted the most RP, as a record card.
 Widget _dayCard(
   DayRecord day,
+  BestMetric metric,
   String playerName,
   void Function(DayRecord day) onOpen,
 ) {
@@ -919,13 +938,13 @@ Widget _dayCard(
       unit: 'RP',
       valueColor: AppTheme.signColor(day.netRp >= 0),
       detail: DateFormat('EEEE, MMMM d').format(day.day),
-      legend: topLegendByRp(day.matches),
+      legend: topLegendBy(day.matches, metric),
       playerName: name,
       stats: [
-        (Icons.sports_esports_outlined, 'Games', '${day.matches.length}'),
-        (Icons.sports_kabaddi, 'Kills', formatNumberOrNone(t.kills)),
-        (Icons.local_fire_department, 'Damage', formatNumberOrNone(t.damage)),
-        (Icons.schedule, 'Time played', formatDuration(t.secs)),
+        (StatIcons.games, 'Games', '${day.matches.length}'),
+        (StatIcons.totalKills, 'Kills', formatNumberOrNone(t.kills)),
+        (StatIcons.totalDamage, 'Damage', formatNumberOrNone(t.damage)),
+        (StatIcons.time, 'Time played', formatDuration(t.secs)),
       ],
     ),
   );
@@ -934,6 +953,7 @@ Widget _dayCard(
 /// The session that ran longest, as a record card.
 Widget _longestSessionCard(
   RankedSession s,
+  BestMetric metric,
   String playerName,
   void Function(RankedSession session) onOpen,
 ) {
@@ -956,13 +976,13 @@ Widget _longestSessionCard(
       comparison:
           '${formatSignedInt(s.netRp)} RP over ${plural(s.games, 'game')}',
       detail: formatSessionSpan(s.start, s.end),
-      legend: s.bestLegend,
+      legend: s.bestLegendBy(metric),
       playerName: name,
       stats: [
-        (Icons.sports_esports_outlined, 'Games', '${s.games}'),
-        (Icons.sports_kabaddi, 'Kills', formatNumberOrNone(kills)),
-        (Icons.local_fire_department, 'Damage', formatNumberOrNone(damage)),
-        (Icons.bolt, 'RP', formatSignedInt(s.netRp)),
+        (StatIcons.games, 'Games', '${s.games}'),
+        (StatIcons.totalKills, 'Kills', formatNumberOrNone(kills)),
+        (StatIcons.totalDamage, 'Damage', formatNumberOrNone(damage)),
+        (StatIcons.totalRp, 'RP', formatSignedInt(s.netRp)),
       ],
     ),
   );
@@ -971,6 +991,7 @@ Widget _longestSessionCard(
 /// The session with the biggest climb back from its low, as a record card.
 Widget _comebackCard(
   Comeback c,
+  BestMetric metric,
   String playerName,
   void Function(RankedSession session) onOpen,
 ) {
@@ -993,13 +1014,13 @@ Widget _comebackCard(
       unit: 'RP',
       comparison: 'From ${formatSignedInt(c.low)} to ${formatSignedInt(c.net)}',
       detail: formatSessionSpan(s.start, s.end),
-      legend: s.bestLegend,
+      legend: s.bestLegendBy(metric),
       playerName: name,
       stats: [
-        (Icons.sports_esports_outlined, 'Games', '${s.games}'),
-        (Icons.sports_kabaddi, 'Kills', formatNumberOrNone(kills)),
-        (Icons.local_fire_department, 'Damage', formatNumberOrNone(damage)),
-        (Icons.schedule, 'Time played', formatDuration(s.duration.inSeconds)),
+        (StatIcons.games, 'Games', '${s.games}'),
+        (StatIcons.totalKills, 'Kills', formatNumberOrNone(kills)),
+        (StatIcons.totalDamage, 'Damage', formatNumberOrNone(damage)),
+        (StatIcons.time, 'Time played', formatDuration(s.duration.inSeconds)),
       ],
     ),
   );
@@ -1018,14 +1039,14 @@ List<(IconData icon, String label, String value)> _recordTiles({
   return [
     if (records.bestRpGame != null)
       (
-        Icons.bolt,
+        StatIcons.totalRp,
         'Best game',
         '${formatSignedInt(records.bestRpGame!.effectiveRpChange)} RP',
       ),
     if (kills != null)
-      (Icons.sports_kabaddi, 'Most kills', formatNumber(kills)),
+      (StatIcons.totalKills, 'Most kills', formatNumber(kills)),
     if (damage != null)
-      (Icons.local_fire_department, 'Most damage', formatNumber(damage)),
+      (StatIcons.totalDamage, 'Most damage', formatNumber(damage)),
     if (bestSession != null)
       (
         Icons.timeline,

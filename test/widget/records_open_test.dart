@@ -42,7 +42,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [allTime ?? allTimeBestOverride()],
+        overrides: [allTime ?? allTimeBestOverride(), await prefsOverride()],
         child: MaterialApp(
           home: RankedPersonalRecordsScreen(
             stats: buildStats(name: 'Reptar'),
@@ -124,7 +124,7 @@ void main() {
       final bare = [buildMatch(rp: 10)];
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [allTimeBestOverride()],
+          overrides: [allTimeBestOverride(), await prefsOverride()],
           child: MaterialApp(
             home: RankedPersonalRecordsScreen(
               stats: buildStats(name: 'Reptar'),

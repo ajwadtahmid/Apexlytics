@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:apexlytics/screens/ranked/ranked_recap_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_share_screens.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_share_cards.dart';
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/utils/ranked/ranked_period.dart';
 import 'package:apexlytics/utils/ranked/recap_tiles.dart';
 import 'package:apexlytics/utils/ranked/split_recap.dart';
@@ -12,6 +13,7 @@ import 'package:apexlytics/utils/theme.dart';
 import 'package:apexlytics/widgets/rank_badge.dart';
 import 'package:apexlytics/widgets/share_card.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -34,7 +36,12 @@ void main() {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(MaterialApp(home: child));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [await prefsOverride()],
+        child: MaterialApp(home: child),
+      ),
+    );
     await tester.pump();
   }
 
@@ -68,6 +75,69 @@ void main() {
         ),
       );
       expect(find.text('Reptar'), findsNothing);
+    });
+
+    testWidgets('names what its best legend and map are best at', (
+      tester,
+    ) async {
+      final byRp = splitRecap(matches, metric: BestMetric.totalRp);
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(recap: byRp, scope: 'S30 Split 2'),
+        ),
+      );
+      expect(find.text('Best legend and map by total RP'), findsOneWidget);
+      // In the footer: level with the Apexlytics mark, to its left.
+      final note = tester.getRect(find.text('Best legend and map by total RP'));
+      final brand = tester.getRect(find.text('APEXLYTICS'));
+      expect(note.right, lessThanOrEqualTo(brand.left));
+      expect((note.center.dy - brand.center.dy).abs(), lessThan(12));
+
+      // Only the legend on the card: only the legend is said.
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: byRp,
+            scope: 'S30 Split 2',
+            tiles: const [RecapTile.games, RecapTile.bestLegend],
+          ),
+        ),
+      );
+      expect(find.text('Best legend by total RP'), findsOneWidget);
+
+      // Neither: nothing to say.
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: byRp,
+            scope: 'S30 Split 2',
+            tiles: const [RecapTile.games, RecapTile.peakRp],
+          ),
+        ),
+      );
+      expect(find.textContaining('Best legend'), findsNothing);
+    });
+
+    testWidgets('can leave the footer note off, keeping the mark', (
+      tester,
+    ) async {
+      final byRp = splitRecap(matches, metric: BestMetric.totalRp);
+      await pump(
+        tester,
+        Scaffold(
+          body: RecapShareCard(
+            recap: byRp,
+            scope: 'S30 Split 2',
+            showNote: false,
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Best legend'), findsNothing);
+      expect(find.text('APEXLYTICS'), findsOneWidget);
     });
 
     testWidgets('says RP and the split under the finishing RP', (tester) async {

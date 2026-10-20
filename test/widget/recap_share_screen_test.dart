@@ -338,6 +338,56 @@ void main() {
     });
   });
 
+  group('the footer note', () {
+    const note = 'Best legend and map by total RP';
+
+    Finder noteSwitch() => find.descendant(
+      of: find.widgetWithText(SwitchListTile, 'Show footer note'),
+      matching: find.byType(Switch),
+    );
+
+    testWidgets('is on the card, with a switch to take it off', (tester) async {
+      await pump(tester);
+
+      // On the card, and said again under the switch.
+      expect(find.text(note), findsNWidgets(2));
+      expect(find.text('APEXLYTICS'), findsOneWidget);
+
+      await tester.tap(noteSwitch());
+      await tester.pump();
+
+      // Off the card (the switch still says what it would add); the mark stays.
+      expect(find.text(note), findsOneWidget);
+      expect(find.text('APEXLYTICS'), findsOneWidget);
+      expect(tester.widget<Switch>(noteSwitch()).value, isFalse);
+
+      await tester.tap(noteSwitch());
+      await tester.pump();
+      expect(find.text(note), findsNWidgets(2));
+    });
+
+    testWidgets('has no switch when the card names no best', (tester) async {
+      // Three games on three legends and maps: nothing is best.
+      await pump(tester, matches: scattered);
+
+      expect(find.text('Show footer note'), findsNothing);
+      expect(find.textContaining('Best legend'), findsNothing);
+    });
+
+    testWidgets('has no switch once the best tiles are taken off the card', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        saved: {
+          'recap_card_tiles': ['games', 'peakRp'],
+        },
+      );
+
+      expect(find.text('Show footer note'), findsNothing);
+    });
+  });
+
   group('the card to share', () {
     testWidgets('has the name switch and the Share button', (tester) async {
       await pump(tester);
@@ -345,7 +395,13 @@ void main() {
       expect(find.text('Reptar'), findsOneWidget);
       expect(find.text('Share'), findsOneWidget);
 
-      await tester.tap(find.byType(Switch));
+      // The name's switch, not the footer note's.
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(SwitchListTile, 'Show my name'),
+          matching: find.byType(Switch),
+        ),
+      );
       await tester.pump();
 
       expect(find.text('Reptar'), findsNothing);

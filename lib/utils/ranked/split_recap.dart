@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import '../../models/ranked_match.dart';
+import 'best_metric.dart';
 import 'ranked_aggregates.dart';
 
 /// The headline numbers of a period of ranked play, for the recap screen and
@@ -17,10 +18,15 @@ class SplitRecap {
   /// The rank badge URL of the last game, for the final tier.
   final String rankImg;
 
-  /// Highest RP per game among legends and maps with at least
-  /// [kMinGamesForInsight] games; null when none has played enough.
+  /// The best legend and map under the [BestMetric] the recap was built with,
+  /// among those with at least [kMinGamesForInsight] games; null when none has
+  /// played enough.
   final LegendBreakdown? bestLegend;
   final MapBreakdown? bestMap;
+
+  /// What [bestLegend] and [bestMap] are best at, for the screen and the card
+  /// to say.
+  final BestMetric metric;
 
   /// The play session that gained the most RP.
   final RankedSession? bestSession;
@@ -46,6 +52,7 @@ class SplitRecap {
     required this.rankImg,
     required this.bestLegend,
     required this.bestMap,
+    required this.metric,
     required this.bestSession,
     required this.longestWinStreak,
     required this.totalKills,
@@ -65,15 +72,12 @@ class SplitRecap {
   double get avgRpPerGame => games == 0 ? 0 : netRp / games;
 }
 
-SplitRecap splitRecap(List<RankedMatch> matches) {
+SplitRecap splitRecap(
+  List<RankedMatch> matches, {
+  BestMetric metric = kDefaultBestMetric,
+}) {
   final ranked = rankedOnly(matches);
   final summary = summarize(ranked);
-
-  T? best<T>(Iterable<T> all, int Function(T) games, double Function(T) rate) {
-    final eligible = all.where((e) => games(e) >= kMinGamesForInsight).toList()
-      ..sort((a, b) => rate(b).compareTo(rate(a)));
-    return eligible.firstOrNull;
-  }
 
   final sessions = sessionize(ranked)
     ..sort((a, b) => b.netRp.compareTo(a.netRp));
@@ -88,12 +92,17 @@ SplitRecap splitRecap(List<RankedMatch> matches) {
         : ranked.map((m) => m.cumulativeRp).reduce(math.max),
     finalRp: summary.currentRp,
     rankImg: summary.latestRankImg,
-    bestLegend: best(
+    bestLegend: rankByMetric(
       legendBreakdowns(ranked),
-      (l) => l.games,
-      (l) => l.avgRpPerGame,
-    ),
-    bestMap: best(mapBreakdowns(ranked), (m) => m.games, (m) => m.avgRpPerGame),
+      metric,
+      nameOf: (l) => l.legend,
+    ).firstOrNull,
+    bestMap: rankByMetric(
+      mapBreakdowns(ranked),
+      metric,
+      nameOf: (m) => m.displayName,
+    ).firstOrNull,
+    metric: metric,
     bestSession: sessions.firstOrNull,
     longestWinStreak: personalRecords(ranked).bestWinStreak,
     totalKills: summary.totalKills,

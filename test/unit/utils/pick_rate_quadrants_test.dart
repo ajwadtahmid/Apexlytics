@@ -1,4 +1,5 @@
 import 'package:apexlytics/models/ranked_match.dart';
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/utils/ranked/pick_rate_quadrants.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -118,6 +119,11 @@ void main() {
   });
 
   group('legendBestWorstMap', () {
+    // These are about RP per game, whatever measure is the default.
+    ({LegendMapCell? best, LegendMapCell? worst}) perGame(
+      List<LegendMapCell> cells,
+    ) => legendBestWorstMap(cells, metric: BestMetric.rpPerGame);
+
     LegendMapCell cell(String map, int games, int totalRp) => LegendMapCell(
       legend: 'Alter',
       mapName: map,
@@ -126,7 +132,7 @@ void main() {
     );
 
     test('names the best and the worst of the maps with enough games', () {
-      final r = legendBestWorstMap([
+      final r = perGame([
         cell('Olympus', 4, 40),
         cell('Kings Canyon', 5, -25),
         cell('Storm Point', 3, 3),
@@ -137,7 +143,7 @@ void main() {
     });
 
     test('leaves out a map with fewer than the minimum games', () {
-      final r = legendBestWorstMap([
+      final r = perGame([
         cell('Olympus', 4, 40),
         cell('Kings Canyon', 2, -100),
         cell('Storm Point', 3, -3),
@@ -147,7 +153,7 @@ void main() {
     });
 
     test('has no worst when one map qualifies', () {
-      final r = legendBestWorstMap([
+      final r = perGame([
         cell('Olympus', 4, 40),
         cell('Kings Canyon', 1, -20),
       ]);
@@ -157,7 +163,7 @@ void main() {
     });
 
     test('has no worst when the maps do equally well', () {
-      final r = legendBestWorstMap([
+      final r = perGame([
         cell('Olympus', 4, 20),
         cell('Kings Canyon', 6, 30),
       ]);
@@ -167,7 +173,7 @@ void main() {
     });
 
     test('a tie for worst goes to the map with more games', () {
-      final r = legendBestWorstMap([
+      final r = perGame([
         cell('Olympus', 3, 30),
         cell('Kings Canyon', 3, -15),
         cell('Storm Point', 6, -30),
@@ -176,8 +182,29 @@ void main() {
       expect(r.worst?.mapName, 'Storm Point');
     });
 
+    test('follows the chosen measure', () {
+      // Olympus pays more a game; Storm Point is where the kills come.
+      LegendMapCell on(String map, int rp, int kills) => LegendMapCell(
+        legend: 'Alter',
+        mapName: map,
+        games: 4,
+        totalRp: rp,
+        totalKills: kills,
+        killsGames: 4,
+      );
+      final cells = [on('Olympus', 80, 4), on('Storm Point', 20, 16)];
+
+      final byRp = perGame(cells);
+      expect(byRp.best?.mapName, 'Olympus');
+      expect(byRp.worst?.mapName, 'Storm Point');
+
+      final byKills = legendBestWorstMap(cells, metric: BestMetric.avgKills);
+      expect(byKills.best?.mapName, 'Storm Point');
+      expect(byKills.worst?.mapName, 'Olympus');
+    });
+
     test('has neither when no map has enough games', () {
-      final r = legendBestWorstMap([cell('Olympus', 2, 40)]);
+      final r = perGame([cell('Olympus', 2, 40)]);
 
       expect(r.best, isNull);
       expect(r.worst, isNull);

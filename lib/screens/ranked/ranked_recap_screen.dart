@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../constants/rank_constants.dart' show kPredatorBadgeAsset;
 import '../../models/ranked_match.dart';
+import '../../providers/best_metric_provider.dart';
 import '../../utils/formatting/format.dart'
     show
         formatDuration,
@@ -16,6 +18,7 @@ import '../../utils/ranked/recap_tiles.dart';
 import '../../utils/ranked/split_recap.dart';
 import '../../utils/share_image.dart' show canShareFiles;
 import '../../utils/theme.dart';
+import '../../widgets/best_metric_picker.dart';
 import '../../widgets/rank_badge.dart';
 import '../../widgets/stat_display.dart';
 import '../../widgets/surface_card.dart';
@@ -25,7 +28,7 @@ import 'widgets/recap_journey_chart.dart';
 /// A period of ranked play at a glance: where the player ended up, how the RP
 /// got there, and the figures behind it. The card to share is a tap away.
 /// [matches] are the period's games.
-class RankedRecapScreen extends StatelessWidget {
+class RankedRecapScreen extends ConsumerWidget {
   final List<RankedMatch> matches;
   final String scope;
   final String playerName;
@@ -48,8 +51,8 @@ class RankedRecapScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final recap = splitRecap(matches);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final recap = splitRecap(matches, metric: ref.watch(bestMetricProvider));
     final journey = recapJourney(matches);
     final share = canShareFiles;
 
@@ -69,7 +72,13 @@ class RankedRecapScreen extends StatelessWidget {
               const _Heading('Your climb'),
               RecapJourneyChart(journey: journey),
             ],
-            const _Heading('The breakdown'),
+            _Heading(
+              'The breakdown',
+              // What "best" means, when the figures below name a best.
+              trailing: recap.bestLegend == null && recap.bestMap == null
+                  ? null
+                  : const BestMetricPill(),
+            ),
             StatGrid(rows: _rows(recap)),
             const SizedBox(height: AppTheme.lg),
             FilledButton.icon(
@@ -141,9 +150,17 @@ Widget _figure(RecapTile tile, SplitRecap r) {
         value: formatDuration(r.playSecs),
       );
     case RecapTile.bestLegend:
-      return StatDisplay(label: 'Best legend', value: r.bestLegend!.legend);
+      return StatDisplay(
+        label: 'Best legend',
+        value: r.bestLegend!.legend,
+        footnote: r.metric.formatValue(r.metric.valueOf(r.bestLegend!)!),
+      );
     case RecapTile.bestMap:
-      return StatDisplay(label: 'Best map', value: r.bestMap!.displayName);
+      return StatDisplay(
+        label: 'Best map',
+        value: r.bestMap!.displayName,
+        footnote: r.metric.formatValue(r.metric.valueOf(r.bestMap!)!),
+      );
     case RecapTile.winRate:
       final rate = r.winRate;
       return StatDisplay(
@@ -223,16 +240,27 @@ class _Header extends StatelessWidget {
 
 class _Heading extends StatelessWidget {
   final String text;
-  const _Heading(this.text);
+
+  /// Something at the right-hand end of the heading.
+  final Widget? trailing;
+  const _Heading(this.text, {this.trailing});
 
   @override
   Widget build(BuildContext context) {
+    final title = Text(
+      text,
+      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+    );
     return Padding(
       padding: const EdgeInsets.only(top: AppTheme.lg, bottom: AppTheme.sm),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-      ),
+      child: trailing == null
+          ? title
+          : Row(
+              children: [
+                Expanded(child: title),
+                trailing!,
+              ],
+            ),
     );
   }
 }

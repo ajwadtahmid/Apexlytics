@@ -1877,6 +1877,39 @@ void main() {
         final d = dartLegendMap[(s.legend, s.mapName)]!;
         expect(s.games, d.games);
         expect(s.totalRp, d.totalRp);
+        expect(s.wins, d.wins);
+        expect(s.losses, d.losses);
+        expect(s.totalKills, d.totalKills);
+        expect(s.killsGames, d.killsGames);
+        expect(s.totalDamage, d.totalDamage);
+        expect(s.damageGames, d.damageGames);
+      }
+    });
+
+    test('legend × map cells agree when some games reported no kills or '
+        'damage', () async {
+      final store = RankedHistoryStore(overridePath: inMemoryDatabasePath);
+      addTearDown(store.close);
+      await store.deleteAll();
+      await store.upsertAll('1', [
+        buildMatch(uid: '1', start: 100, kills: 4, damage: 800, rp: 20),
+        buildMatch(uid: '1', start: 200, rp: -10), // no kills, no damage
+        buildMatch(uid: '1', start: 300, kills: 0, damage: 0, rp: -5), // real 0
+        buildMatch(uid: '1', start: 400, kills: 2, rp: 10), // no damage
+      ]);
+      final ranked = rankedOnly(await store.getAll('1'));
+
+      final sql = (await store.legendMapBreakdownsFor('1')).single;
+      final dart = legendMapBreakdowns(ranked).single;
+
+      for (final cell in [sql, dart]) {
+        expect(cell.games, 4);
+        expect(cell.totalKills, 6);
+        expect(cell.killsGames, 3, reason: 'a reported 0 counts, a gap does not');
+        expect(cell.totalDamage, 800);
+        expect(cell.damageGames, 2);
+        expect(cell.wins, 2);
+        expect(cell.losses, 2);
       }
     });
 

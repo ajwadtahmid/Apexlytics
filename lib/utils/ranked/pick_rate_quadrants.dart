@@ -1,3 +1,4 @@
+import 'best_metric.dart';
 import 'ranked_aggregates.dart';
 
 /// Where a legend sits on the pick rate chart: how much it is played against
@@ -117,32 +118,14 @@ int legendsMovedByBaseline(
   return moved;
 }
 
-/// The maps one legend does best and worst on, among those with at least
-/// [kMinGamesForInsight] games. The worst is null unless two or more maps
-/// qualify and it really is below the best. Ties go to the map with more games.
+/// The maps one legend does best and worst on under [metric], among those with
+/// at least [kMinGamesForInsight] games. See [bestAndWorst] for when the worst
+/// is left out.
 ({LegendMapCell? best, LegendMapCell? worst}) legendBestWorstMap(
-  List<LegendMapCell> cells,
-) {
-  final enough =
-      [
-        for (final c in cells)
-          if (c.games >= kMinGamesForInsight) c,
-      ]..sort((a, b) {
-        final byRp = b.avgRpPerGame.compareTo(a.avgRpPerGame);
-        return byRp != 0 ? byRp : b.games.compareTo(a.games);
-      });
-  if (enough.isEmpty) return (best: null, worst: null);
-  final best = enough.first;
-  // Several maps can share the lowest RP per game; the first of them in the
-  // sorted order is the one with the most games.
-  final lowest = enough.firstWhere(
-    (c) => c.avgRpPerGame == enough.last.avgRpPerGame,
-  );
-  final worst = enough.length >= 2 && lowest.avgRpPerGame < best.avgRpPerGame
-      ? lowest
-      : null;
-  return (best: best, worst: worst);
-}
+  List<LegendMapCell> cells, {
+  BestMetric metric = kDefaultBestMetric,
+}) =>
+    bestAndWorst(rankByMetric(cells, metric, nameOf: (c) => c.mapName), metric);
 
 /// More games, then the name, so the pick doesn't depend on list order.
 bool _moreGames(LegendBreakdown a, LegendBreakdown b) =>

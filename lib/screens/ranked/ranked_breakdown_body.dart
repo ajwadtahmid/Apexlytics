@@ -8,6 +8,7 @@ import '../../constants/rank_constants.dart' show kApexPredatorRank;
 import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
+import '../../providers/best_metric_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../providers/ranked_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -15,6 +16,7 @@ import '../../utils/error_messages.dart';
 import '../../utils/formatting/snapshot_types.dart';
 import '../../utils/ranked/ranked_period.dart';
 import '../../utils/theme.dart';
+import '../../widgets/best_metric_picker.dart';
 import '../../widgets/error_card.dart';
 import '../../widgets/graph_card.dart' show showSnapshotBackupSheet;
 import 'ranked_all_trackers_screen.dart';
@@ -531,8 +533,13 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
               ),
               RankedStatsCard(summary: agg.summary),
               const SizedBox(height: AppTheme.lg),
-              const SectionLabel(label: 'Highlights', icon: Icons.star_outline),
+              const SectionLabel(
+                label: 'Highlights',
+                icon: Icons.star_outline,
+                trailing: BestMetricPill(),
+              ),
               RankedOverviewHighlights(
+                metric: ref.watch(bestMetricProvider),
                 legends: agg.legends,
                 maps: agg.maps,
                 legendMatchesFor: (legend) =>
@@ -604,7 +611,7 @@ class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
   }
 }
 
-class _OverviewTab extends StatelessWidget {
+class _OverviewTab extends ConsumerWidget {
   final String uid;
   final PlayerStats stats;
   final List<StatSnapshot> snapshots;
@@ -635,7 +642,7 @@ class _OverviewTab extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final summary = data.summary;
     final matches = data.view.filtered;
     final legends = data.legends;
@@ -685,8 +692,13 @@ class _OverviewTab extends StatelessWidget {
           const SizedBox(height: AppTheme.md),
           RankedStatsCard(summary: summary),
           const SizedBox(height: AppTheme.lg),
-          const SectionLabel(label: 'Highlights', icon: Icons.star_outline),
+          const SectionLabel(
+            label: 'Highlights',
+            icon: Icons.star_outline,
+            trailing: BestMetricPill(),
+          ),
           RankedOverviewHighlights(
+            metric: ref.watch(bestMetricProvider),
             legends: legends,
             maps: maps,
             legendMatchesFor: legendMatchesFor,

@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatAvgDamage, formatAvgKills, formatSignedInt;
+    show formatAvgDamage, formatAvgKills, formatSigned, formatSignedInt;
+import '../../../utils/ranked/best_metric.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/legend_asset_image.dart';
@@ -33,6 +34,9 @@ class RankedOverviewHighlights extends StatelessWidget {
   /// Lifetime.
   final List<RankedMatch>? sessionPool;
 
+  /// What makes a legend or map strongest.
+  final BestMetric metric;
+
   const RankedOverviewHighlights({
     super.key,
     required this.legends,
@@ -41,19 +45,22 @@ class RankedOverviewHighlights extends StatelessWidget {
     required this.mapMatchesFor,
     required this.onRefresh,
     this.sessionPool,
+    this.metric = kDefaultBestMetric,
   });
 
   @override
   Widget build(BuildContext context) {
-    final legendsRanked = _rankByAvgRp(
+    final legendsRanked = rankByMetric(
       legends,
-      (l) => l.games,
-      (l) => l.avgRpPerGame,
+      metric,
+      nameOf: (l) => l.legend,
+      softGate: true,
     );
-    final mapsRanked = _rankByAvgRp(
-      maps.where((m) => !isUnknownMapKey(m.mapKey)).toList(),
-      (m) => m.games,
-      (m) => m.avgRpPerGame,
+    final mapsRanked = rankByMetric(
+      maps.where((m) => !isUnknownMapKey(m.mapKey)),
+      metric,
+      nameOf: (m) => m.displayName,
+      softGate: true,
     );
 
     // Split legends into top (best) and bottom (worst) without overlap.
@@ -81,6 +88,7 @@ class RankedOverviewHighlights extends StatelessWidget {
           _MapHighlight(
             label: 'Strongest Map',
             map: mapsRanked.first,
+            metric: metric,
             matchesFor: mapMatchesFor,
             onRefresh: onRefresh,
             sessionPool: sessionPool,
@@ -90,6 +98,7 @@ class RankedOverviewHighlights extends StatelessWidget {
             _MapHighlight(
               label: 'Weakest Map',
               map: mapsRanked.last,
+              metric: metric,
               matchesFor: mapMatchesFor,
               onRefresh: onRefresh,
               sessionPool: sessionPool,
@@ -107,6 +116,7 @@ class RankedOverviewHighlights extends StatelessWidget {
           if (i > 0) const SizedBox(height: AppTheme.sm),
           _CompactLegend(
             breakdown: items[i],
+            metric: metric,
             matchesFor: legendMatchesFor,
             onRefresh: onRefresh,
             sessionPool: sessionPool,
@@ -114,21 +124,6 @@ class RankedOverviewHighlights extends StatelessWidget {
         ],
       ],
     );
-  }
-
-  /// Ranks by average RP/game (desc), preferring items with enough games to be
-  /// meaningful but falling back to all when too few qualify.
-  static List<T> _rankByAvgRp<T>(
-    List<T> all,
-    int Function(T) games,
-    double Function(T) avgRp,
-  ) {
-    final qualified = all
-        .where((e) => games(e) >= kMinGamesForInsight)
-        .toList();
-    final pool = qualified.isNotEmpty ? qualified : List<T>.from(all);
-    pool.sort((a, b) => avgRp(b).compareTo(avgRp(a)));
-    return pool;
   }
 }
 
@@ -155,6 +150,7 @@ class _SectionLabel extends StatelessWidget {
 
 class _CompactLegend extends StatelessWidget {
   final LegendBreakdown breakdown;
+  final BestMetric metric;
 
   final Future<List<RankedMatch>> Function(String legend) matchesFor;
   final Future<void> Function() onRefresh;
@@ -162,6 +158,7 @@ class _CompactLegend extends StatelessWidget {
 
   const _CompactLegend({
     required this.breakdown,
+    required this.metric,
     required this.matchesFor,
     required this.onRefresh,
     this.sessionPool,
@@ -247,9 +244,7 @@ class _CompactLegend extends StatelessWidget {
                               ),
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
-                                child: RpPill.perGame(
-                                  avgRp: breakdown.avgRpPerGame,
-                                ),
+                                child: _metricPill(metric, breakdown),
                               ),
                             ),
                           ],
@@ -262,27 +257,14 @@ class _CompactLegend extends StatelessWidget {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerLeft,
                               child: Row(
-                                children: [
-                                  _HighlightStat(
-                                    label: 'Total RP',
-                                    value: formatSignedInt(breakdown.totalRp),
-                                    color: AppTheme.signColor(
-                                      breakdown.totalRp >= 0,
-                                    ),
-                                  ),
-                                  _HighlightStat(
-                                    label: 'Avg Kills',
-                                    value: formatAvgKills(breakdown.avgKills),
-                                  ),
-                                  _HighlightStat(
-                                    label: 'Avg Dmg',
-                                    value: formatAvgDamage(breakdown.avgDamage),
-                                  ),
-                                  _HighlightStat(
-                                    label: 'Games',
-                                    value: '${breakdown.games}',
-                                  ),
-                                ],
+                                children: _statsFor(
+                                  metric,
+                                  totalRp: breakdown.totalRp,
+                                  avgRp: breakdown.avgRpPerGame,
+                                  avgKills: breakdown.avgKills,
+                                  avgDamage: breakdown.avgDamage,
+                                  games: breakdown.games,
+                                ),
                               ),
                             ),
                           ),
@@ -308,6 +290,7 @@ class _CompactLegend extends StatelessWidget {
 class _MapHighlight extends StatelessWidget {
   final String label;
   final MapBreakdown map;
+  final BestMetric metric;
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
   final List<RankedMatch>? sessionPool;
@@ -315,6 +298,7 @@ class _MapHighlight extends StatelessWidget {
   const _MapHighlight({
     required this.label,
     required this.map,
+    required this.metric,
     required this.matchesFor,
     required this.onRefresh,
     this.sessionPool,
@@ -322,8 +306,6 @@ class _MapHighlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final positive = map.avgRpPerGame >= 0;
-    final accent = AppTheme.signColor(positive);
     final asset = battleRoyaleMapAsset(map.mapKey);
 
     return SurfaceCard(
@@ -359,12 +341,11 @@ class _MapHighlight extends StatelessWidget {
               right: AppTheme.sm,
               child: Icon(Icons.chevron_right, size: 20, color: Colors.white70),
             ),
-            // Average RP per game, top-right — the ranking metric, as on the
-            // legend cards.
+            // The ranking metric, top-right, as on the legend cards.
             Positioned(
               top: AppTheme.sm,
               right: AppTheme.sm,
-              child: MapRpBadge.perGame(avgRp: map.avgRpPerGame, color: accent),
+              child: _metricBadge(metric, map),
             ),
             Padding(
               padding: const EdgeInsets.all(AppTheme.md),
@@ -396,29 +377,15 @@ class _MapHighlight extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
                     child: Row(
-                      children: [
-                        _HighlightStat(
-                          label: 'Total RP',
-                          value: formatSignedInt(map.totalRp),
-                          color: AppTheme.signColor(map.totalRp >= 0),
-                          onImage: true,
-                        ),
-                        _HighlightStat(
-                          label: 'Avg Kills',
-                          value: formatAvgKills(map.avgKills),
-                          onImage: true,
-                        ),
-                        _HighlightStat(
-                          label: 'Avg Dmg',
-                          value: formatAvgDamage(map.avgDamage),
-                          onImage: true,
-                        ),
-                        _HighlightStat(
-                          label: 'Games',
-                          value: '${map.games}',
-                          onImage: true,
-                        ),
-                      ],
+                      children: _statsFor(
+                        metric,
+                        totalRp: map.totalRp,
+                        avgRp: map.avgRpPerGame,
+                        avgKills: map.avgKills,
+                        avgDamage: map.avgDamage,
+                        games: map.games,
+                        onImage: true,
+                      ),
                     ),
                   ),
                 ],
@@ -430,6 +397,82 @@ class _MapHighlight extends StatelessWidget {
     );
   }
 }
+
+/// The ranking measure as the chip at a legend card's top right. RP figures
+/// are coloured as gains or losses; kills, damage and win rate, which can't be
+/// either, take the app's accent.
+Widget _metricPill(BestMetric metric, RankedTally tally) {
+  final value = metric.valueOf(tally)!;
+  return switch (metric) {
+    BestMetric.rpPerGame => RpPill.perGame(avgRp: value),
+    BestMetric.totalRp => RpPill(totalRp: tally.totalRp),
+    _ => RpPill.custom(text: metric.formatValue(value), color: AppTheme.accent),
+  };
+}
+
+/// [_metricPill] for a map card, over its photo.
+Widget _metricBadge(BestMetric metric, RankedTally tally) {
+  final value = metric.valueOf(tally)!;
+  return switch (metric) {
+    BestMetric.rpPerGame => MapRpBadge.perGame(
+      avgRp: value,
+      color: AppTheme.signColor(value >= 0),
+    ),
+    BestMetric.totalRp => MapRpBadge(
+      totalRp: tally.totalRp,
+      color: AppTheme.signColor(tally.totalRp >= 0),
+    ),
+    _ => MapRpBadge.custom(
+      text: metric.formatValue(value),
+      color: AppTheme.accent,
+    ),
+  };
+}
+
+/// A card's stat row. A figure the card already shows as its ranking pill
+/// ([metric]) is left out, so nothing appears twice, and the average RP per
+/// game, just the number, stands in beside Total RP so the row keeps its length.
+List<Widget> _statsFor(
+  BestMetric metric, {
+  required int totalRp,
+  required double avgRp,
+  required double? avgKills,
+  required double? avgDamage,
+  required int games,
+  bool onImage = false,
+}) => [
+  if (metric != BestMetric.totalRp)
+    _HighlightStat(
+      label: 'Total RP',
+      value: formatSignedInt(totalRp),
+      color: AppTheme.signColor(totalRp >= 0),
+      onImage: onImage,
+    ),
+  if (const {
+    BestMetric.totalRp,
+    BestMetric.avgKills,
+    BestMetric.avgDamage,
+  }.contains(metric))
+    _HighlightStat(
+      label: 'Avg RP',
+      value: formatSigned(avgRp),
+      color: AppTheme.signColor(avgRp >= 0),
+      onImage: onImage,
+    ),
+  if (metric != BestMetric.avgKills)
+    _HighlightStat(
+      label: 'Avg Kills',
+      value: formatAvgKills(avgKills),
+      onImage: onImage,
+    ),
+  if (metric != BestMetric.avgDamage)
+    _HighlightStat(
+      label: 'Avg Dmg',
+      value: formatAvgDamage(avgDamage),
+      onImage: onImage,
+    ),
+  _HighlightStat(label: 'Games', value: '$games', onImage: onImage),
+];
 
 /// Small label/value stat pair for the highlight cards' stat row.
 class _HighlightStat extends StatelessWidget {

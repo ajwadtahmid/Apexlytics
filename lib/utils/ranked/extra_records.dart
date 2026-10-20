@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import '../../constants/legend_constants.dart' show canonicalLegendName;
 import '../../models/ranked_match.dart';
+import 'best_metric.dart';
 import 'ranked_aggregates.dart';
 import 'session_overview.dart';
 
@@ -94,23 +94,12 @@ Comeback? biggestComeback(List<RankedSession> sessions) {
   return best;
 }
 
-/// The legend that earned the most RP across [matches], for a card's portrait.
-/// Ties go to the one with more games, then the name. Null with no games.
-String? topLegendByRp(List<RankedMatch> matches) {
-  if (matches.isEmpty) return null;
-  final rp = <String, int>{};
-  final games = <String, int>{};
-  for (final m in matches) {
-    final name = canonicalLegendName(m.legend);
-    rp[name] = (rp[name] ?? 0) + m.effectiveRpChange;
-    games[name] = (games[name] ?? 0) + 1;
-  }
-  final names = rp.keys.toList()
-    ..sort((a, b) {
-      final byRp = rp[b]!.compareTo(rp[a]!);
-      if (byRp != 0) return byRp;
-      final byGames = games[b]!.compareTo(games[a]!);
-      return byGames != 0 ? byGames : a.compareTo(b);
-    });
-  return names.first;
-}
+/// The legend that did best across [matches] under [metric], for a card's
+/// portrait. See [RankedSession.bestLegendBy]. Null with no games.
+String? topLegendBy(List<RankedMatch> matches, BestMetric metric) =>
+    rankByMetric(
+      legendBreakdowns(matches),
+      metric,
+      nameOf: (l) => l.legend,
+      softGate: true,
+    ).firstOrNull?.legend;

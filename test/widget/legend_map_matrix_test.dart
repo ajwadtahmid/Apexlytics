@@ -4,8 +4,11 @@ import 'package:apexlytics/providers/map_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/ranked_entity_history_screen.dart';
 import 'package:apexlytics/screens/ranked/ranked_legend_map_matrix_screen.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_best_legend_per_map.dart';
 import 'package:apexlytics/services/api_service.dart';
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
+import 'package:apexlytics/utils/theme.dart';
 import 'package:apexlytics/widgets/legend_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +40,76 @@ List<RankedMatch> _games(String legend, String map, int n, int rp, int seed) =>
     ];
 
 void main() {
+  group('the best and worst legend per map', () {
+    final cells = legendMapBreakdowns([
+      for (var i = 0; i < 4; i++)
+        buildMatch(
+          legend: 'Bangalore',
+          rp: 30,
+          kills: 1,
+          start: 1782090000 + i * 5000,
+        ),
+      for (var i = 0; i < 4; i++)
+        buildMatch(
+          legend: 'Axle',
+          rp: 10,
+          kills: 5,
+          start: 1782190000 + i * 5000,
+        ),
+    ]);
+
+    Future<void> pumpWith(WidgetTester tester, BestMetric metric) =>
+        tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: RankedBestLegendPerMap(cells: cells, metric: metric),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('says what it goes by, and writes each figure to match', (
+      tester,
+    ) async {
+      await pumpWith(tester, BestMetric.rpPerGame);
+      expect(find.textContaining('By avg RP.'), findsOneWidget);
+      expect(
+        find.text('Best: Bangalore (+30.0 RP/game, 4 games)'),
+        findsOneWidget,
+      );
+      expect(find.text('Worst: Axle (+10.0 RP/game, 4 games)'), findsOneWidget);
+
+      await pumpWith(tester, BestMetric.avgKills);
+      expect(find.textContaining('By avg kills.'), findsOneWidget);
+      expect(find.text('Best: Axle (5.0 kills/game, 4 games)'), findsOneWidget);
+      expect(
+        find.text('Worst: Bangalore (1.0 kills/game, 4 games)'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('colours RP by gain or loss and the rest in the accent', (
+      tester,
+    ) async {
+      Color? colorOf(String text) =>
+          tester.widget<Text>(find.text(text)).style?.color;
+
+      await pumpWith(tester, BestMetric.rpPerGame);
+      expect(
+        colorOf('Best: Bangalore (+30.0 RP/game, 4 games)'),
+        AppTheme.green,
+      );
+
+      await pumpWith(tester, BestMetric.avgKills);
+      expect(colorOf('Best: Axle (5.0 kills/game, 4 games)'), AppTheme.accent);
+    });
+  });
+
+  // These are about RP per game, whatever measure is the default.
+  List<MapLegendInsight> perGameInsights(List<LegendMapCell> cells) =>
+      mapLegendInsights(cells, metric: BestMetric.rpPerGame);
+
   group('mapLegendInsights', () {
     final cells = legendMapBreakdowns([
       ..._games('Bangalore', 'olympus_rotation', 4, 30, 0),
@@ -44,10 +117,10 @@ void main() {
       ..._games('Wraith', 'olympus_rotation', 2, 90, 20), // too few games
       ..._games('Axle', 'storm_point_rotation', 2, 50, 30),
     ]);
-    final byMap = {for (final i in mapLegendInsights(cells)) i.mapName: i};
+    final byMap = {for (final i in perGameInsights(cells)) i.mapName: i};
 
     test('most-played map first, with its record', () {
-      final all = mapLegendInsights(cells);
+      final all = perGameInsights(cells);
       expect(all.first.mapName, 'Olympus');
       expect(all.first.games, 12);
       expect(all.first.totalRp, 4 * 30 + 6 * 10 + 2 * 90);
@@ -64,10 +137,38 @@ void main() {
       expect(byMap['Olympus']!.qualified, 2);
     });
 
+    test('names the legends by the chosen measure', () {
+      final withKills = legendMapBreakdowns([
+        for (var i = 0; i < 4; i++)
+          buildMatch(
+            legend: 'Bangalore',
+            rp: 30,
+            kills: 1,
+            start: 1782090000 + i * 5000,
+          ),
+        for (var i = 0; i < 4; i++)
+          buildMatch(
+            legend: 'Axle',
+            rp: 10,
+            kills: 5,
+            start: 1782190000 + i * 5000,
+          ),
+      ]);
+
+      final byKills = mapLegendInsights(
+        withKills,
+        metric: BestMetric.avgKills,
+      ).single;
+
+      expect(byKills.best!.legend, 'Axle');
+      expect(byKills.worst!.legend, 'Bangalore');
+      expect(byKills.qualified, 2);
+    });
+
     test('there is no worst with fewer than two legends to compare', () {
       expect(byMap['Storm Point']!.worst, isNull);
       expect(byMap['Storm Point']!.qualified, 0);
-      final one = mapLegendInsights(
+      final one = perGameInsights(
         legendMapBreakdowns(_games('Axle', 'olympus_rotation', 5, 10, 0)),
       );
       expect(one.single.best!.legend, 'Axle');
@@ -76,7 +177,7 @@ void main() {
     });
 
     test('equal legends have no worst, as it would not be worse', () {
-      final level = mapLegendInsights(
+      final level = perGameInsights(
         legendMapBreakdowns([
           ..._games('Axle', 'olympus_rotation', 3, 20, 0),
           ..._games('Bangalore', 'olympus_rotation', 5, 20, 10),
@@ -87,7 +188,7 @@ void main() {
     });
 
     test('a tie on RP per game goes to the legend with more games', () {
-      final tie = mapLegendInsights(
+      final tie = perGameInsights(
         legendMapBreakdowns([
           ..._games('Axle', 'olympus_rotation', 3, 20, 0),
           ..._games('Bangalore', 'olympus_rotation', 5, 20, 10),
@@ -111,7 +212,8 @@ void main() {
       tester.view.physicalSize = const Size(800, 2000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      SharedPreferences.setMockInitialValues({});
+      // The figures below are RP per game.
+      SharedPreferences.setMockInitialValues({'best_metric': 'rpPerGame'});
       final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(
         ProviderScope(

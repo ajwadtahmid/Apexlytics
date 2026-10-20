@@ -499,6 +499,64 @@ void main() {
       },
     );
   });
+  group('the Highlights header', () {
+    const uid = 'uid123';
+    const splitId = 'br_ranked_s29_s1';
+
+    Future<void> showOverview(
+      WidgetTester tester, {
+      Map<String, Object> saved = const {},
+    }) async {
+      tester.view.physicalSize = const Size(800, 3200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final prefs = await prefsWith({
+        PrefsKeys.statsRefreshMinutes: 10,
+        ...saved,
+      });
+      await tester.pumpWidget(
+        app(
+          prefs: prefs,
+          outcome: RankedSyncOutcome.synced,
+          splits: const [
+            RankedSplitBucket(id: splitId, displayName: 'S29 Split 1'),
+          ],
+          splitMatches: [
+            for (var i = 0; i < 4; i++)
+              buildMatch(
+                uid: uid,
+                start: 1700000000 + i * 1500,
+                legend: 'Wraith',
+                rp: 40,
+                cumulativeRp: 1000 + i * 40,
+              ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('has the "Rank by" pill, on Total RP until changed', (
+      tester,
+    ) async {
+      await showOverview(tester);
+
+      expect(find.text('Highlights'), findsOneWidget);
+      expect(find.text('Rank by:'), findsOneWidget);
+      expect(find.text('Total RP'), findsOneWidget);
+      expect(find.text('+160 RP'), findsWidgets); // the legend card's pill
+    });
+
+    testWidgets('shows what was chosen, on the cards too', (tester) async {
+      await showOverview(tester, saved: {PrefsKeys.bestMetric: 'rpPerGame'});
+
+      expect(find.text('Avg RP'), findsWidgets); // the pill, and the stat
+      expect(find.text('+40.0 /game'), findsWidgets);
+      // Total RP is back down in the stats, no longer the card's pill.
+      expect(find.text('TOTAL RP'), findsWidgets);
+    });
+  });
+
   group('tapping Stats in the nav bar while on it', () {
     const uid = 'uid123';
     const splitId = 'br_ranked_s29_s1';

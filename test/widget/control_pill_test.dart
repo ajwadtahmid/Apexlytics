@@ -27,6 +27,24 @@ void main() {
     expect(taps, 1);
   });
 
+  testWidgets('a trailing widget sits after the label', (tester) async {
+    await pump(
+      tester,
+      ControlPill(
+        icon: Icons.bolt,
+        label: 'Damage',
+        trailing: const Icon(Icons.arrow_downward, size: 13),
+        onTap: () {},
+      ),
+    );
+
+    final icon = tester.getTopLeft(find.byIcon(Icons.bolt)).dx;
+    final label = tester.getTopLeft(find.text('Damage')).dx;
+    final arrow = tester.getTopLeft(find.byIcon(Icons.arrow_downward)).dx;
+    expect(icon, lessThan(label));
+    expect(label, lessThan(arrow));
+  });
+
   testWidgets('without a prefix it is just the pill', (tester) async {
     await pump(
       tester,

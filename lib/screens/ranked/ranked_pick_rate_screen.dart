@@ -4,12 +4,15 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/ranked_match.dart';
+import '../../providers/best_metric_provider.dart';
 import '../../providers/pick_rate_options_provider.dart';
 import '../../utils/ranked/label_placement.dart';
 import '../../utils/ranked/legend_table_sort.dart';
 import '../../utils/ranked/pick_rate_quadrants.dart';
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/theme.dart';
+import '../../utils/ranked/best_metric.dart';
+import '../../widgets/best_metric_picker.dart' show bestMetricColor;
 import '../../widgets/legend_asset_image.dart';
 import '../../widgets/stat_display.dart';
 import '../../widgets/surface_card.dart';
@@ -257,6 +260,7 @@ class _RankedPickRateScreenState extends ConsumerState<RankedPickRateScreen> {
 
   Widget _detail(double? pickRate) => _SelectedDetail(
     legend: _selected,
+    metric: ref.watch(bestMetricProvider),
     pickRate: pickRate,
     maps: _selected == null ? null : _mapCells[_selected!.legend],
     onOpen: widget.matchesFor == null ? null : _openHistory,
@@ -879,6 +883,9 @@ class _KeyChip extends StatelessWidget {
 
 class _SelectedDetail extends StatelessWidget {
   final LegendBreakdown? legend;
+
+  /// What makes one of the legend's maps its best or worst.
+  final BestMetric metric;
   final double? pickRate;
 
   /// The legend's games by map, once loaded; null until then or when there is
@@ -889,6 +896,7 @@ class _SelectedDetail extends StatelessWidget {
   final ValueChanged<LegendBreakdown>? onOpen;
   const _SelectedDetail({
     required this.legend,
+    required this.metric,
     required this.pickRate,
     this.maps,
     this.onOpen,
@@ -910,7 +918,10 @@ class _SelectedDetail extends StatelessWidget {
     }
     final rate = pickRate ?? 0;
     final positive = l.avgRpPerGame >= 0;
-    final (:best, :worst) = legendBestWorstMap(maps ?? const []);
+    final (:best, :worst) = legendBestWorstMap(
+      maps ?? const [],
+      metric: metric,
+    );
     return SurfaceCard(
       onTap: onOpen == null ? null : () => onOpen!(l),
       padding: const EdgeInsets.all(AppTheme.md),
@@ -985,7 +996,7 @@ class _SelectedDetail extends StatelessWidget {
           ),
           if (best != null) ...[
             const SizedBox(height: AppTheme.md),
-            _MapLines(best: best, worst: worst),
+            _MapLines(best: best, worst: worst, metric: metric),
           ],
         ],
       ),
@@ -998,9 +1009,15 @@ class _SelectedDetail extends StatelessWidget {
 class _MapLines extends StatelessWidget {
   final LegendMapCell best;
   final LegendMapCell? worst;
-  const _MapLines({required this.best, required this.worst});
+  final BestMetric metric;
+  const _MapLines({
+    required this.best,
+    required this.worst,
+    required this.metric,
+  });
 
   TableRow _row(String label, LegendMapCell cell) {
+    final value = metric.valueOf(cell)!;
     return TableRow(
       children: [
         Padding(
@@ -1023,9 +1040,9 @@ class _MapLines extends StatelessWidget {
               style: AppTheme.caption,
               children: [
                 TextSpan(
-                  text: '${formatSigned(cell.avgRpPerGame)} RP/game',
+                  text: metric.formatInline(value),
                   style: TextStyle(
-                    color: AppTheme.signColor(cell.avgRpPerGame >= 0),
+                    color: bestMetricColor(metric, value),
                     fontWeight: FontWeight.bold,
                   ),
                 ),

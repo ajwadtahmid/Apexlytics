@@ -10,7 +10,7 @@ import 'widgets/ranked_share_cards.dart';
 /// The recap as a card to share, with the choice of which tiles go on it. The
 /// choice is kept between visits; the win rate and the win streak are there to
 /// be asked for.
-class RankedRecapShareScreen extends ConsumerWidget {
+class RankedRecapShareScreen extends ConsumerStatefulWidget {
   final SplitRecap recap;
   final String scope;
   final String playerName;
@@ -29,7 +29,19 @@ class RankedRecapShareScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RankedRecapShareScreen> createState() =>
+      _RankedRecapShareScreenState();
+}
+
+class _RankedRecapShareScreenState
+    extends ConsumerState<RankedRecapShareScreen> {
+  /// Whether the card's footer says what its best legend and map are best at.
+  /// Asked afresh each visit, like the name.
+  bool _showNote = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final recap = widget.recap;
     final chosen = ref.watch(recapTilesProvider);
     final available = availableRecapTiles(recap);
     final shown = shownRecapTiles(chosen, available);
@@ -43,18 +55,36 @@ class RankedRecapShareScreen extends ConsumerWidget {
             ShareCardPanel(
               cardBuilder: (showName) => RecapShareCard(
                 recap: recap,
-                scope: scope,
-                playerName: showName ? playerName : null,
-                isPredator: isPredator,
+                scope: widget.scope,
+                playerName: showName ? widget.playerName : null,
+                isPredator: widget.isPredator,
                 tiles: shown,
-                periodPhrase: periodPhrase,
+                periodPhrase: widget.periodPhrase,
+                showNote: _showNote,
               ),
-              controls: _TilePicker(
-                available: available,
-                shown: shown,
-                onToggle: (tile) => ref
-                    .read(recapTilesProvider.notifier)
-                    .toggle(tile, available),
+              controls: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _TilePicker(
+                    available: available,
+                    shown: shown,
+                    onToggle: (tile) => ref
+                        .read(recapTilesProvider.notifier)
+                        .toggle(tile, available),
+                  ),
+                  // Only when the card has a best legend or map to explain.
+                  if (recapBestNote(recap, shown) != null)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Show footer note'),
+                      subtitle: Text(
+                        recapBestNote(recap, shown)!,
+                        style: AppTheme.caption,
+                      ),
+                      value: _showNote,
+                      onChanged: (v) => setState(() => _showNote = v),
+                    ),
+                ],
               ),
             ),
           ],

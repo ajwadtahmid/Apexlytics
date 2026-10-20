@@ -7,6 +7,7 @@ import 'package:apexlytics/screens/ranked/widgets/recap_journey_chart.dart';
 import 'package:apexlytics/utils/share_image.dart';
 import 'package:apexlytics/utils/theme.dart';
 import 'package:apexlytics/widgets/rank_badge.dart';
+import 'package:apexlytics/widgets/stat_display.dart' show StatGrid;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,11 +47,12 @@ void main() {
     List<RankedMatch> matches, {
     bool isPredator = false,
     String periodPhrase = 'this split',
+    Map<String, Object> saved = const {},
   }) async {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues(saved);
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
@@ -142,10 +144,13 @@ void main() {
       ['Best legend', 'Best map'],
       ['Win rate', 'RP per game'],
     ];
+    // The "Rank by" pill above the grid names a figure too ("RP per game").
+    Finder figure(String label) =>
+        find.descendant(of: find.byType(StatGrid), matching: find.text(label));
     double? previousTop;
     for (final row in rows) {
-      final left = tester.getTopLeft(find.text(row[0]));
-      final right = tester.getTopLeft(find.text(row[1]));
+      final left = tester.getTopLeft(figure(row[0]));
+      final right = tester.getTopLeft(figure(row[1]));
       expect(left.dy, right.dy, reason: '$row share a row');
       expect(left.dx, lessThan(right.dx), reason: '$row in order');
       if (previousTop != null) expect(left.dy, greaterThan(previousTop));
@@ -153,8 +158,51 @@ void main() {
     }
   });
 
+  group('what "best" means', () {
+    testWidgets('is Total RP, said under the best legend and map', (
+      tester,
+    ) async {
+      await pump(tester, wins);
+
+      expect(find.text('Rank by:'), findsOneWidget);
+      // The legend's and the map's figure, as the same measure; the best
+      // session says its own.
+      expect(find.text('+80 RP'), findsNWidgets(3));
+      expect(find.text('+20.0 /game'), findsNothing);
+    });
+
+    testWidgets('follows the saved choice', (tester) async {
+      await pump(tester, wins, saved: {'best_metric': 'totalKills'});
+
+      expect(find.text('Total kills'), findsOneWidget); // the pill
+      expect(find.text('8 kills'), findsNWidgets(2));
+      expect(find.text('+20.0 /game'), findsNothing);
+    });
+
+    testWidgets('can be changed from the recap itself', (tester) async {
+      await pump(tester, wins);
+
+      await tester.tap(find.text('Total RP').first); // the pill
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Avg RP'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('+20.0 /game'), findsNWidgets(2)); // legend, map
+      expect(find.text('+80 RP'), findsOneWidget); // the session alone
+    });
+
+    testWidgets('is not offered when there is no best to name', (tester) async {
+      // Two games: too few on any legend or map to name a best.
+      await pump(tester, wins.take(2).toList());
+
+      expect(find.text('Best legend'), findsNothing);
+      expect(find.text('Rank by:'), findsNothing);
+    });
+  });
+
   testWidgets('shows the figures behind it, once each', (tester) async {
-    await pump(tester, wins);
+    // By RP per game, so the best legend's and map's figures aren't RP totals.
+    await pump(tester, wins, saved: {'best_metric': 'rpPerGame'});
 
     // Four games of two kills and 400 damage, +20 RP each, all one session.
     expect(find.text('4'), findsOneWidget);

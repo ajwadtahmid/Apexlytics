@@ -1,4 +1,5 @@
 import 'package:apexlytics/models/ranked_match.dart';
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/utils/ranked/extra_records.dart';
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -211,36 +212,72 @@ void main() {
     });
   });
 
-  group('topLegendByRp', () {
+  group('topLegendBy', () {
+    const perGame = BestMetric.rpPerGame;
+
     test('is null with no games', () {
-      expect(topLegendByRp([]), isNull);
+      expect(topLegendBy([], perGame), isNull);
     });
 
-    test('is the legend that earned the most RP, not the most played', () {
-      final top = topLegendByRp([
-        game(at(1, 18), 5, legend: 'Wraith'),
-        game(at(1, 19), 5, legend: 'Wraith'),
-        game(at(1, 20), 30, legend: 'Octane'),
-      ]);
+    test('prefers a legend with enough games to a lucky single game', () {
+      final games = [
+        game(at(1, 18), 10, legend: 'Wraith'),
+        game(at(1, 19), 10, legend: 'Wraith'),
+        game(at(1, 20), 10, legend: 'Wraith'),
+        game(at(1, 21), 40, legend: 'Octane'),
+      ];
 
-      expect(top, 'Octane');
+      // Whatever the measure: one game is not enough to be the top legend.
+      expect(topLegendBy(games, perGame), 'Wraith');
+      expect(topLegendBy(games, BestMetric.totalRp), 'Wraith');
+    });
+
+    test('a measure of the total can favour the legend played more', () {
+      final games = [
+        // Wraith earns more a game; Octane earns more in all.
+        for (var i = 0; i < 3; i++) game(at(1, 10 + i), 10, legend: 'Wraith'),
+        for (var i = 0; i < 10; i++) game(at(1, 13 + i), 4, legend: 'Octane'),
+      ];
+
+      expect(topLegendBy(games, perGame), 'Wraith');
+      expect(topLegendBy(games, BestMetric.totalRp), 'Octane');
+    });
+
+    test('with no legend at the minimum, ranks them all', () {
+      expect(
+        topLegendBy([
+          game(at(1, 18), 5, legend: 'Wraith'),
+          game(at(1, 19), 5, legend: 'Wraith'),
+          game(at(1, 20), 30, legend: 'Octane'),
+        ], perGame),
+        'Octane',
+      );
     });
 
     test('a tie goes to the legend with more games, then the name', () {
       expect(
-        topLegendByRp([
+        topLegendBy([
           game(at(1, 18), 10, legend: 'Wraith'),
           game(at(1, 19), 10, legend: 'Octane'),
-        ]),
+        ], perGame),
         'Octane',
       );
       expect(
-        topLegendByRp([
-          game(at(1, 18), 5, legend: 'Wraith'),
-          game(at(1, 19), 5, legend: 'Wraith'),
+        topLegendBy([
+          game(at(1, 18), 10, legend: 'Wraith'),
+          game(at(1, 19), 10, legend: 'Wraith'),
           game(at(1, 20), 10, legend: 'Octane'),
-        ]),
+        ], perGame),
         'Wraith',
+      );
+    });
+
+    test('is null when no game reported what the measure counts', () {
+      expect(
+        topLegendBy([
+          game(at(1, 18), 10, legend: 'Wraith'),
+        ], BestMetric.avgKills),
+        isNull,
       );
     });
   });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../constants/stat_icons.dart';
 import '../../../constants/legend_constants.dart' show canonicalLegendName;
 import '../../../constants/rank_constants.dart' show kPredatorBadgeAsset;
 import '../../../models/ranked_match.dart';
@@ -43,6 +44,10 @@ class RecapShareCard extends StatelessWidget {
   /// Where the RP was netted, said after it: "this split", or "in Week 3" when a
   /// single week is on screen.
   final String periodPhrase;
+
+  /// Whether the footer says what the best legend and map are best at, when the
+  /// card shows either.
+  final bool showNote;
   const RecapShareCard({
     super.key,
     required this.recap,
@@ -51,6 +56,7 @@ class RecapShareCard extends StatelessWidget {
     this.isPredator = false,
     this.tiles,
     this.periodPhrase = 'this split',
+    this.showNote = true,
   });
 
   /// One tile of the card, or null when it has nothing to show.
@@ -59,7 +65,7 @@ class RecapShareCard extends StatelessWidget {
     switch (tile) {
       case RecapTile.games:
         return ShareTile(
-          icon: Icons.sports_esports_outlined,
+          icon: StatIcons.games,
           label: 'Games',
           value: '${r.games}',
         );
@@ -71,13 +77,13 @@ class RecapShareCard extends StatelessWidget {
         );
       case RecapTile.kills:
         return ShareTile(
-          icon: Icons.sports_kabaddi,
+          icon: StatIcons.totalKills,
           label: 'Kills',
           value: formatTotalOrNone(r.totalKills, r.killsGames),
         );
       case RecapTile.damage:
         return ShareTile(
-          icon: Icons.local_fire_department,
+          icon: StatIcons.totalDamage,
           label: 'Damage',
           value: formatTotalOrNone(r.totalDamage, r.damageGames),
         );
@@ -93,7 +99,7 @@ class RecapShareCard extends StatelessWidget {
               );
       case RecapTile.timePlayed:
         return ShareTile(
-          icon: Icons.schedule,
+          icon: StatIcons.time,
           label: 'Time played',
           value: formatDuration(r.playSecs),
         );
@@ -115,7 +121,7 @@ class RecapShareCard extends StatelessWidget {
               );
       case RecapTile.winRate:
         return ShareTile(
-          icon: Icons.percent,
+          icon: StatIcons.winRate,
           label: 'Win rate',
           value: r.winRate == null
               ? kNoReading
@@ -123,7 +129,7 @@ class RecapShareCard extends StatelessWidget {
         );
       case RecapTile.rpPerGame:
         return ShareTile(
-          icon: Icons.bolt,
+          icon: StatIcons.avgRp,
           label: 'RP per game',
           value: formatSigned(r.avgRpPerGame),
           color: _signed(r.avgRpPerGame),
@@ -134,11 +140,21 @@ class RecapShareCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = recap;
+    final shown = tiles ?? defaultRecapTiles.toList();
+    final note = showNote ? recapBestNote(r, shown) : null;
     return ShareCardFrame(
       label: '$scope recap',
       name: playerName,
       legend: r.bestLegend?.legend,
       height: _kRecapHeight,
+      // One line whatever the font, so the footer keeps its height.
+      footer: note == null
+          ? null
+          : FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(note, style: AppTheme.captionSmall),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -190,14 +206,24 @@ class RecapShareCard extends StatelessWidget {
           Wrap(
             spacing: AppTheme.sm,
             runSpacing: AppTheme.sm,
-            children: [
-              for (final t in tiles ?? defaultRecapTiles.toList()) ?_tile(t),
-            ],
+            children: [for (final t in shown) ?_tile(t)],
           ),
         ],
       ),
     );
   }
+}
+
+/// What [recap]'s best legend and map are best at, said for the card's footer
+/// once [shown] tiles include either: "Best legend and map by total RP". Null
+/// when neither is on the card.
+String? recapBestNote(SplitRecap recap, List<RecapTile> shown) {
+  final legend =
+      shown.contains(RecapTile.bestLegend) && recap.bestLegend != null;
+  final map = shown.contains(RecapTile.bestMap) && recap.bestMap != null;
+  if (!legend && !map) return null;
+  final what = legend && map ? 'legend and map' : (legend ? 'legend' : 'map');
+  return 'Best $what by ${recap.metric.phrase}';
 }
 
 /// All of a period's records on one card, as the same two-column tiles the recap
@@ -429,8 +455,8 @@ class StreakShareCard extends StatelessWidget {
       visual: _WinDots(count: games),
       height: _kStreakHeight,
       stats: [
-        (Icons.sports_kabaddi, 'Kills', formatNumberOrNone(kills)),
-        (Icons.local_fire_department, 'Damage', formatNumberOrNone(damage)),
+        (StatIcons.totalKills, 'Kills', formatNumberOrNone(kills)),
+        (StatIcons.totalDamage, 'Damage', formatNumberOrNone(damage)),
         (
           Icons.schedule,
           'First to last win',

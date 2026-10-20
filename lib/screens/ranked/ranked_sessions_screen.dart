@@ -1,6 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../providers/best_metric_provider.dart';
 import '../../utils/formatting/format.dart' show formatTotalOrNone, plural;
 import '../../utils/ranked/ranked_aggregates.dart';
 import '../../utils/ranked/session_overview.dart';
@@ -47,14 +49,14 @@ class SessionRecapTile extends StatelessWidget {
 /// Card-less session summary: date, net RP, a stat strip (games · kills ·
 /// time · top legend), and how the session went game by game. Used by
 /// [SessionRecapTile].
-class SessionRecapBody extends StatelessWidget {
+class SessionRecapBody extends ConsumerWidget {
   final RankedSession session;
   final SessionBadge? badge;
   const SessionRecapBody({super.key, required this.session, this.badge});
 
   @override
-  Widget build(BuildContext context) {
-    final best = session.bestLegend;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final best = session.bestLegendBy(ref.watch(bestMetricProvider));
     final multiple = session.matches.length > 1;
 
     return Column(

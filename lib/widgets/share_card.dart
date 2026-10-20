@@ -27,6 +27,9 @@ class ShareCardFrame extends StatelessWidget {
   /// A legend whose portrait is faded in on the right. Null for none.
   final String? legend;
   final double height;
+
+  /// A line at the bottom left, level with the Apexlytics mark at the right.
+  final Widget? footer;
   final Widget child;
   const ShareCardFrame({
     super.key,
@@ -34,6 +37,7 @@ class ShareCardFrame extends StatelessWidget {
     this.name,
     this.legend,
     this.height = kShareCardHeight,
+    this.footer,
     required this.child,
   });
 
@@ -109,7 +113,13 @@ class ShareCardFrame extends StatelessWidget {
                 const SizedBox(height: AppTheme.md),
                 Expanded(child: child),
                 const SizedBox(height: AppTheme.sm),
-                const Align(alignment: Alignment.centerRight, child: _Brand()),
+                Row(
+                  children: [
+                    Expanded(child: footer ?? const SizedBox.shrink()),
+                    const SizedBox(width: AppTheme.sm),
+                    const _Brand(),
+                  ],
+                ),
               ],
             ),
           ),

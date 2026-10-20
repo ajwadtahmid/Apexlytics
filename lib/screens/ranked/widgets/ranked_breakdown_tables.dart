@@ -3,8 +3,11 @@ import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
     show formatAvgDamage, formatAvgKills, formatTotalOrNone, formatSigned;
+import '../../../constants/stat_icons.dart';
+import '../../../utils/ranked/best_metric.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
+import '../../../widgets/best_metric_picker.dart' show bestMetricIcon;
 import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/map_asset_image.dart';
 import '../../../widgets/rp_pill.dart';
@@ -15,27 +18,46 @@ import 'map_rp_badge.dart';
 import 'rank_badge.dart';
 import 'ranked_legend_detail_sheet.dart';
 import 'ranked_map_detail_sheet.dart';
+import '../../../widgets/choice_sheet.dart';
 import '../../../widgets/control_pill.dart';
 
-enum _Sort { totalRp, games, avgRp }
+/// The orders the Legends and Maps tabs offer, in the order the sheet lists
+/// them. Each is a [BestMetric] but the number of games, which isn't one.
+enum _Sort {
+  totalRp(BestMetric.totalRp),
+  avgRp(BestMetric.rpPerGame),
+  games(null),
+  winRate(BestMetric.winRate),
+  avgKills(BestMetric.avgKills),
+  totalKills(BestMetric.totalKills),
+  avgDamage(BestMetric.avgDamage),
+  totalDamage(BestMetric.totalDamage);
 
-const _sortLabels = {
-  _Sort.totalRp: 'Total RP',
-  _Sort.games: 'Games',
-  _Sort.avgRp: 'Avg RP',
-};
+  const _Sort(this.metric);
+  final BestMetric? metric;
 
-const _sortIcons = {
-  _Sort.totalRp: Icons.military_tech,
-  _Sort.games: Icons.tag, // sorting by *number* of games
-  _Sort.avgRp: Icons.show_chart,
-};
+  String get label => metric?.label ?? 'Games';
 
-_Sort _nextSort(_Sort s) => switch (s) {
-  _Sort.totalRp => _Sort.games,
-  _Sort.games => _Sort.avgRp,
-  _Sort.avgRp => _Sort.totalRp,
-};
+  /// Games wear their own icon; the rest wear their measure's.
+  IconData get icon => metric == null ? StatIcons.games : bestMetricIcon(metric!);
+}
+
+/// Opens the sheet that picks how a tab's rows are ordered.
+void _showSortSheet(
+  BuildContext context, {
+  required String title,
+  required _Sort selected,
+  required ValueChanged<_Sort> onChosen,
+}) => showChoiceSheet<_Sort>(
+  context,
+  title: title,
+  options: [
+    for (final s in _Sort.values)
+      ChoiceOption(value: s, icon: s.icon, label: s.label),
+  ],
+  selected: selected,
+  onChosen: onChosen,
+);
 
 
 // ── Legends tab ─────────────────────────────────────────────────────────────
@@ -68,14 +90,7 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
 
   @override
   Widget build(BuildContext context) {
-    final rows = [...widget.rows];
-    _applySort(
-      rows,
-      _sort,
-      (r) => r.totalRp,
-      (r) => r.games,
-      (r) => r.avgRpPerGame,
-    );
+    final rows = _sorted(widget.rows, _sort, (r) => r.legend);
 
     return RefreshIndicator(
       color: AppTheme.accent,
@@ -85,7 +100,12 @@ class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
         children: [
           _SortBar(
             selected: _sort,
-            onTap: () => setState(() => _sort = _nextSort(_sort)),
+            onTap: () => _showSortSheet(
+              context,
+              title: 'Sort legends by',
+              selected: _sort,
+              onChosen: (s) => setState(() => _sort = s),
+            ),
           ),
           const SizedBox(height: AppTheme.sm),
           for (var i = 0; i < rows.length; i++)
@@ -285,14 +305,7 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
 
   @override
   Widget build(BuildContext context) {
-    final all = [...widget.rows];
-    _applySort(
-      all,
-      _sort,
-      (r) => r.totalRp,
-      (r) => r.games,
-      (r) => r.avgRpPerGame,
-    );
+    final all = _sorted(widget.rows, _sort, (r) => r.displayName);
     // Keep "Unknown" but always pin it to the bottom, regardless of sort.
     final known = all.where((r) => !isUnknownMapKey(r.mapKey)).toList();
     final unknown = all.where((r) => isUnknownMapKey(r.mapKey)).toList();
@@ -306,7 +319,12 @@ class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
         children: [
           _SortBar(
             selected: _sort,
-            onTap: () => setState(() => _sort = _nextSort(_sort)),
+            onTap: () => _showSortSheet(
+              context,
+              title: 'Sort maps by',
+              selected: _sort,
+              onChosen: (s) => setState(() => _sort = s),
+            ),
           ),
           const SizedBox(height: AppTheme.sm),
           for (var i = 0; i < rows.length; i++)
@@ -516,24 +534,23 @@ class _MapStat extends StatelessWidget {
 
 // ── Shared sort helpers ─────────────────────────────────────────────────────
 
-void _applySort<T>(
-  List<T> rows,
+/// [rows] ordered by [sort], biggest first. A row with no figure for it (no
+/// kills reported, say) goes last; ties go to the one with more games, then the
+/// name.
+List<T> _sorted<T extends RankedTally>(
+  Iterable<T> rows,
   _Sort sort,
-  int Function(T) totalRp,
-  int Function(T) games,
-  double Function(T) avgRp,
+  String Function(T) nameOf,
 ) {
-  switch (sort) {
-    case _Sort.totalRp:
-      rows.sort((a, b) => totalRp(b).compareTo(totalRp(a)));
-    case _Sort.games:
-      rows.sort((a, b) => games(b).compareTo(games(a)));
-    case _Sort.avgRp:
-      rows.sort((a, b) => avgRp(b).compareTo(avgRp(a)));
-  }
+  final metric = sort.metric;
+  if (metric != null) return sortByMetric(rows, metric, nameOf: nameOf);
+  return [...rows]..sort((a, b) {
+    final byGames = b.games.compareTo(a.games);
+    return byGames != 0 ? byGames : nameOf(a).compareTo(nameOf(b));
+  });
 }
 
-/// Cycling "Sort:" pill.
+/// The "Sort:" pill, which opens the sheet of orders.
 class _SortBar extends StatelessWidget {
   final _Sort selected;
   final VoidCallback onTap;
@@ -546,8 +563,8 @@ class _SortBar extends StatelessWidget {
       children: [
         ControlPill(
           prefix: 'Sort:',
-          icon: _sortIcons[selected]!,
-          label: _sortLabels[selected]!,
+          icon: selected.icon,
+          label: selected.label,
           onTap: onTap,
         ),
       ],

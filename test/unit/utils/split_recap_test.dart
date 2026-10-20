@@ -1,3 +1,4 @@
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/utils/ranked/split_recap.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -69,6 +70,43 @@ void main() {
 
     expect(r.bestLegend!.legend, 'Axle');
     expect(r.bestMap!.displayName, 'Olympus');
+  });
+
+  test('best legend and map follow the chosen measure', () {
+    // Axle earns more a game; Octane earns more in all, and scores more.
+    final r = [
+      for (var i = 0; i < 3; i++)
+        buildMatch(start: t0 + i * 1000, rp: 10, kills: 1, damage: 100),
+      for (var i = 0; i < 10; i++)
+        buildMatch(
+          start: t0 + 86400 + i * 1000,
+          legend: 'Octane',
+          map: 'storm_point_rotation',
+          rp: 4,
+          kills: 3,
+          damage: 400,
+        ),
+    ];
+
+    for (final (metric, legend, map) in [
+      (BestMetric.rpPerGame, 'Axle', 'Olympus'),
+      (BestMetric.totalRp, 'Octane', 'Storm Point'),
+      (BestMetric.avgKills, 'Octane', 'Storm Point'),
+      (BestMetric.totalDamage, 'Octane', 'Storm Point'),
+    ]) {
+      final recap = splitRecap(r, metric: metric);
+      expect(recap.bestLegend!.legend, legend, reason: '$metric');
+      expect(recap.bestMap!.displayName, map, reason: '$metric');
+    }
+  });
+
+  test('no legend reported kills: there is no best by kills', () {
+    final r = splitRecap([
+      for (var i = 0; i < 4; i++) buildMatch(start: t0 + i * 1000, rp: 10),
+    ], metric: BestMetric.avgKills);
+
+    expect(r.bestLegend, isNull);
+    expect(r.bestMap, isNull);
   });
 
   test('a legend with too few games is not the best', () {
