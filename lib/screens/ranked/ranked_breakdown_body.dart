@@ -672,6 +672,8 @@ class _OverviewTab extends StatelessWidget {
           RankedRpChart(
             matches: matches,
             sessions: data.sessions,
+            weeks: data.view.weeks,
+            weekIndex: data.view.weekIndex,
             onShowBackup: () => showSnapshotBackupSheet(
               context,
               snapshots: snapshots,

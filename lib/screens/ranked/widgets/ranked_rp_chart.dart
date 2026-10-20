@@ -3,14 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
-    show formatNumber, formatShortDateTime, formatSignedInt;
+    show formatNumber, formatShortDateTime, formatSignedInt, plural;
+import '../../../utils/formatting/season_utils.dart' show WeekRange;
 import '../../../constants/map_constants.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
+import '../../../utils/ranked/ranked_period.dart' show matchesInWeek;
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 
 /// Match and session times in the chart's tooltips and session picker.
 final _sessionFmt = DateFormat('MMM d, h:mm a');
+
+final _dayFmt = DateFormat('MMM d');
 
 /// Above this many plotted points, individual dots stop being useful (they
 /// overlap into a solid band) and cost more to paint than they convey.
@@ -22,18 +26,26 @@ const int _kMaxChartPoints = 400;
 
 /// Per-match RP progression for the selected split/week (passed in already
 /// filtered). [sessions] is memoized by `rankedSplitViewProvider` rather than
-/// recomputed here on every rebuild. A Session filter narrows
-/// the line to a single play session.
+/// recomputed here on every rebuild. The picker narrows the line to a single
+/// play session; with every week selected ([weekIndex] below 0, and [weeks]
+/// known) that would be a list as long as the split, so it offers the weeks
+/// instead.
 /// [onShowBackup], when set, adds a small icon opening the snapshot-based RP
 /// graph as a backup view.
 class RankedRpChart extends StatefulWidget {
   final List<RankedMatch> matches;
   final List<RankedSession> sessions;
+
+  /// The split's weeks and the one selected on the page (-1 for all of them).
+  final List<WeekRange> weeks;
+  final int weekIndex;
   final VoidCallback? onShowBackup;
   const RankedRpChart({
     super.key,
     required this.matches,
     required this.sessions,
+    this.weeks = const [],
+    this.weekIndex = -1,
     this.onShowBackup,
   });
 
@@ -42,18 +54,49 @@ class RankedRpChart extends StatefulWidget {
 }
 
 class _RankedRpChartState extends State<RankedRpChart> {
-  // -1 = all sessions in the current split/week.
-  int _sessionIndex = -1;
+  // The choice, held as what it is rather than a list position, so data
+  // changing under it can't leave it pointing at something else. Null = all of
+  // the split or week.
+  DateTime? _sessionStart;
+  DateTime? _weekStart;
+
+  @override
+  void didUpdateWidget(RankedRpChart old) {
+    super.didUpdateWidget(old);
+    // Another week on the page's strip starts the chart over.
+    if (old.weekIndex != widget.weekIndex) {
+      _sessionStart = null;
+      _weekStart = null;
+    }
+  }
+
+  /// The weeks the picker offers, when it offers weeks: every week of the
+  /// split with a ranked game in it. Empty when a week is already selected or
+  /// the split has no weeks, which leaves the sessions.
+  List<({WeekRange range, int number, int games})> _weekChoices() {
+    if (widget.weekIndex >= 0 || widget.weeks.isEmpty) return const [];
+    final ranked = widget.matches.where((m) => m.isRanked).toList();
+    return [
+      for (var i = 0; i < widget.weeks.length; i++)
+        if (matchesInWeek(ranked, widget.weeks[i]).length case final games
+            when games > 0)
+          (range: widget.weeks[i], number: i + 1, games: games),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     final sessions = widget.sessions;
-    // A stale selection (data changed under us) falls back to "All".
-    final selected = _sessionIndex >= 0 && _sessionIndex < sessions.length
-        ? _sessionIndex
-        : -1;
+    final weekChoices = _weekChoices();
+    final byWeek = weekChoices.isNotEmpty;
+    // A choice that no longer exists falls back to "All".
+    final selected = byWeek
+        ? weekChoices.indexWhere((w) => w.range.start == _weekStart)
+        : sessions.indexWhere((s) => s.start == _sessionStart);
 
-    final chrono = _matchesForSelection(sessions, selected);
+    final chrono = byWeek
+        ? _matchesInWeek(selected < 0 ? null : weekChoices[selected].range)
+        : _matchesForSelection(sessions, selected);
     // Downsampled for rendering only - "not enough matches" and the session
     // picker still reason about the real (non-downsampled) chrono list.
     final displayMatches = _downsample(chrono, _kMaxChartPoints);
@@ -87,15 +130,44 @@ class _RankedRpChartState extends State<RankedRpChart> {
                         constraints: const BoxConstraints(),
                         onPressed: widget.onShowBackup,
                       ),
-                    if (widget.onShowBackup != null && sessions.isNotEmpty)
+                    if (widget.onShowBackup != null &&
+                        (byWeek || sessions.isNotEmpty))
                       const SizedBox(width: AppTheme.sm),
-                    if (sessions.isNotEmpty)
+                    if (byWeek)
                       Flexible(
-                        child: _SessionPicker(
-                          sessions: sessions,
+                        child: _ScopePicker(
+                          allLabel: 'All weeks',
+                          labels: [
+                            for (final w in weekChoices)
+                              'W${w.number} · ${_weekDates(w.range)}',
+                          ],
+                          details: [
+                            for (final w in weekChoices)
+                              plural(w.games, 'game'),
+                          ],
                           selectedIndex: selected,
-                          fmt: _sessionFmt,
-                          onSelected: (i) => setState(() => _sessionIndex = i),
+                          onSelected: (i) => setState(
+                            () => _weekStart = i < 0
+                                ? null
+                                : weekChoices[i].range.start,
+                          ),
+                        ),
+                      )
+                    else if (sessions.isNotEmpty)
+                      Flexible(
+                        child: _ScopePicker(
+                          allLabel: 'All sessions',
+                          labels: [
+                            for (final s in sessions)
+                              _sessionFmt.format(s.start.toLocal()),
+                          ],
+                          details: [for (final s in sessions) '${s.games}g'],
+                          selectedIndex: selected,
+                          onSelected: (i) => setState(
+                            () => _sessionStart = i < 0
+                                ? null
+                                : sessions[i].start,
+                          ),
                         ),
                       ),
                   ],
@@ -118,6 +190,23 @@ class _RankedRpChartState extends State<RankedRpChart> {
         ],
       ),
     );
+  }
+
+  /// Ranked games, oldest first, in [week] (all of them when null).
+  List<RankedMatch> _matchesInWeek(WeekRange? week) {
+    final chrono = widget.matches.where((m) => m.isRanked).toList()
+      ..sort((a, b) => a.endTime.compareTo(b.endTime));
+    return week == null ? chrono : matchesInWeek(chrono, week);
+  }
+
+  /// "Oct 6–12", or "Oct 30 – Nov 5" across a month. The week's end is the
+  /// start of the next one, so the last day shown is the one before it.
+  static String _weekDates(WeekRange week) {
+    final first = week.start.toLocal();
+    final last = week.end.toLocal().subtract(const Duration(seconds: 1));
+    return first.month == last.month
+        ? '${_dayFmt.format(first)}–${last.day}'
+        : '${_dayFmt.format(first)} – ${_dayFmt.format(last)}';
   }
 
   List<RankedMatch> _matchesForSelection(
@@ -207,24 +296,27 @@ class _RankedRpChartState extends State<RankedRpChart> {
   }
 }
 
-class _SessionPicker extends StatelessWidget {
-  final List<RankedSession> sessions;
-  final int selectedIndex; // -1 = All
-  final DateFormat fmt;
+/// The pill above the chart that narrows it to one session or week. [labels]
+/// and [details] are the choices after "All" ([allLabel]), as the menu shows
+/// them; [selectedIndex] is one of them, or -1 for all.
+class _ScopePicker extends StatelessWidget {
+  final String allLabel;
+  final List<String> labels;
+  final List<String> details;
+  final int selectedIndex;
   final ValueChanged<int> onSelected;
 
-  const _SessionPicker({
-    required this.sessions,
+  const _ScopePicker({
+    required this.allLabel,
+    required this.labels,
+    required this.details,
     required this.selectedIndex,
-    required this.fmt,
     required this.onSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final label = selectedIndex < 0
-        ? 'All sessions'
-        : fmt.format(sessions[selectedIndex].start.toLocal());
+    final label = selectedIndex < 0 ? allLabel : labels[selectedIndex];
 
     return PopupMenuButton<int>(
       initialValue: selectedIndex,
@@ -234,12 +326,12 @@ class _SessionPicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       ),
       itemBuilder: (_) => [
-        const PopupMenuItem(value: -1, child: Text('All sessions')),
-        for (var i = 0; i < sessions.length; i++)
+        PopupMenuItem(value: -1, child: Text(allLabel)),
+        for (var i = 0; i < labels.length; i++)
           PopupMenuItem(
             value: i,
             child: Text(
-              '${fmt.format(sessions[i].start.toLocal())} · ${sessions[i].games}g',
+              '${labels[i]} · ${details[i]}',
               style: const TextStyle(fontSize: 13),
             ),
           ),
