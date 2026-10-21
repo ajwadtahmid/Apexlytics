@@ -8,6 +8,7 @@ import '../../../utils/ranked/best_metric.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/best_metric_picker.dart' show bestMetricIcon;
+import '../../../widgets/trend_window_picker.dart';
 import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/map_asset_image.dart';
 import '../../../widgets/rp_pill.dart';
@@ -550,7 +551,9 @@ List<T> _sorted<T extends RankedTally>(
   });
 }
 
-/// The "Sort:" pill, which opens the sheet of orders.
+/// The tab's two controls: "Trends:" at the left, the window the trend lines on
+/// a legend's or map's page compare over, and "Sort:" at the right, which opens
+/// the sheet of orders.
 class _SortBar extends StatelessWidget {
   final _Sort selected;
   final VoidCallback onTap;
@@ -558,16 +561,23 @@ class _SortBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        ControlPill(
-          prefix: 'Sort:',
-          icon: selected.icon,
-          label: selected.label,
-          onTap: onTap,
-        ),
-      ],
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AppTheme.md,
+        runSpacing: AppTheme.xs,
+        children: [
+          const TrendWindowPill(),
+          ControlPill(
+            prefix: 'Sort:',
+            icon: selected.icon,
+            label: selected.label,
+            onTap: onTap,
+          ),
+        ],
+      ),
     );
   }
 }

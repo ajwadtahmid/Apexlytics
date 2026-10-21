@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/player_stats.dart';
 import '../../../models/ranked_match.dart';
+import '../../../providers/entity_trend_overrides_provider.dart';
+import '../../../providers/entity_trend_window_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/formatting/format.dart'
     show
@@ -12,6 +14,7 @@ import '../../../utils/formatting/format.dart'
         formatSigned,
         formatSignedInt,
         formatTotalOrNone, plural;
+import '../../../utils/ranked/entity_trend_window.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/storage/legend_stats_storage.dart';
 import '../../../utils/theme.dart';
@@ -19,6 +22,7 @@ import '../../../widgets/legend_header.dart';
 import '../../../widgets/legend_trackers_sheet.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/trend_lines.dart';
+import '../../../widgets/trend_window_picker.dart';
 import '../../../widgets/win_loss_stat.dart';
 import '../ranked_entity_history_screen.dart';
 import 'match_history_items.dart' show MatchGrouping;
@@ -104,15 +108,17 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
   LegendBreakdown get breakdown => widget.breakdown;
   Future<void> Function() get onRefresh => widget.onRefresh;
 
-  /// The legend's matches and their trends, loaded once (not per rebuild).
-  late final Future<({List<RankedMatch> matches, EntityTrends trends})> _loaded =
-      widget.matchesFor(breakdown.legend).then(
-        (matches) => (matches: matches, trends: entityTrends(matches)),
-      );
+  /// The legend's matches, loaded once (not per rebuild). Its trends are worked
+  /// out from them as the window changes.
+  final _trends = EntityTrendReadingCache();
+
+  late final Future<List<RankedMatch>> _loaded = widget.matchesFor(
+    breakdown.legend,
+  );
 
   Future<void> _viewHistory(BuildContext context) async {
     // Copy: keep the loaded list in the order the trends used.
-    final games = [...(await _loaded).matches]
+    final games = [...await _loaded]
       ..sort((a, b) => b.endTime.compareTo(a.endTime));
     if (!context.mounted) return;
     openLegendHistory(
@@ -130,6 +136,11 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // The legend's own window if it has one, else the one chosen for all.
+    final trendKey = legendTrendKey(breakdown.legend);
+    final int trendChoice =
+        ref.watch(entityTrendOverridesProvider)[trendKey] ??
+        ref.watch(entityTrendWindowProvider);
     final uid = ref.watch(playerSettingsProvider.select((s) => s.uid));
     final prefs = ref.watch(sharedPreferencesProvider);
     final target = breakdown.legend.toLowerCase();
@@ -202,16 +213,30 @@ class _LegendDetailSheetState extends ConsumerState<_LegendDetailSheet> {
                 ),
               ],
             ),
-            FutureBuilder<({List<RankedMatch> matches, EntityTrends trends})>(
+            FutureBuilder<List<RankedMatch>>(
               future: _loaded,
               builder: (context, snapshot) {
-                final loaded = snapshot.data;
-                if (loaded == null) return const SizedBox.shrink();
+                final matches = snapshot.data;
+                if (matches == null) return const SizedBox.shrink();
+                final reading = _trends.read(matches, trendChoice);
+                final window = reading.window;
+                // With too few games there is nothing to compare, or to say.
+                if (window == null) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TrendLines(trends: loaded.trends),
-                    const TrendFootnote(),
+                    const SizedBox(height: AppTheme.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: EntityTrendWindowPill(
+                        overrideKey: trendKey,
+                        name: breakdown.legend,
+                        games: matches.length,
+                        window: window,
+                      ),
+                    ),
+                    TrendLines(trends: reading.trends),
+                    TrendFootnote(window: window),
                   ],
                 );
               },

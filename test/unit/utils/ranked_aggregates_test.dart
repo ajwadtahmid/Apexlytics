@@ -892,10 +892,11 @@ void main() {
   });
 
   group('entityTrends', () {
-    // RP = the match's index, oldest to newest, so the newest
-    // kTrendRecentGames have the highest values.
-    const total = kTrendRecentGames * 2 + 4;
-    const olderCount = total - kTrendRecentGames;
+    // RP = the match's index, oldest to newest, so the newest games have the
+    // highest values.
+    const window = 5;
+    const total = window * 2 + 4;
+    const olderCount = total - window;
     List<RankedMatch> manyMatches(int count, {String legend = 'Axle'}) => [
       for (var i = 0; i < count; i++)
         match(
@@ -909,21 +910,43 @@ void main() {
         ),
     ];
 
-    test('current is the overall average across every game, matching what the '
-        'entity row already displays - not just the recent window', () {
-      final trends = entityTrends(manyMatches(total));
-      expect(trends.rp, isNotNull);
-      // current = avg RP over all games: sum(0..total-1)/total.
-      final currentAvg = (total * (total - 1) / 2) / total;
-      expect(trends.rp!.current, closeTo(currentAvg, 0.01));
-      // older = avg over everything but the newest window.
-      final olderAvg = (olderCount * (olderCount - 1) / 2) / olderCount;
-      expect(trends.rp!.older, closeTo(olderAvg, 0.01));
-      expect(trends.rp!.delta, closeTo(currentAvg - olderAvg, 0.01));
+    test('recent is the newest games, overall is every game', () {
+      final trends = entityTrends(manyMatches(total), recentGames: window);
+
+      // The newest five are indices 9..13; all fourteen average 6.5.
+      expect(trends.rp!.recent, closeTo((9 + 10 + 11 + 12 + 13) / 5, 0.001));
+      expect(trends.rp!.overall, closeTo(6.5, 0.001));
+      expect(trends.rp!.delta, closeTo(11 - 6.5, 0.001));
+      expect(olderCount, 9);
     });
 
-    test('null below kTrendRecentGames * 2 games - no older baseline yet', () {
-      final trends = entityTrends(manyMatches(kTrendRecentGames * 2 - 1));
+    test('overall is the average the entity\'s row shows: every game, the '
+        'recent ones included', () {
+      final matches = manyMatches(40);
+
+      final trends = entityTrends(matches, recentGames: 10);
+
+      expect(trends.rp!.overall, closeTo(19.5, 0.001)); // 0..39
+      expect(trends.kills!.overall, 1.0);
+      expect(trends.damage!.overall, 100.0);
+    });
+
+    test('a bigger window takes more of the newest games', () {
+      final matches = manyMatches(40);
+
+      final small = entityTrends(matches, recentGames: 5);
+      final big = entityTrends(matches, recentGames: 20);
+
+      // Newest five: 35..39 = 37; newest twenty: 20..39 = 29.5.
+      expect(small.rp!.recent, closeTo(37, 0.001));
+      expect(big.rp!.recent, closeTo(29.5, 0.001));
+    });
+
+    test('null below twice the window in games - no older baseline yet', () {
+      final trends = entityTrends(
+        manyMatches(window * 2 - 1),
+        recentGames: window,
+      );
       expect(trends.rp, isNull);
       expect(trends.kills, isNull);
       expect(trends.damage, isNull);
@@ -933,7 +956,7 @@ void main() {
         'every game played - an untracked game must not drag the average '
         'toward zero', () {
       final matches = [
-        for (var i = 0; i < kTrendRecentGames * 2; i++)
+        for (var i = 0; i < window * 2; i++)
           buildMatch(
             start: t0 + i * 10800,
             // Only the even-indexed games report kills/damage.
@@ -943,38 +966,43 @@ void main() {
           ),
       ];
 
-      final trends = entityTrends(matches);
+      final trends = entityTrends(matches, recentGames: window);
       // Dividing by every game (the bug this guards against) would show
       // half the real average, since only half the games report at all.
-      expect(trends.kills!.current, 5.0);
-      expect(trends.damage!.current, 500.0);
+      expect(trends.kills!.recent, 5.0);
+      expect(trends.kills!.overall, 5.0);
+      expect(trends.damage!.recent, 500.0);
     });
 
-    test('no trend for a stat the older games never reported, rather than '
-        '"was 0"', () {
+    test('a stat only the recent games reported compares with itself, not '
+        'with zero', () {
       // Oldest five games have no kills/damage tracker; the newest five do.
       final matches = [
-        for (var i = 0; i < kTrendRecentGames * 2; i++)
+        for (var i = 0; i < window * 2; i++)
           match(
             legend: 'Axle',
             mapKey: 'olympus_rotation',
             rpChange: 10,
             cumulativeRp: 1000 + i,
-            kills: i < kTrendRecentGames ? null : 3,
-            damage: i < kTrendRecentGames ? null : 300,
+            kills: i < window ? null : 3,
+            damage: i < window ? null : 300,
             startOffset: i * 10800,
           ),
       ];
 
-      final trends = entityTrends(matches);
-      expect(trends.kills, isNull);
-      expect(trends.damage, isNull);
+      final trends = entityTrends(matches, recentGames: window);
+      // Only the newest five reported, so they are the whole average: no change
+      // from it, and nothing taken for a drop from zero.
+      expect(trends.kills!.recent, 3.0);
+      expect(trends.kills!.overall, 3.0);
+      expect(trends.kills!.delta, 0);
+      expect(trends.damage!.delta, 0);
       expect(trends.rp, isNotNull, reason: 'RP is always reported');
     });
 
     test('no trend at all when no game reported the stat', () {
       final trends = entityTrends([
-        for (var i = 0; i < kTrendRecentGames * 2; i++)
+        for (var i = 0; i < window * 2; i++)
           match(
             legend: 'Axle',
             mapKey: 'olympus_rotation',
@@ -984,7 +1012,7 @@ void main() {
             damage: null,
             startOffset: i * 10800,
           ),
-      ]);
+      ], recentGames: window);
 
       expect(trends.kills, isNull);
       expect(trends.damage, isNull);

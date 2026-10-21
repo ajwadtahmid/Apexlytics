@@ -129,10 +129,14 @@ class _MapRow extends StatelessWidget {
             const SizedBox(height: 2),
             _LegendLine('Worst', insight.worst!, metric),
           ] else if (best != null && insight.qualified == 1)
-            const Padding(
-              padding: EdgeInsets.only(top: 2),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
               child: Text(
-                'No other legend has $kMinGamesForInsight+ games here yet',
+                // Others with games but no figure for this measure (no kills
+                // recorded, say) are not short of games.
+                insight.eligible > 1
+                    ? 'No other legend has ${metric.phrase} recorded here yet'
+                    : 'No other legend has $kMinGamesForInsight+ games here yet',
                 style: AppTheme.captionSmall,
               ),
             ),

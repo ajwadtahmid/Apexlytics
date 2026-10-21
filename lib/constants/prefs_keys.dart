@@ -64,6 +64,14 @@ class PrefsKeys {
   /// What makes a legend or map "best" (a `BestMetric` name). Device-only: not
   /// backed up.
   static const bestMetric = 'best_metric';
+
+  /// How many of a legend's or map's newest games its trend lines count as
+  /// recent (0 for Auto). Device-only: not backed up.
+  static const entityTrendGames = 'entity_trend_games';
+
+  /// The legends and maps given a trend window of their own, as JSON from a name
+  /// to a game count. Device-only: not backed up.
+  static const entityTrendOverrides = 'entity_trend_overrides';
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the

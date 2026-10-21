@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../constants/map_constants.dart';
 import '../../../models/ranked_match.dart';
+import '../../../providers/entity_trend_overrides_provider.dart';
+import '../../../providers/entity_trend_window_provider.dart';
 import '../../../utils/formatting/format.dart'
     show
         formatAvgDamage,
@@ -10,11 +13,13 @@ import '../../../utils/formatting/format.dart'
         formatSigned,
         formatSignedInt,
         formatTotalOrNone, plural;
+import '../../../utils/ranked/entity_trend_window.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/map_asset_image.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/trend_lines.dart';
+import '../../../widgets/trend_window_picker.dart';
 import '../../../widgets/win_loss_stat.dart';
 import '../ranked_entity_history_screen.dart';
 import 'match_history_items.dart' show MatchGrouping;
@@ -44,7 +49,7 @@ Future<void> showMapDetailSheet(
 /// Detail sheet for a map: the full stat set the Maps tab shows per row, plus
 /// a "View all history" button that resolves this map's matches and pushes
 /// the same [RankedEntityHistoryScreen] drill-down the Maps tab uses.
-class _MapDetailSheet extends StatefulWidget {
+class _MapDetailSheet extends ConsumerStatefulWidget {
   final MapBreakdown map;
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
@@ -60,22 +65,22 @@ class _MapDetailSheet extends StatefulWidget {
   });
 
   @override
-  State<_MapDetailSheet> createState() => _MapDetailSheetState();
+  ConsumerState<_MapDetailSheet> createState() => _MapDetailSheetState();
 }
 
-class _MapDetailSheetState extends State<_MapDetailSheet> {
+class _MapDetailSheetState extends ConsumerState<_MapDetailSheet> {
   MapBreakdown get map => widget.map;
   Future<void> Function() get onRefresh => widget.onRefresh;
 
-  /// The map's matches and their trends, loaded once (not per rebuild).
-  late final Future<({List<RankedMatch> matches, EntityTrends trends})> _loaded =
-      widget.matchesFor(map.mapKey).then(
-        (matches) => (matches: matches, trends: entityTrends(matches)),
-      );
+  /// The map's matches, loaded once (not per rebuild). Its trends are worked
+  /// out from them as the window changes.
+  final _trends = EntityTrendReadingCache();
+
+  late final Future<List<RankedMatch>> _loaded = widget.matchesFor(map.mapKey);
 
   Future<void> _viewHistory(BuildContext context) async {
     // Copy: keep the loaded list in the order the trends used.
-    final games = [...(await _loaded).matches]
+    final games = [...await _loaded]
       ..sort((a, b) => b.endTime.compareTo(a.endTime));
     if (!context.mounted) return;
     Navigator.of(context).push(
@@ -96,6 +101,11 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // The map's own window if it has one, else the one chosen for all.
+    final trendKey = mapTrendKey(map.mapKey);
+    final int trendChoice =
+        ref.watch(entityTrendOverridesProvider)[trendKey] ??
+        ref.watch(entityTrendWindowProvider);
     final asset = battleRoyaleMapAsset(map.mapKey);
     return SafeArea(
       child: Padding(
@@ -180,16 +190,30 @@ class _MapDetailSheetState extends State<_MapDetailSheet> {
                 ),
               ],
             ),
-            FutureBuilder<({List<RankedMatch> matches, EntityTrends trends})>(
+            FutureBuilder<List<RankedMatch>>(
               future: _loaded,
               builder: (context, snapshot) {
-                final loaded = snapshot.data;
-                if (loaded == null) return const SizedBox.shrink();
+                final matches = snapshot.data;
+                if (matches == null) return const SizedBox.shrink();
+                final reading = _trends.read(matches, trendChoice);
+                final window = reading.window;
+                // With too few games there is nothing to compare, or to say.
+                if (window == null) return const SizedBox.shrink();
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TrendLines(trends: loaded.trends),
-                    const TrendFootnote(),
+                    const SizedBox(height: AppTheme.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: EntityTrendWindowPill(
+                        overrideKey: trendKey,
+                        name: map.displayName,
+                        games: matches.length,
+                        window: window,
+                      ),
+                    ),
+                    TrendLines(trends: reading.trends),
+                    TrendFootnote(window: window),
                   ],
                 );
               },

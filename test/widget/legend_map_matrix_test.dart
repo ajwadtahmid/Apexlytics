@@ -110,6 +110,95 @@ void main() {
   List<MapLegendInsight> perGameInsights(List<LegendMapCell> cells) =>
       mapLegendInsights(cells, metric: BestMetric.rpPerGame);
 
+  group('the hint under a map with one comparable legend', () {
+    // Two legends with enough games on Olympus; only Bangalore recorded kills.
+    final cells = legendMapBreakdowns([
+      for (var i = 0; i < 4; i++)
+        buildMatch(
+          legend: 'Bangalore',
+          rp: 30,
+          kills: 2,
+          start: 1782090000 + i * 5000,
+        ),
+      for (var i = 0; i < 4; i++)
+        buildMatch(legend: 'Axle', rp: 10, start: 1782190000 + i * 5000),
+    ]);
+
+    Future<void> pumpWith(
+      WidgetTester tester,
+      List<LegendMapCell> cells,
+      BestMetric metric,
+    ) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: RankedBestLegendPerMap(cells: cells, metric: metric),
+          ),
+        ),
+      ),
+    );
+
+    test('counts the legends with games apart from those with a figure', () {
+      final byKills = mapLegendInsights(
+        cells,
+        metric: BestMetric.avgKills,
+      ).single;
+      expect(byKills.eligible, 2);
+      expect(byKills.qualified, 1);
+
+      final byRp = mapLegendInsights(cells, metric: BestMetric.totalRp).single;
+      expect(byRp.eligible, 2);
+      expect(byRp.qualified, 2);
+    });
+
+    testWidgets('does not say a legend is short of games when it only has no '
+        'figure', (tester) async {
+      await pumpWith(tester, cells, BestMetric.avgKills);
+
+      expect(
+        find.text('No other legend has avg kills recorded here yet'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('3+ games'), findsNothing);
+    });
+
+    testWidgets('still says it when the others really are short of games', (
+      tester,
+    ) async {
+      final thin = legendMapBreakdowns([
+        for (var i = 0; i < 4; i++)
+          buildMatch(
+            legend: 'Bangalore',
+            rp: 30,
+            kills: 2,
+            start: 1782090000 + i * 5000,
+          ),
+        for (var i = 0; i < 2; i++)
+          buildMatch(
+            legend: 'Axle',
+            rp: 10,
+            kills: 2,
+            start: 1782190000 + i * 5000,
+          ),
+      ]);
+
+      await pumpWith(tester, thin, BestMetric.avgKills);
+
+      expect(
+        find.text('No other legend has 3+ games here yet'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('says nothing when two legends can be compared', (
+      tester,
+    ) async {
+      await pumpWith(tester, cells, BestMetric.totalRp);
+
+      expect(find.textContaining('No other legend'), findsNothing);
+    });
+  });
+
   group('mapLegendInsights', () {
     final cells = legendMapBreakdowns([
       ..._games('Bangalore', 'olympus_rotation', 4, 30, 0),

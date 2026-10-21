@@ -66,6 +66,8 @@ void main() {
       PrefsKeys.legendRoleFilter: false,
       PrefsKeys.recapTiles: false,
       PrefsKeys.bestMetric: false,
+      PrefsKeys.entityTrendGames: false,
+      PrefsKeys.entityTrendOverrides: false,
       // Legacy migration-only key; build() derives the per-mode keys from it.
       PrefsKeys.mapNotifyMinutes: false,
     };

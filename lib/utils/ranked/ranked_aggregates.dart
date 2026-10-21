@@ -481,8 +481,13 @@ class MapLegendInsight {
   /// or more of them and it does worse than [best].
   final LegendMapCell? worst;
 
-  /// How many legends have enough games here to be compared.
+  /// How many legends have enough games here, and a figure for the measure, to
+  /// be compared.
   final int qualified;
+
+  /// How many have enough games here, whether or not they have a figure for the
+  /// measure (a legend with no kills recorded has none for kills).
+  final int eligible;
 
   const MapLegendInsight({
     required this.mapName,
@@ -491,6 +496,7 @@ class MapLegendInsight {
     required this.best,
     this.worst,
     this.qualified = 0,
+    this.eligible = 0,
   });
 
   double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
@@ -528,6 +534,9 @@ List<MapLegendInsight> mapLegendInsights(
               best: best,
               worst: worst,
               qualified: ranked.length,
+              eligible: e.value
+                  .where((c) => c.games >= kMinGamesForInsight)
+                  .length,
             );
           }(),
       ]..sort((a, b) {
@@ -1037,41 +1046,32 @@ SessionTrend? sessionTrend(
   return SessionTrend(recent: recent, previous: previous);
 }
 
-/// Recent-games window [entityTrends] compares against the rest of an
-/// entity's history.
-const int kTrendRecentGames = 5;
-
-/// [current] is the entity's overall average (matches e.g.
-/// [LegendBreakdown.avgRpPerGame]); [older] is what it was before that, so a
-/// trend line reads as "your average used to be X, it's now the Y you see
-/// above" rather than citing a third, unrelated figure.
+/// How an entity's recent games compare with its average: [recent] is the
+/// average the newest games gave, [overall] the average over all of its games,
+/// the figure its row and sheet already show. [delta] is how far recent play
+/// sits above (or below) that average.
 class TrendChange {
-  final double older;
-  final double current;
-  const TrendChange({required this.older, required this.current});
+  final double recent;
+  final double overall;
+  const TrendChange({required this.recent, required this.overall});
 
-  double get delta => current - older;
+  double get delta => recent - overall;
 }
 
-/// [older] vs. [current] average for whichever value [valueOf] extracts from
-/// each match. [current] is the average across all of [matches]; [older] is
-/// the average across everything before the most recent [window] games.
-/// Null below `window * 2` games - not enough history for "older" to mean
-/// anything - and when either side has no match with a value at all, so a stat
-/// that was never reported isn't shown as "was 0". A null [valueOf] (e.g. untracked kills/damage) excludes that
-/// match from both the total and the game count, rather than as a zero.
-/// Windowed by game count, not sessions, so a legend/map played in just a
-/// couple of long sessions still gets a meaningful "recent" slice.
+/// [recent] vs. [overall] average for whichever value [valueOf] extracts from
+/// each match: [recent] is the average across the newest [window] games of
+/// [newestFirst] (which must be in that order), [overall] the average across
+/// all of them. Null when either has no match with a value at all, so a stat
+/// that was never reported isn't shown as a change from 0. A null [valueOf]
+/// (e.g. untracked kills/damage) excludes that match from both the total and
+/// the game count, rather than counting it as a zero.
+/// Windowed by game count, not sessions: games are the sample, and a session
+/// of one legend can be a single game or twenty.
 TrendChange? _trendChange(
-  List<RankedMatch> matches, {
+  List<RankedMatch> newestFirst, {
+  required int window,
   required int? Function(RankedMatch) valueOf,
 }) {
-  const window = kTrendRecentGames;
-  if (matches.length < window * 2) return null;
-
-  final chrono = matches.toList()
-    ..sort((a, b) => b.startTime.compareTo(a.startTime)); // newest first
-
   double? avgOf(Iterable<RankedMatch> range) {
     var total = 0, games = 0;
     for (final m in range) {
@@ -1084,11 +1084,11 @@ TrendChange? _trendChange(
     return games == 0 ? null : total / games;
   }
 
-  final older = avgOf(chrono.skip(window));
-  final current = avgOf(chrono);
+  final recent = avgOf(newestFirst.take(window));
+  final overall = avgOf(newestFirst);
   // No reading in a range is "no data", not an average of 0.
-  if (older == null || current == null) return null;
-  return TrendChange(older: older, current: current);
+  if (recent == null || overall == null) return null;
+  return TrendChange(recent: recent, overall: overall);
 }
 
 /// RP/kills/damage [TrendChange]s for one legend's or map's [matches]
@@ -1100,8 +1100,34 @@ typedef EntityTrends = ({
   TrendChange? damage,
 });
 
-EntityTrends entityTrends(List<RankedMatch> matches) => (
-  rp: _trendChange(matches, valueOf: (m) => m.effectiveRpChange),
-  kills: _trendChange(matches, valueOf: (m) => m.kills),
-  damage: _trendChange(matches, valueOf: (m) => m.damage),
-);
+/// The trends of [matches], with the newest [recentGames] as the recent part.
+/// Pick that count with `resolveEntityTrendWindow`. Null for each below twice
+/// [recentGames] games - the recent games would be most of the history.
+EntityTrends entityTrends(
+  List<RankedMatch> matches, {
+  required int recentGames,
+}) {
+  if (recentGames < 1 || matches.length < recentGames * 2) {
+    return (rp: null, kills: null, damage: null);
+  }
+  // Sorted once, for all three.
+  final newestFirst = matches.toList()
+    ..sort((a, b) => b.startTime.compareTo(a.startTime));
+  return (
+    rp: _trendChange(
+      newestFirst,
+      window: recentGames,
+      valueOf: (m) => m.effectiveRpChange,
+    ),
+    kills: _trendChange(
+      newestFirst,
+      window: recentGames,
+      valueOf: (m) => m.kills,
+    ),
+    damage: _trendChange(
+      newestFirst,
+      window: recentGames,
+      valueOf: (m) => m.damage,
+    ),
+  );
+}
