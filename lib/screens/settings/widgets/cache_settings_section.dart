@@ -3,12 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../providers/api_provider.dart';
 import '../../../providers/backup_status_provider.dart';
+import '../../../providers/best_metric_provider.dart';
+import '../../../providers/entity_trend_overrides_provider.dart';
+import '../../../providers/entity_trend_window_provider.dart';
+import '../../../providers/legend_list_options_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../../providers/news_provider.dart';
+import '../../../providers/pick_rate_options_provider.dart';
 import '../../../providers/player_provider.dart' show myPlayerStatsProvider;
+import '../../../providers/recap_tiles_provider.dart';
 import '../../../providers/predator_provider.dart';
 import '../../../providers/server_provider.dart';
 import '../../../providers/storage_usage_provider.dart';
+import '../../../providers/trend_window_provider.dart';
 import '../../../providers/owner_provider.dart';
 import '../../../providers/ranked_provider.dart';
 import '../../../providers/search_provider.dart';
@@ -293,6 +300,21 @@ class CacheSettingsSection extends ConsumerWidget {
   /// that shows it while the history stayed on disk, unseen. This order
   /// fails the other way — data still visible, profile still there, and a
   /// retry finishes the job.
+  /// Puts the choices the player made about how things look (how to rank, sort
+  /// and window them, the recap tiles) back to their defaults. The sweep has
+  /// erased their saved copies, but each provider still holds its value in
+  /// memory: left alone, the old choice would go on showing, and the next
+  /// change would save the old ones again with it.
+  void _resetViewChoices(WidgetRef ref) {
+    ref.invalidate(bestMetricProvider);
+    ref.invalidate(entityTrendWindowProvider);
+    ref.invalidate(entityTrendOverridesProvider);
+    ref.invalidate(trendWindowProvider);
+    ref.invalidate(recapTilesProvider);
+    ref.invalidate(legendListOptionsProvider);
+    ref.invalidate(pickRateOptionsProvider);
+  }
+
   Future<void> _clearAll(
     BuildContext context,
     WidgetRef ref, {
@@ -345,6 +367,7 @@ class CacheSettingsSection extends ConsumerWidget {
     // after a partial failure: what did clear must stop showing.
     resetSnapshotCache();
     invalidatePlayerDerivedProviders(ref);
+    _resetViewChoices(ref);
     ref.invalidate(lastBackupProvider);
     if (!context.mounted) return;
     if (failed.isEmpty) {

@@ -1,10 +1,17 @@
+import 'dart:convert';
+
+import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/providers/api_provider.dart';
+import 'package:apexlytics/providers/best_metric_provider.dart';
+import 'package:apexlytics/providers/entity_trend_overrides_provider.dart';
+import 'package:apexlytics/providers/entity_trend_window_provider.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/providers/storage_usage_provider.dart';
 import 'package:apexlytics/screens/settings/widgets/cache_settings_section.dart';
 import 'package:apexlytics/services/api_service.dart';
 import 'package:apexlytics/utils/formatting/format.dart';
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/utils/storage/api_cache_store.dart';
 import 'package:apexlytics/utils/storage/ranked_history_store.dart';
 import 'package:flutter/material.dart';
@@ -222,6 +229,74 @@ void main() {
       expect(container.read(playerSettingsProvider).profiles, isEmpty);
       expect(api.cacheUsage.entries, 3);
       expect(await t.runAsync(() => store.countStartedSince(null)), 2);
+    });
+
+    testWidgets('Clear all data puts the view choices back, in memory as well '
+        'as on disk, and nothing returns with the next change', (t) async {
+      await pump(t, games: 2);
+      await container
+          .read(bestMetricProvider.notifier)
+          .set(BestMetric.totalKills);
+      await container.read(entityTrendWindowProvider.notifier).set(50);
+      await container
+          .read(entityTrendOverridesProvider.notifier)
+          .set('legend:Axle', 25);
+      final prefs = container.read(sharedPreferencesProvider);
+      expect(prefs.containsKey(PrefsKeys.entityTrendOverrides), isTrue);
+      await openSheet(t);
+
+      await t.tap(find.text('Clear all data'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Continue'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Erase everything'));
+      await t.pump();
+      await letStorageFinish(t);
+
+      // Gone from disk, and no longer what the app is holding.
+      for (final key in [
+        PrefsKeys.bestMetric,
+        PrefsKeys.entityTrendGames,
+        PrefsKeys.entityTrendOverrides,
+      ]) {
+        expect(prefs.containsKey(key), isFalse, reason: key);
+      }
+      expect(container.read(bestMetricProvider), kDefaultBestMetric);
+      expect(container.read(entityTrendWindowProvider), 0);
+      expect(container.read(entityTrendOverridesProvider), isEmpty);
+
+      // The next change saves only itself, not the legend erased with the rest.
+      await container
+          .read(entityTrendOverridesProvider.notifier)
+          .set('legend:Wraith', 10);
+      expect(
+        jsonDecode(prefs.getString(PrefsKeys.entityTrendOverrides)!),
+        {'legend:Wraith': 10},
+      );
+    });
+
+    testWidgets('Clear profiles & favorites leaves the view choices alone', (
+      t,
+    ) async {
+      await pump(t, games: 2);
+      await container
+          .read(entityTrendOverridesProvider.notifier)
+          .set('legend:Axle', 25);
+      await container
+          .read(bestMetricProvider.notifier)
+          .set(BestMetric.totalKills);
+      await openSheet(t);
+
+      await t.tap(find.text('Clear profiles & favorites'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Clear'));
+      await t.pump();
+      await letStorageFinish(t);
+
+      expect(container.read(bestMetricProvider), BestMetric.totalKills);
+      expect(container.read(entityTrendOverridesProvider), {
+        'legend:Axle': 25,
+      });
     });
 
     testWidgets('Clear all data asks twice before it does anything', (
