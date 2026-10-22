@@ -100,8 +100,8 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **Player Stats**: Rank, RP, current legend, equipped trackers, and weekly RP gain tracking. Supports search by name or numeric UID.
 - **RP Progression Graph**: Interactive chart of RP gained per match, built from your match history, with session filtering and split/week navigation. A snapshot-based RP graph is also available.
 - **Ranked Breakdown** (the Stats tab): a full ranked deep-dive built from the matches Apexlytics records for you, with a split and week picker. Its four tabs:
-  - **Overview**: your account, the chosen split or week (summary, RP chart and stats), highlights such as your best and worst legends, and a "Dig deeper" grid that opens the pages below. A first-run preview shows what it will look like while you wait for a first game.
-  - **Legends** and **Maps**: per-legend and per-map breakdown tables.
+  - **Overview**: your account, the chosen split or week (summary, RP chart and stats), highlights such as your best and worst legends and maps, ranked by a measure you choose (total or average RP, win rate, kills or damage), and a "Dig deeper" grid that opens the pages below. A first-run preview shows what it will look like while you wait for a first game.
+  - **Legends** and **Maps**: per-legend and per-map breakdown tables, sortable by RP, games, win rate, kills or damage. Open a row for its trends, which compare your recent games with your average over a window you choose, for everything or for one legend or map.
   - **Games**: your match history, with per-match corrections. Filter it by legend, map, date and RP change; long-press a game to select several and exclude or include them from every calculation at once.
 - **Dig deeper pages**:
   - **All Trackers**: every legend's trackers, with filter and sort.
@@ -110,7 +110,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
   - **Performance Trends**: how you are trending, with session sparklines, time-of-day and day-of-week charts, and a choice of how far back to look.
   - **Compare**: two splits, two legends or two maps side by side.
   - **Sessions**: your play sessions, with a detail page for each.
-  - **Recap**: a recap of the period with a journey chart, and a shareable image card with a tile picker.
+  - **Recap**: a recap of the period with a journey chart, and a shareable image card with a tile picker and an optional footer note.
   - **Personal Records**: best RP, kills and damage games, win streaks and an all-time best; open any record to see the game.
   - Shareable cards never include your player ID.
 - **Ranked tracking**: Refreshes automatically while the app is open; the interval is a setting, and it shortens to 5 minutes while a match is being recorded. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking starts.
