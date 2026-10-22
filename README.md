@@ -59,10 +59,10 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - [Development](#development)
 - [Data & Privacy](#data--privacy)
 - [Support & Feedback](#support--feedback)
-- [FAQ](#faq)
-- [Known Limitations](#known-limitations)
 - [Changelog](#changelog)
 - [Credits & Acknowledgments](#credits--acknowledgments)
+- [FAQ](#faq)
+- [Known Limitations](#known-limitations)
 - [License](#license)
 
 ---
@@ -75,7 +75,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Stats**: Your ranked climb, broken down. An RP chart, your best and worst legends and maps by the measure you choose, legend and map tables, sessions, personal records, trends and split comparison, all built from the matches Apexlytics records for you. See the [Ranked Tracking Guide](#ranked-tracking-guide) for how tracking works.
 
-- **Favorite Players & Compare**: Add players to your favorites and track their RP progression in real-time. Compare your stats side-by-side with favorited players to monitor competition and benchmark your climb.
+- **Favorite Players & Compare**: Add players to your favorites to see each one's last-seen rank and RP at a glance. Compare your stats side-by-side with favorited players to monitor competition and benchmark your climb.
 
 - **Detailed Legend Stats**: Deep-dive into legend performance with advanced metrics including damage per kill, win rate, revive rate, and more custom stats. Analyze what's working and optimize your legend pool.
 
@@ -137,7 +137,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 - **No account required**: Data is fetched using your public in-game name or UID.
 - **Data Backup & Restore**: Export your player profiles, favorites, and tracked data as a backup file. Restore from backup anytime to recover your data or switch devices seamlessly. Settings reminds you to back up once 15 days have passed and new matches have been recorded.
 - **Settings**: Pick your default tab, how often stats refresh (down to manual only), and whether to keep the screen on while you play.
-- **Guided tour & set-up**: A short first-run tour explains each tab, and Home offers a "Set up your player" tile until a profile is saved.
+- **Guided tour & set-up**: A short first-run tour explains each tab, and you can reopen it any time from Settings → Take the tour. Home offers a "Set up your player" tile until a profile is saved.
 - **Report a bug**: Settings can open a prefilled GitHub issue or email with diagnostics and a recent log attached, with player names and IDs removed. Nothing is sent until you send it.
 - **Dark theme**: Designed for low-light gaming sessions.
 
@@ -295,6 +295,8 @@ Special thanks to:
 
 - **[Hugo Derave](https://github.com/HugoDerave)**: Developer and maintainer of the [Unofficial Apex Legends API](https://apexlegendsapi.com/), which powers player stats lookups, map rotation data, and server status for this app
 - **[Apex Legends Status](https://apexlegendsstatus.com/)**: Provides real-time server status, map rotation data, and players stats with comprehensive ranked stats, leaderboard for ranked along with all trackers and so much more
+
+**AI assistance:** Apexlytics is built with the help of AI coding tools (Claude Code). The features, design and testing are directed and checked by the maintainer.
 
 This project would not be possible without these amazing resources and the developer behind them.
 
