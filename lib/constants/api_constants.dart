@@ -54,6 +54,11 @@ class ApiConstants {
   static const String ownerVerifyPath = '/owner/verify';
   static const String ownerTokenHeader = 'x-owner-token';
 
+  /// Asks `/games` to skip its "is this player being tracked?" check. Only an
+  /// owner token makes the server listen, and only for a limited number of UIDs
+  /// an hour.
+  static const String gamesForceParam = 'force';
+
   /// Rolling match-history window the `/games` endpoint serves per UID.
   ///
   /// History is lost only if 100+ ranked matches are played between syncs.

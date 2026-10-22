@@ -83,19 +83,32 @@ class GamesService {
   final ApiService _api;
 
   /// Supplies the owner token, when this device has one. Only `/games` sends
-  /// it: the server lifts the per-client quota and grants priority on a match,
-  /// and ignores anything else.
+  /// it: the server lifts the per-client quota and grants priority on a match
+  /// (and lets [getMatches] skip its tracking check), and ignores anything
+  /// else.
   final Future<String?> Function()? ownerToken;
 
   GamesService(this._api, {this.ownerToken});
 
-  Future<GamesResult> getMatches(String uid) async {
+  /// [forceTracking] asks the server to skip its check that the player is being
+  /// tracked, which a player who is tracked only on apexlegendsstatus.com's own
+  /// site never passes. It is sent only with an owner token (the server ignores
+  /// it otherwise), and the server allows it for a limited number of UIDs an
+  /// hour.
+  Future<GamesResult> getMatches(
+    String uid, {
+    bool forceTracking = false,
+  }) async {
     final token = await ownerToken?.call();
     // Live match history — always ask; the backend owns the caching and the
     // per-UID cooldown, so there is nothing useful for the HTTP cache to do.
     final response = await _api.getWithStatus(
       ApiConstants.gamesPath,
-      params: {'uid': uid, 'limit': ApiConstants.gamesHistoryLimit},
+      params: {
+        'uid': uid,
+        'limit': ApiConstants.gamesHistoryLimit,
+        if (forceTracking && token != null) ApiConstants.gamesForceParam: '1',
+      },
       // The backup has its own budget and tracking state, so re-running a
       // possibly-served request there can spend a second slot or report
       // "not tracked". A failure just shows stored history until the retry.

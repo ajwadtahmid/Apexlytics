@@ -129,6 +129,10 @@ final rankedSyncProvider = FutureProvider.autoDispose
 /// [force] skips the backoff check and always asks `/games`; the outcome is still recorded,
 /// so the next normal sync replays it. Only for explicit user actions. Holds no `Ref`, so a
 /// disposed provider can't break it.
+///
+/// [forceTracking] also asks the server to skip its "is this player being tracked?" check
+/// (see [GamesService.getMatches]): for the owner's explicit "Refresh all" only, since the
+/// server allows it for a limited number of UIDs an hour.
 Future<RankedSyncOutcome> syncRankedHistory({
   required String uid,
   required RankedHistoryStore store,
@@ -136,6 +140,7 @@ Future<RankedSyncOutcome> syncRankedHistory({
   required GamesService Function() games,
   required Map<String, SeasonMeta> seasons,
   bool force = false,
+  bool forceTracking = false,
 }) async {
   // Read before the network call, so a "Clear all data" that lands while
   // it's in flight isn't undone by this sync's writes (see dataEpoch).
@@ -175,7 +180,11 @@ Future<RankedSyncOutcome> syncRankedHistory({
   final GamesResult result;
   try {
     // Resolved before the first await, while a provider-backed factory's `ref` is live.
-    result = await games().getMatches(uid);
+    // Named only when set, so a plain sync reads as it always did.
+    final service = games();
+    result = await (forceTracking
+        ? service.getMatches(uid, forceTracking: true)
+        : service.getMatches(uid));
   } catch (e) {
     // Nothing to fall back on: surface the failure so the view can show it with
     // a retry. Deliberately no backoff is recorded here — it would turn the
@@ -235,12 +244,7 @@ Future<RankedSyncOutcome> syncRankedHistory({
     case GamesMatches(:final matches):
       // An empty list is a valid answer — tracking is live, nothing recorded
       // yet — so it still counts as a successful sync.
-      await store.upsertAll(
-        uid,
-        matches,
-        seasons: seasons,
-        onlyIfEpoch: epoch,
-      );
+      await store.upsertAll(uid, matches, seasons: seasons, onlyIfEpoch: epoch);
   }
   // Re-read from prefs, not [seasons]: other screens call upsertSeason() directly, so a
   // season learned this session wouldn't otherwise show here. Uses [prefs], not a `ref`,

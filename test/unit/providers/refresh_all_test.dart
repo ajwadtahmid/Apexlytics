@@ -45,8 +45,7 @@ Map<String, Object?> playerJson(String name, String uid, int rp) => {
   },
 };
 
-RankedMatch match(String uid, int start) =>
-    buildMatch(uid: uid, start: start);
+RankedMatch match(String uid, int start) => buildMatch(uid: uid, start: start);
 
 const a = PlayerProfile(name: 'Alpha', uid: '1000000001', platform: 'PC');
 const b = PlayerProfile(name: 'Bravo', uid: '1000000002', platform: 'PC');
@@ -102,7 +101,7 @@ void main() {
       ),
     );
     for (final p in [a, b, c]) {
-      when(() => games.getMatches(p.uid)).thenAnswer(
+      when(() => games.getMatches(p.uid, forceTracking: true)).thenAnswer(
         (_) async => GamesMatches([match(p.uid, 1000), match(p.uid, 2000)]),
       );
     }
@@ -126,7 +125,10 @@ void main() {
       await setUpWorld();
       final progress = <(int, int)>[];
 
-      final report = await run([a, b], onProgress: (d, t) => progress.add((d, t)));
+      final report = await run([
+        a,
+        b,
+      ], onProgress: (d, t) => progress.add((d, t)));
 
       expect(report.results.map((r) => r.profile.name), ['Alpha', 'Bravo']);
       expect(report.results.every((r) => r.statsOk), isTrue);
@@ -150,7 +152,10 @@ void main() {
       expect(await store.count(a.uid), 2);
       expect(await store.count(b.uid), 2);
       // Stats first, then history, per profile.
-      verifyInOrder([() => games.getMatches(a.uid), () => games.getMatches(b.uid)]);
+      verifyInOrder([
+        () => games.getMatches(a.uid, forceTracking: true),
+        () => games.getMatches(b.uid, forceTracking: true),
+      ]);
     });
 
     test('a profile whose stats fail still gets its history, and the rest '
@@ -172,7 +177,9 @@ void main() {
 
     test('a failed history call is reported, and the rest carry on', () async {
       await setUpWorld();
-      when(() => games.getMatches(a.uid)).thenThrow(const AppException('down'));
+      when(
+        () => games.getMatches(a.uid, forceTracking: true),
+      ).thenThrow(const AppException('down'));
 
       final report = await run([a, b]);
 
@@ -183,34 +190,37 @@ void main() {
       expect(report.results.last.history, RankedSyncOutcome.synced);
     });
 
-    test('force goes past a cooldown that would otherwise skip /games', () async {
-      await setUpWorld(
-        prefsInit: {
-          PrefsKeys.gamesNextSync(a.uid): DateTime.now()
-              .add(const Duration(hours: 2))
-              .millisecondsSinceEpoch,
-          PrefsKeys.gamesLastOutcome(a.uid): RankedSyncOutcome.synced.name,
-        },
-      );
+    test(
+      'force goes past a cooldown that would otherwise skip /games',
+      () async {
+        await setUpWorld(
+          prefsInit: {
+            PrefsKeys.gamesNextSync(a.uid): DateTime.now()
+                .add(const Duration(hours: 2))
+                .millisecondsSinceEpoch,
+            PrefsKeys.gamesLastOutcome(a.uid): RankedSyncOutcome.synced.name,
+          },
+        );
 
-      final report = await run([a]);
+        final report = await run([a]);
 
-      verify(() => games.getMatches(a.uid)).called(1);
-      expect(report.results.single.newMatches, 2);
-      // The next normal sync replays this outcome instead of asking again.
-      final next = prefs.getInt(PrefsKeys.gamesNextSync(a.uid))!;
-      expect(next, greaterThan(DateTime.now().millisecondsSinceEpoch));
-    });
+        verify(() => games.getMatches(a.uid, forceTracking: true)).called(1);
+        expect(report.results.single.newMatches, 2);
+        // The next normal sync replays this outcome instead of asking again.
+        final next = prefs.getInt(PrefsKeys.gamesNextSync(a.uid))!;
+        expect(next, greaterThan(DateTime.now().millisecondsSinceEpoch));
+      },
+    );
 
     test('server decisions that aren\'t errors come through as such', () async {
       await setUpWorld();
-      when(() => games.getMatches(a.uid)).thenAnswer(
+      when(() => games.getMatches(a.uid, forceTracking: true)).thenAnswer(
         (_) async => const GamesPending(
           status: 'not_tracked',
           retryAfter: Duration(minutes: 5),
         ),
       );
-      when(() => games.getMatches(b.uid)).thenAnswer(
+      when(() => games.getMatches(b.uid, forceTracking: true)).thenAnswer(
         (_) async => const GamesPending(
           status: 'queued',
           retryAfter: Duration(minutes: 5),
@@ -238,22 +248,27 @@ void main() {
       expect(await store.count(a.uid), 2);
     });
 
-    test('an old cached copy of the stats is not recorded as a new reading', () async {
-      await setUpWorld();
-      await run([a]); // fills the stats cache
-      await store.deleteAll(); // start the readings over
-      resetSnapshotCache();
-      offline = true; // the network drops; only the cached copy can answer
+    test(
+      'an old cached copy of the stats is not recorded as a new reading',
+      () async {
+        await setUpWorld();
+        await run([a]); // fills the stats cache
+        await store.deleteAll(); // start the readings over
+        resetSnapshotCache();
+        offline = true; // the network drops; only the cached copy can answer
 
-      final report = await run([a]);
+        final report = await run([a]);
 
-      expect(report.results.single.statsOk, isFalse);
-      expect(await store.snapshotsFor(a.uid), isEmpty);
-    });
+        expect(report.results.single.statsOk, isFalse);
+        expect(await store.snapshotsFor(a.uid), isEmpty);
+      },
+    );
 
     test('"Clear all data" mid-run stops it and writes nothing more', () async {
       await setUpWorld();
-      when(() => games.getMatches(a.uid)).thenAnswer((_) async {
+      when(() => games.getMatches(a.uid, forceTracking: true)).thenAnswer((
+        _,
+      ) async {
         await store.deleteAll(); // the user erased everything meanwhile
         return GamesMatches([match(a.uid, 1000)]);
       });
@@ -262,7 +277,7 @@ void main() {
 
       expect(report.aborted, isTrue);
       expect(await store.count(a.uid), 0);
-      verifyNever(() => games.getMatches(b.uid));
+      verifyNever(() => games.getMatches(b.uid, forceTracking: true));
       expect(
         adapter.requests.map((r) => r.queryParameters['uid']),
         isNot(contains(b.uid)),
@@ -296,44 +311,55 @@ void main() {
       return container;
     }
 
-    test('does nothing on a device that is not unlocked as the owner', () async {
-      final container = await containerFor(owner: false);
+    test(
+      'does nothing on a device that is not unlocked as the owner',
+      () async {
+        final container = await containerFor(owner: false);
 
-      final report = await container.read(refreshAllProvider.notifier).run();
+        final report = await container.read(refreshAllProvider.notifier).run();
 
-      expect(report, isNull);
-      verifyNever(() => games.getMatches(any()));
-    });
+        expect(report, isNull);
+        verifyNever(() => games.getMatches(any(), forceTracking: true));
+      },
+    );
 
-    test('refreshes the active profile first, then the rest in order', () async {
-      final container = await containerFor(owner: true, active: 1);
+    test(
+      'refreshes the active profile first, then the rest in order',
+      () async {
+        final container = await containerFor(owner: true, active: 1);
 
-      final report = await container.read(refreshAllProvider.notifier).run();
+        final report = await container.read(refreshAllProvider.notifier).run();
 
-      expect(report!.results.map((r) => r.profile.name), [
-        'Bravo',
-        'Alpha',
-        'Charlie',
-      ]);
-    });
+        expect(report!.results.map((r) => r.profile.name), [
+          'Bravo',
+          'Alpha',
+          'Charlie',
+        ]);
+      },
+    );
 
-    test('reports running while it works, and ignores a second press', () async {
-      final container = await containerFor(owner: true);
-      final gate = Completer<GamesResult>();
-      when(() => games.getMatches(a.uid)).thenAnswer((_) => gate.future);
-      final notifier = container.read(refreshAllProvider.notifier);
+    test(
+      'reports running while it works, and ignores a second press',
+      () async {
+        final container = await containerFor(owner: true);
+        final gate = Completer<GamesResult>();
+        when(
+          () => games.getMatches(a.uid, forceTracking: true),
+        ).thenAnswer((_) => gate.future);
+        final notifier = container.read(refreshAllProvider.notifier);
 
-      final first = notifier.run();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(container.read(refreshAllProvider).running, isTrue);
-      expect(container.read(refreshAllProvider).total, 3);
+        final first = notifier.run();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(container.read(refreshAllProvider).running, isTrue);
+        expect(container.read(refreshAllProvider).total, 3);
 
-      expect(await notifier.run(), isNull, reason: 'already running');
+        expect(await notifier.run(), isNull, reason: 'already running');
 
-      gate.complete(GamesMatches([match(a.uid, 1000)]));
-      await first;
-      expect(container.read(refreshAllProvider).running, isFalse);
-    });
+        gate.complete(GamesMatches([match(a.uid, 1000)]));
+        await first;
+        expect(container.read(refreshAllProvider).running, isFalse);
+      },
+    );
 
     test('nobody saved means nothing to do', () async {
       final container = await containerFor(owner: true, profiles: const []);

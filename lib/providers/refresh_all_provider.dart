@@ -72,7 +72,8 @@ class RefreshAllReport {
 }
 
 /// Refreshes each profile in [profiles], one at a time, in order: stats (`/player/uid` → season
-/// list, RP snapshot, legend stats) then history (`/games`, forced past the client cooldown).
+/// list, RP snapshot, legend stats) then history (`/games`, forced past the client cooldown, and
+/// past the server's tracking check for a limited number of profiles an hour).
 /// One failing never stops the rest, and each part is reported separately.
 ///
 /// Sequential because the server paces upstream calls and owner priority goes to the earliest
@@ -141,6 +142,8 @@ Future<RefreshAllReport> refreshProfiles({
         // Read now: the stats step may have just learned the current season.
         seasons: loadAllSeasonsSync(prefs),
         force: true,
+        // The owner asked for every profile, tracked on this server or not.
+        forceTracking: true,
       );
       added = (await store.count(profile.uid) - before).clamp(0, 1 << 30);
     } catch (e) {

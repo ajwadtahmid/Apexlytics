@@ -123,8 +123,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       gamesService = MockGamesService();
       store =
-          customStore ??
-          RankedHistoryStore(overridePath: inMemoryDatabasePath);
+          customStore ?? RankedHistoryStore(overridePath: inMemoryDatabasePath);
       container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
@@ -155,6 +154,46 @@ void main() {
       container.listen(rankedSyncProvider(uid), (_, _) {});
       return container.read(rankedSyncProvider(uid).future);
     }
+
+    group('asking the server to skip its tracking check', () {
+      Future<void> sync({required bool forceTracking}) {
+        return syncRankedHistory(
+          uid: uid,
+          store: store,
+          prefs: container.read(sharedPreferencesProvider),
+          games: () => gamesService,
+          seasons: const {},
+          force: true,
+          forceTracking: forceTracking,
+        );
+      }
+
+      test('does so when told to', () async {
+        await setUpWith();
+        when(
+          () => gamesService.getMatches(uid, forceTracking: true),
+        ).thenAnswer((_) async => const GamesMatches([]));
+
+        await sync(forceTracking: true);
+
+        verify(
+          () => gamesService.getMatches(uid, forceTracking: true),
+        ).called(1);
+        verifyNever(() => gamesService.getMatches(uid));
+      });
+
+      test('does not otherwise, so a normal sync is unchanged', () async {
+        await setUpWith();
+        when(
+          () => gamesService.getMatches(uid),
+        ).thenAnswer((_) async => const GamesMatches([]));
+
+        await sync(forceTracking: false);
+
+        verify(() => gamesService.getMatches(uid)).called(1);
+        verifyNever(() => gamesService.getMatches(uid, forceTracking: true));
+      });
+    });
 
     test('GamesMatches persists the matches and returns synced', () async {
       await setUpWith();
@@ -344,9 +383,9 @@ void main() {
         'an offline retry loop', () async {
       await setUpWith();
       await store.upsertAll(uid, [_match(uid, 0)]);
-      when(() => gamesService.getMatches(uid)).thenThrow(
-        const MalformedResponseException('Unexpected response.'),
-      );
+      when(
+        () => gamesService.getMatches(uid),
+      ).thenThrow(const MalformedResponseException('Unexpected response.'));
 
       final result = await readOutcome();
 
@@ -361,14 +400,16 @@ void main() {
       expect(await store.count(uid), 1, reason: 'history is kept');
     });
 
-    test('a parse-time TypeError is classified the same way, not as offline',
-        () async {
-      await setUpWith();
-      await store.upsertAll(uid, [_match(uid, 0)]);
-      when(() => gamesService.getMatches(uid)).thenThrow(TypeError());
+    test(
+      'a parse-time TypeError is classified the same way, not as offline',
+      () async {
+        await setUpWith();
+        await store.upsertAll(uid, [_match(uid, 0)]);
+        when(() => gamesService.getMatches(uid)).thenThrow(TypeError());
 
-      expect(await readOutcome(), RankedSyncOutcome.requestError);
-    });
+        expect(await readOutcome(), RankedSyncOutcome.requestError);
+      },
+    );
 
     test(
       'a fetch failure with persisted history serves it and returns offline',
@@ -409,35 +450,32 @@ void main() {
       },
     );
 
-    test(
-      'a 429 reads as busy and waits the server\'s Retry-After, not '
-      'requestError\'s hour',
-      () async {
-        await setUpWith();
-        await store.upsertAll(uid, [_match(uid, 0)]);
-        when(() => gamesService.getMatches(uid)).thenThrow(
-          const AppException(
-            'Rate limit reached. Wait a moment and try again.',
-            status: 429,
-            retryAfter: Duration(seconds: 40),
-          ),
-        );
+    test('a 429 reads as busy and waits the server\'s Retry-After, not '
+        'requestError\'s hour', () async {
+      await setUpWith();
+      await store.upsertAll(uid, [_match(uid, 0)]);
+      when(() => gamesService.getMatches(uid)).thenThrow(
+        const AppException(
+          'Rate limit reached. Wait a moment and try again.',
+          status: 429,
+          retryAfter: Duration(seconds: 40),
+        ),
+      );
 
-        final result = await readOutcome();
+      final result = await readOutcome();
 
-        // Rate limiting clears on its own; it must not be reported as a
-        // rejected request that "needs attention", nor as `queued` (an hourly
-        // slot wait).
-        expect(result, RankedSyncOutcome.busy);
-        final nextSync = container
-            .read(sharedPreferencesProvider)
-            .getInt(PrefsKeys.gamesNextSync(uid))!;
-        final expected = DateTime.now()
-            .add(const Duration(seconds: 40))
-            .millisecondsSinceEpoch;
-        expect((nextSync - expected).abs() < 3000, isTrue);
-      },
-    );
+      // Rate limiting clears on its own; it must not be reported as a
+      // rejected request that "needs attention", nor as `queued` (an hourly
+      // slot wait).
+      expect(result, RankedSyncOutcome.busy);
+      final nextSync = container
+          .read(sharedPreferencesProvider)
+          .getInt(PrefsKeys.gamesNextSync(uid))!;
+      final expected = DateTime.now()
+          .add(const Duration(seconds: 40))
+          .millisecondsSinceEpoch;
+      expect((nextSync - expected).abs() < 3000, isTrue);
+    });
 
     test(
       'a 5xx AppException still returns offline, not requestError',

@@ -97,6 +97,70 @@ void main() {
       ).called(1);
     });
 
+    group('forceTracking', () {
+      /// The query the request went out with, for one call of [getMatches].
+      Future<Map<String, dynamic>> sentParams({
+        String? token,
+        bool? force,
+      }) async {
+        Map<String, dynamic>? sent;
+        when(
+          () => mockApi.getWithStatus(
+            any(),
+            params: any(named: 'params'),
+            failover: any(named: 'failover'),
+            headers: any(named: 'headers'),
+          ),
+        ).thenAnswer((invocation) async {
+          sent = Map<String, dynamic>.from(
+            invocation.namedArguments[#params] as Map,
+          );
+          return (status: 200, data: <dynamic>[]);
+        });
+        final service = GamesService(
+          mockApi,
+          ownerToken: token == null ? null : () async => token,
+        );
+        if (force == null) {
+          await service.getMatches('uid123');
+        } else {
+          await service.getMatches('uid123', forceTracking: force);
+        }
+        return sent!;
+      }
+
+      test(
+        'asks the server to skip its tracking check, with an owner token',
+        () async {
+          final params = await sentParams(token: 'secret', force: true);
+
+          expect(params[ApiConstants.gamesForceParam], '1');
+          expect(params['uid'], 'uid123');
+        },
+      );
+
+      test('is not sent unless asked for, owner or not', () async {
+        expect(
+          await sentParams(token: 'secret'),
+          isNot(contains(ApiConstants.gamesForceParam)),
+        );
+        expect(
+          await sentParams(token: 'secret', force: false),
+          isNot(contains(ApiConstants.gamesForceParam)),
+        );
+      });
+
+      test(
+        'is never sent without an owner token, which the server would ignore',
+        () async {
+          expect(
+            await sentParams(force: true),
+            isNot(contains(ApiConstants.gamesForceParam)),
+          );
+        },
+      );
+    });
+
     test('a 200 carrying a list parses into matches', () async {
       stubResponse(status: 200, data: <dynamic>[]);
 
