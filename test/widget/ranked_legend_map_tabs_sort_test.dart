@@ -2,7 +2,7 @@ import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/constants/stat_icons.dart';
 import 'package:apexlytics/providers/entity_trend_window_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
-import 'package:apexlytics/screens/ranked/widgets/ranked_breakdown_tables.dart';
+import 'package:apexlytics/screens/ranked/widgets/ranked_legend_map_tabs.dart';
 import 'package:apexlytics/widgets/control_pill.dart';
 import 'package:apexlytics/widgets/trend_window_picker.dart'
     show DefaultTrendWindowPill;
@@ -81,7 +81,7 @@ void main() {
   Finder inSheet(String label) =>
       find.descendant(of: find.byType(ListTile), matching: find.text(label));
 
-  Widget legends() => RankedLegendBreakdown(
+  Widget legends() => RankedLegendsTab(
     rows: [
       legend('Axle', 10, 30),
       legend('Bangalore', 3, 60),
@@ -91,7 +91,7 @@ void main() {
     onRefresh: () async {},
   );
 
-  Widget maps() => RankedMapBreakdown(
+  Widget maps() => RankedMapsTab(
     rows: [
       map('olympus_rotation', 'Olympus', 10, 30),
       map('storm_point_rotation', 'Storm Point', 3, 60),
@@ -177,7 +177,7 @@ void main() {
   group('the orders beyond RP and games', () {
     // Axle 2 kills a game and 20 in all; Bangalore 4 a game and 12; Caustic
     // reported none. Win rates: Caustic 3 of 4, Axle 1 of 2, Bangalore 1 of 4.
-    Widget withKills() => RankedLegendBreakdown(
+    Widget withKills() => RankedLegendsTab(
       rows: [
         legend(
           'Axle',

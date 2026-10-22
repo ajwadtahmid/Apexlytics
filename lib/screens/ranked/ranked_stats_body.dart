@@ -28,7 +28,7 @@ import 'ranked_personal_records_screen.dart';
 import 'ranked_pick_rate_screen.dart';
 import 'ranked_sessions_list_screen.dart';
 import 'ranked_time_breakdown_screen.dart';
-import 'widgets/ranked_breakdown_tables.dart';
+import 'widgets/ranked_legend_map_tabs.dart';
 import 'widgets/ranked_highlight_cards.dart';
 import 'widgets/ranked_info_sheet.dart';
 import 'widgets/ranked_match_list.dart';
@@ -69,8 +69,7 @@ class RankedStatsBody extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<RankedStatsBody> createState() =>
-      _RankedStatsBodyState();
+  ConsumerState<RankedStatsBody> createState() => _RankedStatsBodyState();
 }
 
 class _RankedStatsBodyState extends ConsumerState<RankedStatsBody> {
@@ -484,13 +483,13 @@ class _RankedStatsBodyState extends ConsumerState<RankedStatsBody> {
           mapMatchesFor: mapMatches,
           onRefresh: _refresh,
         ),
-        RankedLegendBreakdown(
+        RankedLegendsTab(
           rows: legends,
           matchesFor: legendMatches,
           onRefresh: _refresh,
           sessionPool: view.history,
         ),
-        RankedMapBreakdown(
+        RankedMapsTab(
           rows: maps,
           matchesFor: mapMatches,
           onRefresh: _refresh,
@@ -596,12 +595,12 @@ class _RankedStatsBodyState extends ConsumerState<RankedStatsBody> {
             ],
           ),
         ),
-        RankedLegendBreakdown(
+        RankedLegendsTab(
           rows: agg.legends,
           matchesFor: (legend) => store.matchesForLegend(widget.uid, legend),
           onRefresh: _refresh,
         ),
-        RankedMapBreakdown(
+        RankedMapsTab(
           rows: agg.maps,
           matchesFor: (mapKey) => store.matchesForMap(widget.uid, mapKey),
           onRefresh: _refresh,

@@ -61,10 +61,9 @@ void _showSortSheet(
   onChosen: onChosen,
 );
 
-
 // ── Legends tab ─────────────────────────────────────────────────────────────
 
-class RankedLegendBreakdown extends StatefulWidget {
+class RankedLegendsTab extends StatefulWidget {
   final List<LegendBreakdown> rows;
   // The entity's ranked matches for the drill-down — resolved lazily so the
   // Lifetime tab can query one legend on tap instead of holding all history.
@@ -75,7 +74,7 @@ class RankedLegendBreakdown extends StatefulWidget {
   /// Lifetime.
   final List<RankedMatch>? sessionPool;
 
-  const RankedLegendBreakdown({
+  const RankedLegendsTab({
     super.key,
     required this.rows,
     required this.matchesFor,
@@ -84,10 +83,10 @@ class RankedLegendBreakdown extends StatefulWidget {
   });
 
   @override
-  State<RankedLegendBreakdown> createState() => _RankedLegendBreakdownState();
+  State<RankedLegendsTab> createState() => _RankedLegendsTabState();
 }
 
-class _RankedLegendBreakdownState extends State<RankedLegendBreakdown> {
+class _RankedLegendsTabState extends State<RankedLegendsTab> {
   _Sort _sort = _Sort.totalRp;
 
   @override
@@ -135,7 +134,11 @@ class _LegendCard extends StatelessWidget {
   final int rank;
   final LegendBreakdown row;
   final VoidCallback onTap;
-  const _LegendCard({required this.rank, required this.row, required this.onTap});
+  const _LegendCard({
+    required this.rank,
+    required this.row,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -256,11 +259,7 @@ class _LegendCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(
-    String label,
-    String value, {
-    Color? valueColor,
-  }) => StatDisplay(
+  Widget _chip(String label, String value, {Color? valueColor}) => StatDisplay(
     label: label,
     value: value,
     valueColor: valueColor,
@@ -280,17 +279,17 @@ class _LegendCard extends StatelessWidget {
 
 // ── Maps tab ────────────────────────────────────────────────────────────────
 
-class RankedMapBreakdown extends StatefulWidget {
+class RankedMapsTab extends StatefulWidget {
   final List<MapBreakdown> rows;
   // The map's ranked matches for the drill-down — resolved lazily so the
   // Lifetime tab can query one map on tap instead of holding all history.
   final Future<List<RankedMatch>> Function(String mapKey) matchesFor;
   final Future<void> Function() onRefresh;
 
-  /// As [RankedLegendBreakdown.sessionPool].
+  /// As [RankedLegendsTab.sessionPool].
   final List<RankedMatch>? sessionPool;
 
-  const RankedMapBreakdown({
+  const RankedMapsTab({
     super.key,
     required this.rows,
     required this.matchesFor,
@@ -299,10 +298,10 @@ class RankedMapBreakdown extends StatefulWidget {
   });
 
   @override
-  State<RankedMapBreakdown> createState() => _RankedMapBreakdownState();
+  State<RankedMapsTab> createState() => _RankedMapsTabState();
 }
 
-class _RankedMapBreakdownState extends State<RankedMapBreakdown> {
+class _RankedMapsTabState extends State<RankedMapsTab> {
   _Sort _sort = _Sort.totalRp;
 
   @override
