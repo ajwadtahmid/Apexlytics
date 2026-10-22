@@ -58,7 +58,8 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
       )),
       (_, next) {
         if (next case AsyncData<ApiResult<PlayerStats>>(:final value)) {
-          // Only a lookup that found someone, so a typo never lands in the list.
+          // Only a lookup that found someone, so a typo never lands in the
+          // list.
           if (value.data.uid.isEmpty) return;
           // A favorite's card keeps the newest figures seen, on every load.
           unawaited(

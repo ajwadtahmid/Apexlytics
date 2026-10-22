@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   Future<void> pump(WidgetTester tester, Widget pill) => tester.pumpWidget(
-    MaterialApp(home: Scaffold(body: Center(child: pill))),
+    MaterialApp(
+      home: Scaffold(body: Center(child: pill)),
+    ),
   );
 
   testWidgets('shows the prefix, icon and label, and taps through', (
@@ -43,6 +45,55 @@ void main() {
     final arrow = tester.getTopLeft(find.byIcon(Icons.arrow_downward)).dx;
     expect(icon, lessThan(label));
     expect(label, lessThan(arrow));
+  });
+
+  testWidgets('a tap on the prefix counts too', (tester) async {
+    var taps = 0;
+    await pump(
+      tester,
+      ControlPill(
+        prefix: 'Sort:',
+        icon: Icons.bolt,
+        label: 'Damage',
+        onTap: () => taps++,
+      ),
+    );
+
+    await tester.tap(find.text('Sort:'));
+    expect(taps, 1);
+  });
+
+  testWidgets('the tappable area is tall enough for a thumb', (tester) async {
+    await pump(
+      tester,
+      ControlPill(icon: Icons.bolt, label: 'Damage', onTap: () {}),
+    );
+
+    final area = tester.getSize(find.byType(GestureDetector).first);
+    expect(area.height, greaterThanOrEqualTo(ControlPill.minHitHeight));
+    // The pill itself keeps its size.
+    final pill = tester.getSize(find.byType(Container).first);
+    expect(pill.height, lessThan(ControlPill.minHitHeight));
+  });
+
+  testWidgets('a screen reader hears one button, prefix and label', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await pump(
+      tester,
+      ControlPill(
+        prefix: 'Sort:',
+        icon: Icons.bolt,
+        label: 'Damage',
+        onTap: () {},
+      ),
+    );
+
+    final node = tester.getSemantics(find.byType(ControlPill));
+    expect(node.label, 'Sort: Damage');
+    expect(node.flagsCollection.isButton, isTrue);
+    handle.dispose();
   });
 
   testWidgets('without a prefix it is just the pill', (tester) async {

@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'trend_arrow.dart';
 import '../utils/formatting/format.dart' show formatNumber, formatSigned;
-import '../utils/ranked/entity_trend_window.dart' show EntityTrendWindow;
 import '../utils/ranked/ranked_aggregates.dart';
 import '../utils/theme.dart';
 
@@ -11,8 +10,8 @@ import '../utils/theme.dart';
 /// 0 in line with it.
 typedef TrendSentence = ({String text, int direction});
 
-/// The sentence for [trend] under [label]: "Avg RP +57.0 lately, 31.6 above your
-/// +25.4 average", or "Avg RP in line with your average" when it is.
+/// The sentence for [trend] under [label]: "Avg RP +57.0 lately, 31.6 above
+/// your +25.4 average", or "Avg RP in line with your average" when it is.
 ///
 /// The figures are shown to [decimals] places (signed when [signed], as RP is),
 /// and the distance between them is worked out from the figures as shown, not
@@ -41,11 +40,13 @@ TrendSentence trendSentence(
   }
   final up = delta > 0;
   final distance = delta.abs();
+  final apart = decimals == 0
+      ? formatNumber(distance.round())
+      : distance.toStringAsFixed(decimals);
   return (
     text:
         '$label ${figure(recent)} lately, '
-        '${decimals == 0 ? formatNumber(distance.round()) : distance.toStringAsFixed(decimals)} '
-        '${up ? 'above' : 'below'} your ${figure(overall)} average',
+        '$apart ${up ? 'above' : 'below'} your ${figure(overall)} average',
     direction: up ? 1 : -1,
   );
 }
@@ -92,18 +93,9 @@ class TrendLines extends StatelessWidget {
       decimals: decimals,
       signed: signed,
     );
-    if (line.direction == 0) {
-      return Text.rich(
-        TextSpan(
-          style: const TextStyle(fontSize: 11, color: AppTheme.muted),
-          children: [
-            trendArrow(Icons.trending_flat, AppTheme.muted),
-            TextSpan(text: line.text),
-          ],
-        ),
-      );
-    }
-    final color = AppTheme.signColor(line.direction > 0);
+    final color = line.direction == 0
+        ? AppTheme.muted
+        : AppTheme.signColor(line.direction > 0);
     return Text.rich(
       TextSpan(
         style: TextStyle(fontSize: 11, color: color),
@@ -119,7 +111,7 @@ class TrendLines extends StatelessWidget {
 /// A line saying how [TrendLines] were worked out: which games are recent, with
 /// [window] the one that was used.
 class TrendFootnote extends StatelessWidget {
-  final EntityTrendWindow window;
+  final int window;
   const TrendFootnote({super.key, required this.window});
 
   @override
@@ -127,7 +119,7 @@ class TrendFootnote extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: AppTheme.sm),
       child: Text(
-        'Trends compare your last ${formatNumber(window.recent)} games with '
+        'Trends compare your last ${formatNumber(window)} games with '
         'your average.',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,

@@ -516,7 +516,7 @@ class _SummarySection extends StatelessWidget {
                     : null,
               ),
               CompareRow(
-                'Avg RP/game',
+                'Avg RP',
                 formatSigned(a.summary.avgRpPerGame),
                 formatSigned(b.summary.avgRpPerGame),
                 delta: b.summary.avgRpPerGame - a.summary.avgRpPerGame,
@@ -534,7 +534,7 @@ class _SummarySection extends StatelessWidget {
                 delta: _diff(a.summary.avgKills, b.summary.avgKills),
               ),
               CompareRow(
-                'Avg Dmg',
+                'Avg Damage',
                 formatAvgDamage(a.summary.avgDamage),
                 formatAvgDamage(b.summary.avgDamage),
                 delta: _diff(a.summary.avgDamage, b.summary.avgDamage),

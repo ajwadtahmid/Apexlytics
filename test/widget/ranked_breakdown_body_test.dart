@@ -548,7 +548,7 @@ void main() {
     });
 
     testWidgets('shows what was chosen, on the cards too', (tester) async {
-      await showOverview(tester, saved: {PrefsKeys.bestMetric: 'rpPerGame'});
+      await showOverview(tester, saved: {PrefsKeys.bestMetric: 'avgRp'});
 
       expect(find.text('Avg RP'), findsWidgets); // the pill, and the stat
       expect(find.text('+40.0 /game'), findsWidgets);

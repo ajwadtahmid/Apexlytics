@@ -9,9 +9,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 /// tally (the fallen, the damage done). Font Awesome icons are used through
 /// their plain [IconData], so they go wherever a Material icon does.
 abstract final class StatIcons {
-  /// RP gained or lost, added up. To try the sigma instead:
-  /// `static const totalRp = Icons.functions;`
-  static final totalRp = Icons.bar_chart;
+  /// RP gained or lost, added up.
+  static const totalRp = Icons.bar_chart;
 
   /// RP gained or lost in an average game.
   static const avgRp = Icons.show_chart;
@@ -27,6 +26,9 @@ abstract final class StatIcons {
 
   /// Time played.
   static const time = Icons.schedule;
+
+  /// Consecutive wins.
+  static const winStreak = Icons.military_tech;
 
   /// Kills in an average game, and all of them.
   static final avgKills = FontAwesomeIcons.crosshairs.data;

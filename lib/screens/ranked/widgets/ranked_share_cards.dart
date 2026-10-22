@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../constants/stat_icons.dart';
 import '../../../constants/legend_constants.dart' show canonicalLegendName;
 import '../../../constants/rank_constants.dart' show kPredatorBadgeAsset;
+import '../../../constants/stat_icons.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
     show
@@ -130,7 +130,7 @@ class RecapShareCard extends StatelessWidget {
       case RecapTile.rpPerGame:
         return ShareTile(
           icon: StatIcons.avgRp,
-          label: 'RP per game',
+          label: 'Avg RP',
           value: formatSigned(r.avgRpPerGame),
           color: _signed(r.avgRpPerGame),
         );
@@ -458,7 +458,7 @@ class StreakShareCard extends StatelessWidget {
         (StatIcons.totalKills, 'Kills', formatNumberOrNone(kills)),
         (StatIcons.totalDamage, 'Damage', formatNumberOrNone(damage)),
         (
-          Icons.schedule,
+          StatIcons.time,
           'First to last win',
           formatDuration(last.difference(first).inSeconds),
         ),

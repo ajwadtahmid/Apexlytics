@@ -41,6 +41,7 @@ void main() {
         home: Scaffold(
           body: SingleChildScrollView(
             child: RankedOverviewHighlights(
+              metric: BestMetric.totalRp,
               legends: legends,
               maps: const [],
               legendMatchesFor: (_) async => const [],
@@ -102,7 +103,7 @@ void main() {
       return (name) => tester.getTopLeft(find.text(name).first).dy;
     }
 
-    var top = await pumpWith(BestMetric.rpPerGame);
+    var top = await pumpWith(BestMetric.avgRp);
     expect(top('Axle'), lessThan(top('Wraith')));
 
     top = await pumpWith(BestMetric.totalRp);
@@ -163,7 +164,7 @@ void main() {
     testWidgets('is RP per game by default, with every stat beneath it', (
       tester,
     ) async {
-      await pumpWith(tester, BestMetric.rpPerGame);
+      await pumpWith(tester, BestMetric.avgRp);
 
       expect(find.text('+20.0 /game'), findsOneWidget); // the legend's pill
       expect(find.text('20.0 /game'), findsOneWidget); // the map's badge
@@ -252,7 +253,7 @@ void main() {
 
     testWidgets('Avg RP is not added when nothing was dropped', (tester) async {
       for (final metric in [
-        BestMetric.rpPerGame,
+        BestMetric.avgRp,
         BestMetric.totalKills,
         BestMetric.totalDamage,
         BestMetric.winRate,
@@ -266,7 +267,7 @@ void main() {
     testWidgets('a map badge for kills has no gain-or-loss arrow', (
       tester,
     ) async {
-      await pumpWith(tester, BestMetric.rpPerGame);
+      await pumpWith(tester, BestMetric.avgRp);
       expect(find.byIcon(Icons.arrow_upward), findsOneWidget);
 
       await pumpWith(tester, BestMetric.avgKills);
@@ -326,6 +327,7 @@ void main() {
             body: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: RankedOverviewHighlights(
+                metric: BestMetric.totalRp,
                 legends: legends,
                 maps: const [],
                 legendMatchesFor: (_) async => const [],

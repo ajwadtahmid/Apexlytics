@@ -53,7 +53,7 @@ void main() {
   ];
 
   test('totals, peak and where the player finished', () {
-    final r = splitRecap(games);
+    final r = splitRecap(games, metric: BestMetric.totalRp);
 
     expect(r.games, 6);
     expect(r.wins, 2);
@@ -66,7 +66,7 @@ void main() {
   });
 
   test('best legend and map are by RP per game, with enough games', () {
-    final r = splitRecap(games);
+    final r = splitRecap(games, metric: BestMetric.totalRp);
 
     expect(r.bestLegend!.legend, 'Axle');
     expect(r.bestMap!.displayName, 'Olympus');
@@ -89,7 +89,7 @@ void main() {
     ];
 
     for (final (metric, legend, map) in [
-      (BestMetric.rpPerGame, 'Axle', 'Olympus'),
+      (BestMetric.avgRp, 'Axle', 'Olympus'),
       (BestMetric.totalRp, 'Octane', 'Storm Point'),
       (BestMetric.avgKills, 'Octane', 'Storm Point'),
       (BestMetric.totalDamage, 'Octane', 'Storm Point'),
@@ -118,7 +118,7 @@ void main() {
         rp: 90,
         cumulativeRp: 1080,
       ),
-    ]);
+    ], metric: BestMetric.totalRp);
 
     expect(r.bestLegend!.legend, 'Axle');
   });
@@ -126,7 +126,7 @@ void main() {
   test(
     'best session gained the most RP, and the streak counts wins in a row',
     () {
-      final r = splitRecap(games);
+      final r = splitRecap(games, metric: BestMetric.totalRp);
 
       expect(r.bestSession!.netRp, 40);
       expect(r.bestSession!.games, 3);
@@ -144,14 +144,14 @@ void main() {
         excluded: true,
       ),
       buildMatch(start: t0 + 6 * 86400, rp: 0),
-    ]);
+    ], metric: BestMetric.totalRp);
 
     expect(r.games, 6);
     expect(r.peakRp, 1050);
   });
 
   test('no games is an empty recap with nothing best', () {
-    final r = splitRecap(const []);
+    final r = splitRecap(const [], metric: BestMetric.totalRp);
 
     expect(r.isEmpty, isTrue);
     expect(r.bestLegend, isNull);
@@ -160,7 +160,7 @@ void main() {
   });
 
   test('win rate is wins over wins plus losses', () {
-    final r = splitRecap(games);
+    final r = splitRecap(games, metric: BestMetric.totalRp);
 
     // Two wins and four losses.
     expect(r.winRate, closeTo(2 / 6, 1e-9));
@@ -170,33 +170,43 @@ void main() {
     final r = splitRecap([
       buildMatch(start: t0, rp: 20, cumulativeRp: 1020),
       buildMatch(start: t0 + 1500, rp: 0, cumulativeRp: 1020),
-    ]);
+    ], metric: BestMetric.totalRp);
 
     expect(r.winRate, 1);
   });
 
   test('win rate is unknown with no wins or losses', () {
-    expect(splitRecap(const []).winRate, isNull);
+    expect(splitRecap(const [], metric: BestMetric.totalRp).winRate, isNull);
     expect(
-      splitRecap([buildMatch(start: t0, rp: 0, cumulativeRp: 1000)]).winRate,
+      splitRecap([
+        buildMatch(start: t0, rp: 0, cumulativeRp: 1000),
+      ], metric: BestMetric.totalRp).winRate,
       isNull,
     );
   });
 
   test('RP per game is the net over the games, and 0 with none', () {
-    expect(splitRecap(games).avgRpPerGame, closeTo(-10 / 6, 1e-9));
-    expect(splitRecap(const []).avgRpPerGame, 0);
+    expect(
+      splitRecap(games, metric: BestMetric.totalRp).avgRpPerGame,
+      closeTo(-10 / 6, 1e-9),
+    );
+    expect(splitRecap(const [], metric: BestMetric.totalRp).avgRpPerGame, 0);
   });
 
   test('counts the games that reported kills', () {
     final r = splitRecap([
       buildMatch(start: t0, rp: 20, cumulativeRp: 1020, kills: 3),
       buildMatch(start: t0 + 1500, rp: 20, cumulativeRp: 1040),
-    ]);
+    ], metric: BestMetric.totalRp);
 
     expect(r.killsGames, 1);
     expect(r.totalKills, 3);
-    expect(splitRecap([buildMatch(start: t0, rp: 5)]).killsGames, 0);
+    expect(
+      splitRecap([
+        buildMatch(start: t0, rp: 5),
+      ], metric: BestMetric.totalRp).killsGames,
+      0,
+    );
   });
 
   test('totals the damage, and counts the games that reported it', () {
@@ -204,14 +214,16 @@ void main() {
       buildMatch(start: t0, rp: 20, cumulativeRp: 1020, damage: 500),
       buildMatch(start: t0 + 1500, rp: 20, cumulativeRp: 1040, damage: 700),
       buildMatch(start: t0 + 3000, rp: 20, cumulativeRp: 1060),
-    ]);
+    ], metric: BestMetric.totalRp);
 
     expect(r.totalDamage, 1200);
     expect(r.damageGames, 2);
   });
 
   test('no game reporting damage leaves it unknown, not zero', () {
-    final r = splitRecap([buildMatch(start: t0, rp: 5)]);
+    final r = splitRecap([
+      buildMatch(start: t0, rp: 5),
+    ], metric: BestMetric.totalRp);
 
     expect(r.damageGames, 0);
   });

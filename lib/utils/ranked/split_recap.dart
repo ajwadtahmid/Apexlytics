@@ -72,10 +72,7 @@ class SplitRecap {
   double get avgRpPerGame => games == 0 ? 0 : netRp / games;
 }
 
-SplitRecap splitRecap(
-  List<RankedMatch> matches, {
-  BestMetric metric = kDefaultBestMetric,
-}) {
+SplitRecap splitRecap(List<RankedMatch> matches, {required BestMetric metric}) {
   final ranked = rankedOnly(matches);
   final summary = summarize(ranked);
 

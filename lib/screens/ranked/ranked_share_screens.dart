@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/ranked_match.dart';
+import '../../utils/ranked/ranked_aggregates.dart' show rankedOnly;
 import '../../utils/ranked/ranked_period.dart';
-import '../../utils/ranked/split_recap.dart';
 import '../../widgets/nav_entry_card.dart';
 import 'ranked_recap_screen.dart';
 
@@ -48,11 +48,10 @@ class RankedRecapEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final recap = splitRecap(matches);
     return NavEntryCard(
       icon: Icons.auto_awesome_outlined,
       title: 'Recap',
-      onTap: recap.isEmpty
+      onTap: rankedOnly(matches).isEmpty
           ? () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('No ranked games to recap yet.')),
             )

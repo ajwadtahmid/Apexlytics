@@ -11,13 +11,12 @@ import '../../models/ranked_match.dart';
 import '../formatting/rank_utils.dart'
     show isApexPredatorRp, rankIndex, usablePredatorCutoff;
 import 'best_metric.dart';
+import 'ranked_tally.dart';
+
+export 'ranked_tally.dart';
 
 /// Default gap that separates one play session from the next.
 const Duration kSessionGap = Duration(hours: 2);
-
-/// Minimum games before a legend/map qualifies for "best/worst" insights, so a
-/// single lucky game doesn't crown a legend.
-const int kMinGamesForInsight = 3;
 
 /// Returns only ranked (Battle Royale) matches that count toward the stats —
 /// not hand-excluded, not auto-excluded for an implausible RP swing — newest
@@ -26,37 +25,6 @@ List<RankedMatch> rankedOnly(List<RankedMatch> all) {
   final list = all.where((m) => m.isRanked && m.countsTowardStats).toList()
     ..sort((a, b) => b.endTime.compareTo(a.endTime));
   return list;
-}
-
-/// The totals a ranked group (a legend, a map, a legend on a map) is judged on,
-/// whatever it is a group of. [BestMetric] reads these to rank groups against
-/// each other.
-abstract class RankedTally {
-  final int games;
-  final int totalRp; // Σ rpChange in the group
-
-  /// Games with positive and with negative effective RP.
-  final int wins;
-  final int losses;
-
-  final int totalKills;
-  final int totalDamage;
-
-  /// Games whose kills/damage upstream reported — the divisor for the averages.
-  /// See [RankedSummary.killsGames].
-  final int killsGames;
-  final int damageGames;
-
-  const RankedTally({
-    required this.games,
-    required this.totalRp,
-    required this.wins,
-    required this.losses,
-    required this.totalKills,
-    required this.totalDamage,
-    required this.killsGames,
-    required this.damageGames,
-  });
 }
 
 // ── Shared accumulator ──────────────────────────────────────────────────────
@@ -306,14 +274,7 @@ class LegendBreakdown extends RankedTally {
     required super.losses,
   });
 
-  double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
-  // Null, not 0, when no game reported the tracker: a zero would read as a
-  // measured "no kills" rather than "not recorded".
-  double? get avgKills => killsGames == 0 ? null : totalKills / killsGames;
-  double? get avgDamage => damageGames == 0 ? null : totalDamage / damageGames;
   double get avgLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
-  int get decidedGames => wins + losses;
-  double get winRate => decidedGames == 0 ? 0 : wins / decidedGames;
 }
 
 /// Per-legend breakdown, sorted by total RP contribution (descending).
@@ -372,13 +333,7 @@ class MapBreakdown extends RankedTally {
     required super.losses,
   });
 
-  double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
-  // Null, not 0, when no game reported the tracker: a zero would read as a
-  // measured "no kills" rather than "not recorded".
-  double? get avgKills => killsGames == 0 ? null : totalKills / killsGames;
-  double? get avgDamage => damageGames == 0 ? null : totalDamage / damageGames;
   double get avgLengthSecs => games == 0 ? 0 : totalLengthSecs / games;
-  int get decidedGames => wins + losses;
 }
 
 /// Per-map breakdown, sorted by games played (descending).
@@ -441,8 +396,6 @@ class LegendMapCell extends RankedTally {
     super.totalDamage = 0,
     super.damageGames = 0,
   });
-
-  double get avgRpPerGame => games == 0 ? 0 : totalRp / games;
 }
 
 /// Per (legend, map) breakdown, restricted to legends in [kLegends] and maps in
@@ -593,8 +546,8 @@ class RankedSession {
 
   /// The legend that did best this session under [metric], or null when none
   /// has a figure for it (no games, or no kills reported for a kills measure).
-  /// A legend with [kMinGamesForInsight] games or more is preferred, so a single
-  /// game doesn't crown one; failing that the rest are ranked.
+  /// A legend with [kMinGamesForInsight] games or more is preferred, so a
+  /// single game doesn't crown one; failing that the rest are ranked.
   String? bestLegendBy(BestMetric metric) => rankByMetric(
     legendBreakdowns(matches),
     metric,

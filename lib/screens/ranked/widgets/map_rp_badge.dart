@@ -6,7 +6,8 @@ import '../../../utils/theme.dart';
 /// [MapRpBadge.perGame] the average per game (`12.4 /game`). A dark scrim +
 /// coloured text + a direction arrow keep it legible over any (bright or
 /// dark) part of a map photo. [MapRpBadge.custom] is the same badge for any
-/// other figure: [text] as given, with no arrow, since it is not a gain or loss.
+/// other figure: [text] as given, with no arrow, since it is not a gain or
+/// loss.
 class MapRpBadge extends StatelessWidget {
   final int? totalRp;
   final double? avgRp;

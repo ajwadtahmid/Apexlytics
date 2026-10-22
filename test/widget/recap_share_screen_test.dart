@@ -1,3 +1,4 @@
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/constants/prefs_keys.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
@@ -63,7 +64,7 @@ void main() {
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
         child: MaterialApp(
           home: RankedRecapShareScreen(
-            recap: splitRecap(matches ?? wins),
+            recap: splitRecap(matches ?? wins, metric: BestMetric.totalRp),
             scope: 'S30 Split 2',
             playerName: 'Reptar',
           ),
@@ -88,7 +89,7 @@ void main() {
     expect(find.byType(ShareTile), findsNWidgets(8));
     // Asked for, not shown to begin with.
     expect(tile('WIN RATE'), findsNothing);
-    expect(tile('RP PER GAME'), findsNothing);
+    expect(tile('AVG RP'), findsNothing);
   });
 
   testWidgets('lays the tiles out two to a row, in order', (tester) async {
@@ -119,7 +120,7 @@ void main() {
 
     await tester.tap(chip('Win rate'));
     await tester.pump();
-    await tester.tap(chip('RP per game'));
+    await tester.tap(chip('Avg RP'));
     await tester.pump();
     expect(find.byType(ShareTile), findsNWidgets(10));
     expect(tester.getTopLeft(tile('GAMES')).dy, eight);
@@ -159,7 +160,7 @@ void main() {
       expect(chip(label), findsOneWidget, reason: label);
       expect(tester.widget<FilterChip>(chip(label)).selected, isTrue);
     }
-    for (final label in ['Win rate', 'RP per game']) {
+    for (final label in ['Win rate', 'Avg RP']) {
       expect(chip(label), findsOneWidget, reason: label);
       expect(tester.widget<FilterChip>(chip(label)).selected, isFalse);
     }
@@ -204,7 +205,7 @@ void main() {
 
       await tester.tap(chip('Win rate'));
       await tester.pump();
-      await tester.tap(chip('RP per game'));
+      await tester.tap(chip('Avg RP'));
       await tester.pump();
 
       expect(find.byType(ShareTile), findsNWidgets(10));
@@ -214,7 +215,7 @@ void main() {
       // They come last, after the best map.
       final map = tester.getTopLeft(tile('BEST MAP')).dy;
       expect(tester.getTopLeft(tile('WIN RATE')).dy, greaterThan(map));
-      expect(tester.getTopLeft(tile('RP PER GAME')).dy, greaterThan(map));
+      expect(tester.getTopLeft(tile('AVG RP')).dy, greaterThan(map));
     });
 
     testWidgets('keeps them on once turned on', (tester) async {
@@ -227,7 +228,7 @@ void main() {
 
       expect(find.byType(ShareTile), findsNWidgets(3));
       expect(tile('WIN RATE'), findsOneWidget);
-      expect(tile('RP PER GAME'), findsOneWidget);
+      expect(tile('AVG RP'), findsOneWidget);
     });
 
     testWidgets('comes back as it was left', (tester) async {
@@ -287,7 +288,7 @@ void main() {
       // The rest are still there, win rate and RP per game among them.
       expect(chip('Games'), findsOneWidget);
       expect(chip('Win rate'), findsOneWidget);
-      expect(chip('RP per game'), findsOneWidget);
+      expect(chip('Avg RP'), findsOneWidget);
       expect(chip('Best session'), findsOneWidget);
     });
 

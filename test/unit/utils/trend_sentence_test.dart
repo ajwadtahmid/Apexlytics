@@ -16,7 +16,7 @@ void main() {
     signed: signed,
   );
 
-  group('the cases that used to print figures that did not add up', () {
+  group('figures that sit near a rounding edge', () {
     test('kills: 2.2 and 1.9 are 0.3 apart, not 0.4', () {
       // 2.24 and 1.86 are 0.38 apart, which rounds to 0.4.
       expect(

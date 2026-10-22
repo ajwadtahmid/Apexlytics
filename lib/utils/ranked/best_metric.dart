@@ -1,17 +1,17 @@
 import '../formatting/format.dart'
     show formatNumber, formatPercent, formatSigned, formatSignedInt;
-import 'ranked_aggregates.dart';
+import 'ranked_tally.dart';
 
 /// What makes one legend or map better than another. The order is the one the
 /// picker lists them in.
 enum BestMetric {
   totalRp('Total RP', 'total RP'),
-  rpPerGame('Avg RP', 'avg RP'),
+  avgRp('Avg RP', 'avg RP'),
   winRate('Win rate', 'win rate'),
-  avgKills('Avg kills', 'avg kills'),
-  totalKills('Total kills', 'total kills'),
-  avgDamage('Avg damage', 'avg damage'),
-  totalDamage('Total damage', 'total damage');
+  avgKills('Avg Kills', 'avg kills'),
+  totalKills('Total Kills', 'total kills'),
+  avgDamage('Avg Damage', 'avg damage'),
+  totalDamage('Total Damage', 'total damage');
 
   const BestMetric(this.label, this.phrase);
 
@@ -24,13 +24,13 @@ enum BestMetric {
 
   /// Whether the figure can be negative, and so reads as a gain or a loss.
   /// Kills, damage and win rate can't be, so they are not coloured as one.
-  bool get isRp => this == rpPerGame || this == totalRp;
+  bool get isRp => this == avgRp || this == totalRp;
 
   /// [value] (as [valueOf] gives it) written for a pill: `+80.1 /game`,
   /// `+561 RP`, `2.8 kills/game`, `1,204 kills`, `521 dmg/game`, `23,760 dmg`,
   /// `62% win rate`.
   String formatValue(double value) => switch (this) {
-    rpPerGame => '${formatSigned(value)} /game',
+    avgRp => '${formatSigned(value)} /game',
     totalRp => '${formatSignedInt(value.round())} RP',
     avgKills => '${value.toStringAsFixed(1)} kills/game',
     totalKills => '${formatNumber(value.round())} kills',
@@ -42,7 +42,7 @@ enum BestMetric {
   /// [formatValue] for a line of text, where a bare "/game" would not say what
   /// is being averaged.
   String formatInline(double value) =>
-      this == rpPerGame ? '${formatSigned(value)} RP/game' : formatValue(value);
+      this == avgRp ? '${formatSigned(value)} RP/game' : formatValue(value);
 
   /// [tally]'s figure under this measure, or null when it has none to give:
   /// no games, no game that reported kills or damage (not the same as a
@@ -51,19 +51,20 @@ enum BestMetric {
     if (tally.games == 0) return null;
     final decided = tally.wins + tally.losses;
     return switch (this) {
-      rpPerGame => tally.totalRp / tally.games,
+      avgRp => tally.avgRpPerGame,
       totalRp => tally.totalRp.toDouble(),
-      avgKills =>
-        tally.killsGames == 0 ? null : tally.totalKills / tally.killsGames,
+      avgKills => tally.avgKills,
       totalKills => tally.killsGames == 0 ? null : tally.totalKills.toDouble(),
-      avgDamage =>
-        tally.damageGames == 0 ? null : tally.totalDamage / tally.damageGames,
+      avgDamage => tally.avgDamage,
       totalDamage =>
         tally.damageGames == 0 ? null : tally.totalDamage.toDouble(),
       winRate => decided == 0 ? null : tally.wins / decided,
     };
   }
 }
+
+/// What "best" means until the player chooses.
+const kDefaultBestMetric = BestMetric.totalRp;
 
 /// [items] that have a figure under [metric], best first. Ties go to the one
 /// with more games, then to the name [nameOf] gives, so the order never depends
@@ -113,9 +114,6 @@ List<T> rankByMetric<T extends RankedTally>(
     worst: ranked.firstWhere((t) => metric.valueOf(t) == lowest),
   );
 }
-
-/// What "best" means until the player chooses.
-const kDefaultBestMetric = BestMetric.totalRp;
 
 /// [items] ordered by [metric], biggest first, for a list the player is
 /// sorting. Unlike [rankByMetric] nothing is left out for having few games; an

@@ -15,10 +15,9 @@ String legendTrendKey(String legend) => 'legend:${canonicalLegendName(legend)}';
 String mapTrendKey(String mapKey) => 'map:${canonicalMapKey(mapKey)}';
 
 /// The legends and maps the player gave a trend window of their own, as a game
-/// count each (see [isTrendChoice]) or [kEntityTrendAuto]; everything
-/// else follows the window chosen for all of them (see
-/// [entityTrendWindowProvider]). Kept
-/// between visits, on this device only. Filed by [legendTrendKey] and
+/// count each (see [isTrendChoice]) or [kEntityTrendAuto]; everything else
+/// follows the window chosen for all of them (see [entityTrendWindowProvider]).
+/// Kept between visits, on this device only. Filed by [legendTrendKey] and
 /// [mapTrendKey], not by profile: it is how the player likes to look at a
 /// legend, not data about one player.
 final entityTrendOverridesProvider =

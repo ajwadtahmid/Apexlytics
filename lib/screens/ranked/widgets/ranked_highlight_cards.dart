@@ -45,7 +45,7 @@ class RankedOverviewHighlights extends StatelessWidget {
     required this.mapMatchesFor,
     required this.onRefresh,
     this.sessionPool,
-    this.metric = kDefaultBestMetric,
+    required this.metric,
   });
 
   @override
@@ -257,14 +257,7 @@ class _CompactLegend extends StatelessWidget {
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerLeft,
                               child: Row(
-                                children: _statsFor(
-                                  metric,
-                                  totalRp: breakdown.totalRp,
-                                  avgRp: breakdown.avgRpPerGame,
-                                  avgKills: breakdown.avgKills,
-                                  avgDamage: breakdown.avgDamage,
-                                  games: breakdown.games,
-                                ),
+                                children: _statsFor(metric, breakdown),
                               ),
                             ),
                           ),
@@ -376,17 +369,7 @@ class _MapHighlight extends StatelessWidget {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: _statsFor(
-                        metric,
-                        totalRp: map.totalRp,
-                        avgRp: map.avgRpPerGame,
-                        avgKills: map.avgKills,
-                        avgDamage: map.avgDamage,
-                        games: map.games,
-                        onImage: true,
-                      ),
-                    ),
+                    child: Row(children: _statsFor(metric, map, onImage: true)),
                   ),
                 ],
               ),
@@ -404,7 +387,7 @@ class _MapHighlight extends StatelessWidget {
 Widget _metricPill(BestMetric metric, RankedTally tally) {
   final value = metric.valueOf(tally)!;
   return switch (metric) {
-    BestMetric.rpPerGame => RpPill.perGame(avgRp: value),
+    BestMetric.avgRp => RpPill.perGame(avgRp: value),
     BestMetric.totalRp => RpPill(totalRp: tally.totalRp),
     _ => RpPill.custom(text: metric.formatValue(value), color: AppTheme.accent),
   };
@@ -414,7 +397,7 @@ Widget _metricPill(BestMetric metric, RankedTally tally) {
 Widget _metricBadge(BestMetric metric, RankedTally tally) {
   final value = metric.valueOf(tally)!;
   return switch (metric) {
-    BestMetric.rpPerGame => MapRpBadge.perGame(
+    BestMetric.avgRp => MapRpBadge.perGame(
       avgRp: value,
       color: AppTheme.signColor(value >= 0),
     ),
@@ -431,21 +414,18 @@ Widget _metricBadge(BestMetric metric, RankedTally tally) {
 
 /// A card's stat row. A figure the card already shows as its ranking pill
 /// ([metric]) is left out, so nothing appears twice, and the average RP per
-/// game, just the number, stands in beside Total RP so the row keeps its length.
+/// game, just the number, stands in beside Total RP so the row keeps its
+/// length.
 List<Widget> _statsFor(
-  BestMetric metric, {
-  required int totalRp,
-  required double avgRp,
-  required double? avgKills,
-  required double? avgDamage,
-  required int games,
+  BestMetric metric,
+  RankedTally tally, {
   bool onImage = false,
 }) => [
   if (metric != BestMetric.totalRp)
     _HighlightStat(
       label: 'Total RP',
-      value: formatSignedInt(totalRp),
-      color: AppTheme.signColor(totalRp >= 0),
+      value: formatSignedInt(tally.totalRp),
+      color: AppTheme.signColor(tally.totalRp >= 0),
       onImage: onImage,
     ),
   if (const {
@@ -455,23 +435,23 @@ List<Widget> _statsFor(
   }.contains(metric))
     _HighlightStat(
       label: 'Avg RP',
-      value: formatSigned(avgRp),
-      color: AppTheme.signColor(avgRp >= 0),
+      value: formatSigned(tally.avgRpPerGame),
+      color: AppTheme.signColor(tally.avgRpPerGame >= 0),
       onImage: onImage,
     ),
   if (metric != BestMetric.avgKills)
     _HighlightStat(
       label: 'Avg Kills',
-      value: formatAvgKills(avgKills),
+      value: formatAvgKills(tally.avgKills),
       onImage: onImage,
     ),
   if (metric != BestMetric.avgDamage)
     _HighlightStat(
       label: 'Avg Dmg',
-      value: formatAvgDamage(avgDamage),
+      value: formatAvgDamage(tally.avgDamage),
       onImage: onImage,
     ),
-  _HighlightStat(label: 'Games', value: '$games', onImage: onImage),
+  _HighlightStat(label: 'Games', value: '${tally.games}', onImage: onImage),
 ];
 
 /// Small label/value stat pair for the highlight cards' stat row.

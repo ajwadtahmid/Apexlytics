@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../constants/stat_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../constants/map_constants.dart';
+import '../../constants/stat_icons.dart';
 import '../../models/player_stats.dart';
 import '../../models/ranked_match.dart';
 import '../../providers/best_metric_provider.dart';
@@ -567,7 +567,11 @@ class _RecordCard extends StatelessWidget {
                   (Icons.person_outline, 'Legend', m.legend),
                   (Icons.map_outlined, 'Map', battleRoyaleMapName(m.mapKey)),
                   if (shareDrops != 'RP')
-                    (StatIcons.totalRp, 'RP', formatSignedInt(m.effectiveRpChange)),
+                    (
+                      StatIcons.totalRp,
+                      'RP',
+                      formatSignedInt(m.effectiveRpChange),
+                    ),
                   if (shareDrops != 'Kills')
                     (
                       StatIcons.totalKills,
@@ -686,6 +690,7 @@ class _SessionRecordCard extends StatelessWidget {
     final value = s == null ? null : '${formatSignedInt(s.netRp)} RP';
     final kills = s == null || s.killsGames == 0 ? null : s.totalKills;
     final damage = s == null || s.damageGames == 0 ? null : s.totalDamage;
+    final top = s?.bestLegendBy(metric);
     return SurfaceCard(
       padding: const EdgeInsets.all(AppTheme.md),
       onTap: s == null ? null : () => onOpen(s),
@@ -734,7 +739,7 @@ class _SessionRecordCard extends StatelessWidget {
                 unit: 'RP',
                 valueColor: AppTheme.signColor(s.netRp >= 0),
                 detail: formatSessionSpan(s.start, s.end),
-                legend: s.bestLegendBy(metric),
+                legend: top,
                 playerName: name,
                 stats: [
                   (StatIcons.games, 'Games', '${s.games}'),
@@ -749,12 +754,7 @@ class _SessionRecordCard extends StatelessWidget {
                     'Time played',
                     formatDuration(s.duration.inSeconds),
                   ),
-                  if (s.bestLegendBy(metric) != null)
-                    (
-                      Icons.person_outline,
-                      'Top legend',
-                      s.bestLegendBy(metric)!,
-                    ),
+                  if (top != null) (Icons.person_outline, 'Top legend', top),
                 ],
               ),
             ),
@@ -814,7 +814,7 @@ class _StreakCard extends StatelessWidget {
       onTap: hasGames ? () => onOpen(streakMatches) : null,
       child: Row(
         children: [
-          const Icon(Icons.military_tech, size: 20, color: AppTheme.accent),
+          const Icon(StatIcons.winStreak, size: 20, color: AppTheme.accent),
           const SizedBox(width: AppTheme.md),
           Expanded(
             child: Column(
@@ -961,7 +961,7 @@ Widget _longestSessionCard(
   final damage = s.damageGames == 0 ? null : s.totalDamage;
   final time = formatDuration(s.duration.inSeconds);
   return _SummaryRecordCard(
-    icon: Icons.schedule,
+    icon: StatIcons.time,
     label: 'Longest Session',
     value: time,
     lines: [
@@ -1061,7 +1061,7 @@ List<(IconData icon, String label, String value)> _recordTiles({
       ),
     if (longest != null)
       (
-        Icons.schedule,
+        StatIcons.time,
         'Longest session',
         formatDuration(longest.duration.inSeconds),
       ),
@@ -1073,7 +1073,7 @@ List<(IconData icon, String label, String value)> _recordTiles({
       ),
     if (records.bestWinStreak > 0)
       (
-        Icons.military_tech,
+        StatIcons.winStreak,
         'Win streak',
         plural(records.bestWinStreak, 'game'),
       ),

@@ -11,6 +11,10 @@ import '../../../utils/ranked/ranked_period.dart' show matchesInWeek;
 import '../../../utils/theme.dart';
 import '../../../widgets/surface_card.dart';
 
+/// A week the picker offers: its range, its number in the split, and how many
+/// ranked games it holds.
+typedef _WeekChoice = ({WeekRange range, int number, int games});
+
 /// Match and session times in the chart's tooltips and session picker.
 final _sessionFmt = DateFormat('MMM d, h:mm a');
 
@@ -60,6 +64,12 @@ class _RankedRpChartState extends State<RankedRpChart> {
   DateTime? _sessionStart;
   DateTime? _weekStart;
 
+  // The weeks on offer, worked out again only when the games or weeks change.
+  List<_WeekChoice> _weekChoicesCache = const [];
+  List<RankedMatch>? _weekChoicesMatches;
+  List<WeekRange>? _weekChoicesWeeks;
+  int? _weekChoicesIndex;
+
   @override
   void didUpdateWidget(RankedRpChart old) {
     super.didUpdateWidget(old);
@@ -73,10 +83,18 @@ class _RankedRpChartState extends State<RankedRpChart> {
   /// The weeks the picker offers, when it offers weeks: every week of the
   /// split with a ranked game in it. Empty when a week is already selected or
   /// the split has no weeks, which leaves the sessions.
-  List<({WeekRange range, int number, int games})> _weekChoices() {
+  List<_WeekChoice> _weekChoices() {
     if (widget.weekIndex >= 0 || widget.weeks.isEmpty) return const [];
+    if (identical(widget.matches, _weekChoicesMatches) &&
+        identical(widget.weeks, _weekChoicesWeeks) &&
+        widget.weekIndex == _weekChoicesIndex) {
+      return _weekChoicesCache;
+    }
     final ranked = widget.matches.where((m) => m.isRanked).toList();
-    return [
+    _weekChoicesMatches = widget.matches;
+    _weekChoicesWeeks = widget.weeks;
+    _weekChoicesIndex = widget.weekIndex;
+    return _weekChoicesCache = [
       for (var i = 0; i < widget.weeks.length; i++)
         if (matchesInWeek(ranked, widget.weeks[i]).length case final games
             when games > 0)
@@ -137,13 +155,12 @@ class _RankedRpChartState extends State<RankedRpChart> {
                       Flexible(
                         child: _ScopePicker(
                           allLabel: 'All weeks',
-                          labels: [
+                          choices: [
                             for (final w in weekChoices)
-                              'W${w.number} · ${_weekDates(w.range)}',
-                          ],
-                          details: [
-                            for (final w in weekChoices)
-                              plural(w.games, 'game'),
+                              (
+                                label: 'W${w.number} · ${_weekDates(w.range)}',
+                                detail: plural(w.games, 'game'),
+                              ),
                           ],
                           selectedIndex: selected,
                           onSelected: (i) => setState(
@@ -157,11 +174,13 @@ class _RankedRpChartState extends State<RankedRpChart> {
                       Flexible(
                         child: _ScopePicker(
                           allLabel: 'All sessions',
-                          labels: [
+                          choices: [
                             for (final s in sessions)
-                              _sessionFmt.format(s.start.toLocal()),
+                              (
+                                label: _sessionFmt.format(s.start.toLocal()),
+                                detail: '${s.games}g',
+                              ),
                           ],
-                          details: [for (final s in sessions) '${s.games}g'],
                           selectedIndex: selected,
                           onSelected: (i) => setState(
                             () => _sessionStart = i < 0
@@ -296,27 +315,25 @@ class _RankedRpChartState extends State<RankedRpChart> {
   }
 }
 
-/// The pill above the chart that narrows it to one session or week. [labels]
-/// and [details] are the choices after "All" ([allLabel]), as the menu shows
-/// them; [selectedIndex] is one of them, or -1 for all.
+/// The pill above the chart that narrows it to one session or week. [choices]
+/// are the entries after "All" ([allLabel]), as the menu shows them;
+/// [selectedIndex] is one of them, or -1 for all.
 class _ScopePicker extends StatelessWidget {
   final String allLabel;
-  final List<String> labels;
-  final List<String> details;
+  final List<({String label, String detail})> choices;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
   const _ScopePicker({
     required this.allLabel,
-    required this.labels,
-    required this.details,
+    required this.choices,
     required this.selectedIndex,
     required this.onSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final label = selectedIndex < 0 ? allLabel : labels[selectedIndex];
+    final label = selectedIndex < 0 ? allLabel : choices[selectedIndex].label;
 
     return PopupMenuButton<int>(
       initialValue: selectedIndex,
@@ -327,11 +344,11 @@ class _ScopePicker extends StatelessWidget {
       ),
       itemBuilder: (_) => [
         PopupMenuItem(value: -1, child: Text(allLabel)),
-        for (var i = 0; i < labels.length; i++)
+        for (var i = 0; i < choices.length; i++)
           PopupMenuItem(
             value: i,
             child: Text(
-              '${labels[i]} · ${details[i]}',
+              '${choices[i].label} · ${choices[i].detail}',
               style: const TextStyle(fontSize: 13),
             ),
           ),

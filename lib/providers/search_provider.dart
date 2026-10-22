@@ -131,10 +131,11 @@ class PlayerRef {
     snapshot: PlayerSnapshot.fromJson(json['snapshot']),
   );
 
-  // searchedByUid and snapshot are intentionally excluded from equality and hash:
-  // two entries for the same player deduplicate regardless of how they were
-  // searched (by name or UID) or what was last seen of them. [SearchState]
-  // compares snapshots itself, so an update still reaches the favorites list.
+  // searchedByUid and snapshot are intentionally excluded from equality and
+  // hash: two entries for the same player deduplicate regardless of how they
+  // were searched (by name or UID) or what was last seen of them.
+  // [SearchState] compares snapshots itself, so an update still reaches the
+  // favorites list.
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

@@ -1056,7 +1056,7 @@ class _FirstRunPreview extends StatelessWidget {
                   const Row(
                     children: [
                       Expanded(child: _PreviewStat('Games')),
-                      Expanded(child: _PreviewStat('RP per game')),
+                      Expanded(child: _PreviewStat('Avg RP')),
                       Expanded(child: _PreviewStat('Win rate')),
                     ],
                   ),

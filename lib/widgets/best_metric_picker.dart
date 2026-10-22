@@ -19,7 +19,7 @@ Color bestMetricColor(BestMetric metric, double value) =>
 /// figure wears everywhere (see [StatIcons]).
 IconData bestMetricIcon(BestMetric metric) => switch (metric) {
   BestMetric.totalRp => StatIcons.totalRp,
-  BestMetric.rpPerGame => StatIcons.avgRp,
+  BestMetric.avgRp => StatIcons.avgRp,
   BestMetric.winRate => StatIcons.winRate,
   BestMetric.avgKills => StatIcons.avgKills,
   BestMetric.totalKills => StatIcons.totalKills,
@@ -27,7 +27,7 @@ IconData bestMetricIcon(BestMetric metric) => switch (metric) {
   BestMetric.totalDamage => StatIcons.totalDamage,
 };
 
-/// "Rank by: RP per game": what the strongest and weakest legends and maps are
+/// "Rank by: Total RP": what the strongest and weakest legends and maps are
 /// judged on, with a tap to change it. The choice is shared (see
 /// [bestMetricProvider]), so this reads the same wherever it is shown.
 class BestMetricPill extends ConsumerWidget {
@@ -45,7 +45,8 @@ class BestMetricPill extends ConsumerWidget {
   }
 }
 
-/// The sheet that picks the [BestMetric]. A choice applies at once and closes it.
+/// The sheet that picks the [BestMetric]. A choice applies at once and closes
+/// it.
 Future<void> showBestMetricSheet(BuildContext context, WidgetRef ref) {
   return showChoiceSheet<BestMetric>(
     context,

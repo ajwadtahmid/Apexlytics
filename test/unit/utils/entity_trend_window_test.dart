@@ -5,6 +5,29 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../helpers.dart';
 
 void main() {
+  group('the limits', () {
+    test('trend lines start at twice the smallest window', () {
+      expect(kTrendMinGames, kTrendCustomMin * 2);
+      expect(
+        resolveEntityTrendWindow(kEntityTrendAuto, kTrendMinGames - 1),
+        isNull,
+      );
+      expect(
+        resolveEntityTrendWindow(kEntityTrendAuto, kTrendMinGames),
+        kTrendCustomMin,
+      );
+    });
+
+    test('Auto never goes below the smallest window a player can type', () {
+      for (var games = kTrendMinGames; games < 40; games++) {
+        expect(
+          resolveEntityTrendWindow(kEntityTrendAuto, games)!,
+          greaterThanOrEqualTo(kTrendCustomMin),
+        );
+      }
+    });
+  });
+
   group('resolveEntityTrendWindow', () {
     test('has no window with too few games to compare', () {
       for (final choice in [kEntityTrendAuto, ...kEntityTrendPresets]) {
@@ -32,14 +55,14 @@ void main() {
       ]) {
         test('$games games compare their newest $recent', () {
           final window = resolveEntityTrendWindow(kEntityTrendAuto, games)!;
-          expect(window.recent, recent);
+          expect(window, recent);
         });
       }
 
       test('never takes more than half of the games', () {
         for (var games = 10; games <= 400; games++) {
           final window = resolveEntityTrendWindow(kEntityTrendAuto, games)!;
-          expect(window.recent * 2, lessThanOrEqualTo(games), reason: '$games');
+          expect(window * 2, lessThanOrEqualTo(games), reason: '$games');
         }
       });
     });
@@ -54,7 +77,7 @@ void main() {
         (500, 1000),
       ]) {
         test('$choice is used with $games games', () {
-          expect(resolveEntityTrendWindow(choice, games)!.recent, choice);
+          expect(resolveEntityTrendWindow(choice, games)!, choice);
         });
       }
 
@@ -68,7 +91,7 @@ void main() {
         (5, 10, 5),
       ]) {
         test('$choice is held to $used with only $games games', () {
-          expect(resolveEntityTrendWindow(choice, games)!.recent, used);
+          expect(resolveEntityTrendWindow(choice, games)!, used);
         });
       }
     });
@@ -116,7 +139,7 @@ void main() {
       final fifty = cache.read(matches, 25);
 
       expect(identical(auto, fifty), isFalse);
-      expect(fifty.window, (recent: 25));
+      expect(fifty.window, 25);
       // And back again, to a fresh and correct one.
       expect(cache.read(matches, kEntityTrendAuto).window, auto.window);
     });
@@ -127,8 +150,8 @@ void main() {
       final first = cache.read(games(40), kEntityTrendAuto);
       final second = cache.read(games(80), kEntityTrendAuto);
 
-      expect(first.window, (recent: 10));
-      expect(second.window, (recent: 20));
+      expect(first.window, 10);
+      expect(second.window, 20);
     });
 
     test('is what entityTrendReading says', () {
@@ -168,14 +191,14 @@ void main() {
       final reading = entityTrendReading(games(40), kEntityTrendAuto);
 
       // A quarter of 40: the newest 10 against the average of all 40.
-      expect(reading.window, (recent: 10));
+      expect(reading.window, 10);
       expect(reading.trends.rp!.delta, greaterThan(0));
     });
 
     test('follows a chosen count', () {
       final reading = entityTrendReading(games(60), 25);
 
-      expect(reading.window, (recent: 25));
+      expect(reading.window, 25);
     });
   });
 }

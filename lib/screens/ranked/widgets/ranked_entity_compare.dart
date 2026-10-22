@@ -153,7 +153,7 @@ class _RankedEntityCompareState extends State<RankedEntityCompare> {
                 integerDelta: true,
               ),
               CompareRow(
-                'RP/game',
+                'Avg RP',
                 formatSigned(a.avgRp),
                 formatSigned(b.avgRp),
                 delta: b.avgRp - a.avgRp,
@@ -171,7 +171,7 @@ class _RankedEntityCompareState extends State<RankedEntityCompare> {
                 delta: _diff(a.avgKills, b.avgKills),
               ),
               CompareRow(
-                'Avg Dmg',
+                'Avg Damage',
                 formatAvgDamage(a.avgDamage),
                 formatAvgDamage(b.avgDamage),
                 delta: _diff(a.avgDamage, b.avgDamage),

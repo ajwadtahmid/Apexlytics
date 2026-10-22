@@ -21,7 +21,7 @@ class RankedBestLegendPerMap extends StatelessWidget {
     super.key,
     required this.cells,
     this.currentMapName,
-    this.metric = kDefaultBestMetric,
+    required this.metric,
   });
 
   @override
@@ -136,7 +136,8 @@ class _MapRow extends StatelessWidget {
                 // recorded, say) are not short of games.
                 insight.eligible > 1
                     ? 'No other legend has ${metric.phrase} recorded here yet'
-                    : 'No other legend has $kMinGamesForInsight+ games here yet',
+                    : 'No other legend has $kMinGamesForInsight+ games '
+                          'here yet',
                 style: AppTheme.captionSmall,
               ),
             ),

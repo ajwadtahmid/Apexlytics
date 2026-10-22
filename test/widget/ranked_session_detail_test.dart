@@ -111,7 +111,7 @@ void main() {
   ) async {
     await pump(tester, mixed); // +25 over five games
 
-    expect(find.text('avg RP/game'), findsOneWidget);
+    expect(find.text('avg RP'), findsOneWidget);
     final avg = tester.widget<Text>(find.text('+5.0'));
     expect(avg.style!.color, AppTheme.green);
     expect(find.text('longest gap'), findsNothing);

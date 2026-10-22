@@ -69,9 +69,10 @@ class PrefsKeys {
   /// recent (0 for Auto). Device-only: not backed up.
   static const entityTrendGames = 'entity_trend_games';
 
-  /// The legends and maps given a trend window of their own, as JSON from a name
-  /// to a game count. Device-only: not backed up.
+  /// The legends and maps given a trend window of their own, as JSON from a
+  /// name to a game count. Device-only: not backed up.
   static const entityTrendOverrides = 'entity_trend_overrides';
+
   static const rankedInfoCoachMarkShown = 'ranked_info_coach_mark_shown';
 
   /// Highest [kOnboardingVersion] the user has seen. Absent/lower than the

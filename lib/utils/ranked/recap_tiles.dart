@@ -12,12 +12,12 @@ enum RecapTile {
   bestLegend('Best legend'),
   bestMap('Best map'),
   winRate('Win rate'),
-  rpPerGame('RP per game');
+  rpPerGame('Avg RP');
 
   final String label;
   const RecapTile(this.label);
 
-  /// Shown until the player says otherwise. The win rate and RP per game are
+  /// Shown until the player says otherwise. The win rate and average RP are
   /// there to be asked for.
   bool get onByDefault => this != winRate && this != rpPerGame;
 }

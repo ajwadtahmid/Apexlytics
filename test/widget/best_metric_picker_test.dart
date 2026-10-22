@@ -39,7 +39,7 @@ void main() {
     expect(find.text('Total RP'), findsOneWidget);
 
     await pump(tester, saved: {PrefsKeys.bestMetric: 'totalDamage'});
-    expect(find.text('Total damage'), findsOneWidget);
+    expect(find.text('Total Damage'), findsOneWidget);
   });
 
   testWidgets('tapping it lists every measure in order, with an icon each', (
@@ -57,10 +57,10 @@ void main() {
       'Total RP',
       'Avg RP',
       'Win rate',
-      'Avg kills',
-      'Total kills',
-      'Avg damage',
-      'Total damage',
+      'Avg Kills',
+      'Total Kills',
+      'Avg Damage',
+      'Total Damage',
     ]);
     double top(String label) => tester.getTopLeft(find.text(label).last).dy;
     expect([...names]..sort((a, b) => top(a).compareTo(top(b))), names);
@@ -79,7 +79,7 @@ void main() {
   ) async {
     await pump(tester, saved: {PrefsKeys.bestMetric: 'totalKills'});
 
-    await tester.tap(find.text('Total kills'));
+    await tester.tap(find.text('Total Kills'));
     await tester.pumpAndSettle();
 
     expect(find.text('Decides which are strongest and weakest.'), findsNothing);
@@ -94,15 +94,15 @@ void main() {
   testWidgets('only the one in use is lit, with a tick', (tester) async {
     await pump(tester, saved: {PrefsKeys.bestMetric: 'totalKills'});
 
-    await tester.tap(find.text('Total kills'));
+    await tester.tap(find.text('Total Kills'));
     await tester.pumpAndSettle();
 
     final tick = tester.widget<Icon>(find.byIcon(Icons.check));
     expect(tick.color, AppTheme.accent);
     expect(find.byIcon(Icons.check), findsOneWidget);
-    final lit = tester.widget<Text>(find.text('Total kills').last);
+    final lit = tester.widget<Text>(find.text('Total Kills').last);
     expect(lit.style?.color, AppTheme.accent);
-    final other = tester.widget<Text>(find.text('Avg kills'));
+    final other = tester.widget<Text>(find.text('Avg Kills'));
     expect(other.style?.color, isNot(AppTheme.accent));
   });
 
@@ -113,7 +113,7 @@ void main() {
 
     await tester.tap(find.text('Total RP'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Total kills'));
+    await tester.tap(find.text('Total Kills'));
     await tester.pumpAndSettle();
 
     expect(container.read(bestMetricProvider), BestMetric.totalKills);
@@ -123,7 +123,7 @@ void main() {
     );
     // The sheet is gone and the pill reads the new choice.
     expect(find.text('Rank legends and maps by'), findsNothing);
-    expect(find.text('Total kills'), findsOneWidget);
+    expect(find.text('Total Kills'), findsOneWidget);
     expect(find.text('Total RP'), findsNothing);
   });
 }

@@ -22,11 +22,14 @@ const List<int> kEntityTrendPresets = [10, 25, 50, 100];
 const int kTrendCustomMin = 5;
 const int kTrendCustomMax = 1000;
 
+/// The fewest games an entity needs for trend lines at all: twice the smallest
+/// window, so the recent games are never most of the history.
+const int kTrendMinGames = kTrendCustomMin * 2;
+
 /// What Auto picks: about [kAutoTrendShare] of the games, but never fewer than
-/// [kAutoTrendMinGames] nor more than [kAutoTrendMaxGames]. So a legend with 35
+/// [kTrendCustomMin] nor more than [kAutoTrendMaxGames]. So a legend with 35
 /// games compares its last 9 with the rest, and one with 1,500 its last 100.
 const double kAutoTrendShare = 0.25;
-const int kAutoTrendMinGames = 5;
 const int kAutoTrendMaxGames = 100;
 
 /// Whether [choice] can be a saved window: Auto, or a count in range.
@@ -39,31 +42,26 @@ bool isTrendChoice(int choice) =>
 /// [kTrendCustomMax].
 int maxTrendWindow(int games) => math.min(kTrendCustomMax, games ~/ 2);
 
-/// How many of an entity's newest games are "recent".
-typedef EntityTrendWindow = ({int recent});
-
 /// The window for an entity with [games] games under [choice]: how many of the
 /// newest are "recent".
 ///
 /// A chosen count is used as it is, unless that would be more than half the
 /// games (see [maxTrendWindow]), when half is used. Null with fewer than
-/// `kAutoTrendMinGames * 2` games, where there is nothing to compare against.
-EntityTrendWindow? resolveEntityTrendWindow(int choice, int games) {
-  if (games < kAutoTrendMinGames * 2) return null;
+/// [kTrendMinGames] games, where there is nothing to compare against.
+int? resolveEntityTrendWindow(int choice, int games) {
+  if (games < kTrendMinGames) return null;
   if (choice != kEntityTrendAuto) {
-    return (recent: math.min(choice, maxTrendWindow(games)));
+    return math.min(choice, maxTrendWindow(games));
   }
-  return (
-    recent: (games * kAutoTrendShare).round().clamp(
-      kAutoTrendMinGames,
-      kAutoTrendMaxGames,
-    ),
+  return (games * kAutoTrendShare).round().clamp(
+    kTrendCustomMin,
+    kAutoTrendMaxGames,
   );
 }
 
 /// What an entity's trend lines show, and the window they were worked out
 /// over; no window, and so nothing to show, with too few games.
-typedef EntityTrendReading = ({EntityTrends trends, EntityTrendWindow? window});
+typedef EntityTrendReading = ({EntityTrends trends, int? window});
 
 /// [matches] (one legend's or one map's) and their trends under [choice].
 EntityTrendReading entityTrendReading(List<RankedMatch> matches, int choice) {
@@ -71,14 +69,14 @@ EntityTrendReading entityTrendReading(List<RankedMatch> matches, int choice) {
   return (
     trends: window == null
         ? (rp: null, kills: null, damage: null)
-        : entityTrends(matches, recentGames: window.recent),
+        : entityTrends(matches, recentGames: window),
     window: window,
   );
 }
 
-/// Remembers the last [entityTrendReading], for a sheet that asks for it on every
-/// rebuild: the games are sorted and averaged again only when they, or the
-/// window, have changed.
+/// Remembers the last [entityTrendReading], for a sheet that asks for it on
+/// every rebuild: the games are sorted and averaged again only when they, or
+/// the window, have changed.
 class EntityTrendReadingCache {
   List<RankedMatch>? _matches;
   int? _choice;

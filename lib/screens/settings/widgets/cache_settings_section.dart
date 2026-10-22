@@ -291,15 +291,6 @@ class CacheSettingsSection extends ConsumerWidget {
     ),
   );
 
-  /// Erases every persisted surface: prefs (bar first-run state), the ranked
-  /// match database, and the API cache. The owner token goes only if [removeOwnerToken].
-  ///
-  /// Every step runs even if an earlier one fails, and the message names
-  /// whatever didn't clear. Match history goes first on purpose: clearing
-  /// settings first and then failing on history would remove the profile
-  /// that shows it while the history stayed on disk, unseen. This order
-  /// fails the other way — data still visible, profile still there, and a
-  /// retry finishes the job.
   /// Puts the choices the player made about how things look (how to rank, sort
   /// and window them, the recap tiles) back to their defaults. The sweep has
   /// erased their saved copies, but each provider still holds its value in
@@ -315,6 +306,15 @@ class CacheSettingsSection extends ConsumerWidget {
     ref.invalidate(pickRateOptionsProvider);
   }
 
+  /// Erases every persisted surface: prefs (bar first-run state), the ranked
+  /// match database, and the API cache. The owner token goes only if [removeOwnerToken].
+  ///
+  /// Every step runs even if an earlier one fails, and the message names
+  /// whatever didn't clear. Match history goes first on purpose: clearing
+  /// settings first and then failing on history would remove the profile
+  /// that shows it while the history stayed on disk, unseen. This order
+  /// fails the other way — data still visible, profile still there, and a
+  /// retry finishes the job.
   Future<void> _clearAll(
     BuildContext context,
     WidgetRef ref, {

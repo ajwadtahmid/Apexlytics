@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/models/ranked_match.dart';
 import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/models/server_status.dart';
@@ -220,7 +221,7 @@ void main() {
                 kills: 3,
                 damage: 1200,
               ),
-          ]),
+          ], metric: BestMetric.totalRp),
           scope: 'S30 Split 2',
           playerName: 'A Rather Long Player Name',
         ),
@@ -258,6 +259,7 @@ void main() {
     await pump(
       tester,
       RankedOverviewHighlights(
+        metric: BestMetric.totalRp,
         legends: legends,
         maps: const [],
         legendMatchesFor: (_) async => const [],
@@ -275,7 +277,11 @@ void main() {
     ]);
     await pump(
       tester,
-      RankedBestLegendPerMap(cells: cells, currentMapName: 'Storm Point'),
+      RankedBestLegendPerMap(
+        metric: BestMetric.totalRp,
+        cells: cells,
+        currentMapName: 'Storm Point',
+      ),
     );
     expectNoOverflow();
   });
@@ -606,7 +612,7 @@ void main() {
                   start: 1782090000 + i * 1500,
                   cumulativeRp: 1020 + i * 20,
                 ),
-            ]),
+            ], metric: BestMetric.totalRp),
             scope: 'S30 Split 2 Week 12',
             playerName: show ? 'AReallyLongPlayerNameHere' : null,
           ),

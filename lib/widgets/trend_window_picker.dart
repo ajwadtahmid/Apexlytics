@@ -56,10 +56,11 @@ void _askForCount(
   });
 }
 
-/// "Trends: Auto": the window a legend's or map's trend lines compare its recent
-/// games over (see [entityTrendWindowProvider]), with a tap to change it.
-class TrendWindowPill extends ConsumerWidget {
-  const TrendWindowPill({super.key});
+/// "Trend window: Auto": the window a legend's or map's trend lines compare its
+/// recent games over (see [entityTrendWindowProvider]), with a tap to change
+/// it.
+class DefaultTrendWindowPill extends ConsumerWidget {
+  const DefaultTrendWindowPill({super.key});
 
   /// How the choice reads on the pill.
   static String labelOf(int choice) =>
@@ -68,17 +69,17 @@ class TrendWindowPill extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ControlPill(
-      prefix: 'Trends:',
+      prefix: 'Trend window:',
       icon: Icons.trending_up,
       label: labelOf(ref.watch(entityTrendWindowProvider)),
-      onTap: () => showTrendWindowSheet(context, ref),
+      onTap: () => showDefaultTrendWindowSheet(context, ref),
     );
   }
 }
 
 /// The sheet that picks the window for everything: Auto, a shortcut, or a count
 /// typed in. A choice applies at once and closes it.
-Future<void> showTrendWindowSheet(BuildContext context, WidgetRef ref) {
+Future<void> showDefaultTrendWindowSheet(BuildContext context, WidgetRef ref) {
   final chosen = ref.read(entityTrendWindowProvider);
   final notifier = ref.read(entityTrendWindowProvider.notifier);
   return showChoiceSheet<int>(
@@ -105,15 +106,16 @@ Future<void> showTrendWindowSheet(BuildContext context, WidgetRef ref) {
         : notifier.set(n),
     footnote:
         'Trend lines compare recent games with the average. Auto uses about a '
-        'quarter of a legend\'s or map\'s games, from $kAutoTrendMinGames to '
+        'quarter of a legend\'s or map\'s games, from $kTrendCustomMin to '
         '$kAutoTrendMaxGames. Each can have its own window on its page.',
   );
 }
 
 /// "Trend window: 18 games", on a legend's or map's sheet: the window its trend
 /// lines use, lit in the accent colour when it differs from what everything
-/// else uses. A tap opens the sheet that changes it for this legend or map
-/// alone.
+/// else uses, and marked "(max)" when the choice was more than its games allow
+/// and was cut to half of them. A tap opens the sheet that changes it for this
+/// legend or map alone.
 class EntityTrendWindowPill extends ConsumerWidget {
   /// What the window is filed under (see `legendTrendKey` and `mapTrendKey`).
   final String overrideKey;
@@ -125,7 +127,7 @@ class EntityTrendWindowPill extends ConsumerWidget {
   final int games;
 
   /// The window in use.
-  final EntityTrendWindow window;
+  final int window;
   const EntityTrendWindowPill({
     super.key,
     required this.overrideKey,
@@ -136,15 +138,17 @@ class EntityTrendWindowPill extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final override = ref.watch(entityTrendOverridesProvider)[overrideKey];
+    final global = ref.watch(entityTrendWindowProvider);
     // Lit when it differs from what everything else uses.
-    final choice = ref.watch(entityTrendOverridesProvider)[overrideKey];
-    final own =
-        choice != null && choice != ref.watch(entityTrendWindowProvider);
+    final own = override != null && override != global;
+    final choice = override ?? global;
+    final cut = choice != kEntityTrendAuto && window < choice;
     return ControlPill(
       prefix: 'Trend window:',
       icon: Icons.trending_up,
       color: own ? AppTheme.accent : null,
-      label: '${formatNumber(window.recent)} games',
+      label: '${formatNumber(window)} games${cut ? ' (max)' : ''}',
       onTap: () => _showSheet(context, ref),
     );
   }
@@ -167,7 +171,7 @@ class EntityTrendWindowPill extends ConsumerWidget {
         ChoiceOption(
           value: _kFollowDefault,
           icon: Icons.restart_alt,
-          label: 'Default (${TrendWindowPill.labelOf(global)})',
+          label: 'Default (${DefaultTrendWindowPill.labelOf(global)})',
         ),
         // Auto in its own right, for when everything else is on a count. With
         // Auto as the default it would only repeat the first row.
@@ -177,8 +181,14 @@ class EntityTrendWindowPill extends ConsumerWidget {
             icon: Icons.auto_awesome,
             label: 'Auto',
           ),
+        // Shortcuts this legend or map has too few games for are left out.
         for (final n in kEntityTrendPresets)
-          ChoiceOption(value: n, icon: StatIcons.games, label: 'Last $n games'),
+          if (n <= max || n == own)
+            ChoiceOption(
+              value: n,
+              icon: StatIcons.games,
+              label: 'Last $n games',
+            ),
         _customOption(own ?? kEntityTrendAuto),
       ],
       selected: selected,
@@ -199,7 +209,7 @@ class EntityTrendWindowPill extends ConsumerWidget {
           overrides.set(overrideKey, n);
         }
       },
-      footnote: 'Others follow Trends on the Legends and Maps tabs.',
+      footnote: 'Others follow the Trend window on the Legends and Maps tabs.',
     );
   }
 }

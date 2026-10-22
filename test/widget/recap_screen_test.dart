@@ -142,7 +142,7 @@ void main() {
       ['Kills', 'Damage'],
       ['Best session', 'Time played'],
       ['Best legend', 'Best map'],
-      ['Win rate', 'RP per game'],
+      ['Win rate', 'Avg RP'],
     ];
     // The "Rank by" pill above the grid names a figure too ("RP per game").
     Finder figure(String label) =>
@@ -174,7 +174,7 @@ void main() {
     testWidgets('follows the saved choice', (tester) async {
       await pump(tester, wins, saved: {'best_metric': 'totalKills'});
 
-      expect(find.text('Total kills'), findsOneWidget); // the pill
+      expect(find.text('Total Kills'), findsOneWidget); // the pill
       expect(find.text('8 kills'), findsNWidgets(2));
       expect(find.text('+20.0 /game'), findsNothing);
     });
@@ -184,7 +184,12 @@ void main() {
 
       await tester.tap(find.text('Total RP').first); // the pill
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Avg RP'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('Avg RP'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('+20.0 /game'), findsNWidgets(2)); // legend, map
@@ -201,8 +206,8 @@ void main() {
   });
 
   testWidgets('shows the figures behind it, once each', (tester) async {
-    // By RP per game, so the best legend's and map's figures aren't RP totals.
-    await pump(tester, wins, saved: {'best_metric': 'rpPerGame'});
+    // By average RP, so the best legend's and map's figures aren't RP totals.
+    await pump(tester, wins, saved: {'best_metric': 'avgRp'});
 
     // Four games of two kills and 400 damage, +20 RP each, all one session.
     expect(find.text('4'), findsOneWidget);
@@ -240,7 +245,7 @@ void main() {
     expect(find.text('Best map'), findsNothing);
     // The others are still there.
     expect(find.text('Games'), findsOneWidget);
-    expect(find.text('RP per game'), findsOneWidget);
+    expect(find.text('Avg RP'), findsOneWidget);
   });
 
   testWidgets('a split with no kills reported reads them as none', (

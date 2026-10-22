@@ -171,7 +171,7 @@ Widget _figure(RecapTile tile, SplitRecap r) {
       );
     case RecapTile.rpPerGame:
       return StatDisplay(
-        label: 'RP per game',
+        label: 'Avg RP',
         value: formatSigned(r.avgRpPerGame),
         valueColor: AppTheme.signColor(r.avgRpPerGame >= 0),
       );

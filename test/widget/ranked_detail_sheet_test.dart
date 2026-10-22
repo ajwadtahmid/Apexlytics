@@ -215,6 +215,21 @@ void main() {
       await openLegend(tester, climbing(40), saved: {'entity_trend_games': 25});
 
       expect(find.textContaining('your last 20 games with'), findsOneWidget);
+      // And the pill says it was cut.
+      expect(pill('20 games (max)'), findsOneWidget);
+    });
+
+    testWidgets('a count that fits is not marked as cut', (tester) async {
+      await openLegend(tester, climbing(60), saved: {'entity_trend_games': 30});
+
+      expect(pill('30 games'), findsOneWidget);
+      expect(find.textContaining('(max)'), findsNothing);
+    });
+
+    testWidgets('Auto is never marked as cut', (tester) async {
+      await openLegend(tester, climbing(12));
+
+      expect(pill('5 games'), findsOneWidget);
     });
 
     testWidgets('too few games to compare: no lines, no footer, no pill', (
@@ -263,9 +278,11 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Trend window for Axle'), findsOneWidget);
         expect(find.text('Default (Auto)'), findsOneWidget);
-        for (final n in [10, 25, 50, 100]) {
+        // Half of 120 is 60, so 100 is not offered.
+        for (final n in [10, 25, 50]) {
           expect(find.text('Last $n games'), findsOneWidget);
         }
+        expect(find.text('Last 100 games'), findsNothing);
         await tester.tap(find.text('Last 50 games'));
         await tester.pumpAndSettle();
 
@@ -290,6 +307,23 @@ void main() {
           (bg.decoration as BoxDecoration).color,
           isNot(AppTheme.surface2),
         );
+      });
+
+      testWidgets('leaves out the shortcuts it has too few games for', (
+        tester,
+      ) async {
+        // 40 games: half, 20, is the most, so only 10 fits.
+        await openLegend(tester, climbing(40));
+
+        await tester.tap(pill('10 games'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Last 10 games'), findsOneWidget);
+        for (final n in [25, 50, 100]) {
+          expect(find.text('Last $n games'), findsNothing);
+        }
+        // Typing a count is still there, up to the same limit.
+        expect(find.text('Custom…'), findsOneWidget);
       });
 
       testWidgets('Default takes it back to the window for everything', (
@@ -345,7 +379,7 @@ void main() {
           saved: {'entity_trend_games': 100},
         );
         // 100 of 120 would be most of the history: half, 60, is the most.
-        await tester.tap(pill('60 games'));
+        await tester.tap(pill('60 games (max)'));
         await tester.pumpAndSettle();
         expect(find.text('Default (100 games)'), findsOneWidget);
         expect(find.text('Auto'), findsOneWidget);

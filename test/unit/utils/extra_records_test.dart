@@ -213,7 +213,7 @@ void main() {
   });
 
   group('topLegendBy', () {
-    const perGame = BestMetric.rpPerGame;
+    const perGame = BestMetric.avgRp;
 
     test('is null with no games', () {
       expect(topLegendBy([], perGame), isNull);

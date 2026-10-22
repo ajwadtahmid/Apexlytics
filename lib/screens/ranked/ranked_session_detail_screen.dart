@@ -166,7 +166,7 @@ class _Summary extends StatelessWidget {
               ),
               _Figure(
                 formatSigned(avgRp),
-                'avg RP/game',
+                'avg RP',
                 color: AppTheme.signColor(avgRp >= 0),
               ),
             ],

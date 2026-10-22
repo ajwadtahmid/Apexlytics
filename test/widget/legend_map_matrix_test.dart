@@ -72,7 +72,7 @@ void main() {
     testWidgets('says what it goes by, and writes each figure to match', (
       tester,
     ) async {
-      await pumpWith(tester, BestMetric.rpPerGame);
+      await pumpWith(tester, BestMetric.avgRp);
       expect(find.textContaining('By avg RP.'), findsOneWidget);
       expect(
         find.text('Best: Bangalore (+30.0 RP/game, 4 games)'),
@@ -95,7 +95,7 @@ void main() {
       Color? colorOf(String text) =>
           tester.widget<Text>(find.text(text)).style?.color;
 
-      await pumpWith(tester, BestMetric.rpPerGame);
+      await pumpWith(tester, BestMetric.avgRp);
       expect(
         colorOf('Best: Bangalore (+30.0 RP/game, 4 games)'),
         AppTheme.green,
@@ -108,7 +108,7 @@ void main() {
 
   // These are about RP per game, whatever measure is the default.
   List<MapLegendInsight> perGameInsights(List<LegendMapCell> cells) =>
-      mapLegendInsights(cells, metric: BestMetric.rpPerGame);
+      mapLegendInsights(cells, metric: BestMetric.avgRp);
 
   group('the hint under a map with one comparable legend', () {
     // Two legends with enough games on Olympus; only Bangalore recorded kills.
@@ -302,7 +302,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       // The figures below are RP per game.
-      SharedPreferences.setMockInitialValues({'best_metric': 'rpPerGame'});
+      SharedPreferences.setMockInitialValues({'best_metric': 'avgRp'});
       final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(
         ProviderScope(

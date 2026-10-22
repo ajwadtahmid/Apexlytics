@@ -1,32 +1,32 @@
 import 'package:flutter/material.dart';
 import '../../../constants/map_constants.dart';
+import '../../../constants/stat_icons.dart';
 import '../../../models/ranked_match.dart';
 import '../../../utils/formatting/format.dart'
     show formatAvgDamage, formatAvgKills, formatTotalOrNone, formatSigned;
-import '../../../constants/stat_icons.dart';
 import '../../../utils/ranked/best_metric.dart';
 import '../../../utils/ranked/ranked_aggregates.dart';
 import '../../../utils/theme.dart';
 import '../../../widgets/best_metric_picker.dart' show bestMetricIcon;
-import '../../../widgets/trend_window_picker.dart';
+import '../../../widgets/choice_sheet.dart';
+import '../../../widgets/control_pill.dart';
 import '../../../widgets/legend_asset_image.dart';
 import '../../../widgets/map_asset_image.dart';
 import '../../../widgets/rp_pill.dart';
 import '../../../widgets/stat_display.dart';
 import '../../../widgets/surface_card.dart';
+import '../../../widgets/trend_window_picker.dart';
 import '../../../widgets/win_loss_stat.dart';
 import 'map_rp_badge.dart';
 import 'rank_badge.dart';
 import 'ranked_legend_detail_sheet.dart';
 import 'ranked_map_detail_sheet.dart';
-import '../../../widgets/choice_sheet.dart';
-import '../../../widgets/control_pill.dart';
 
 /// The orders the Legends and Maps tabs offer, in the order the sheet lists
 /// them. Each is a [BestMetric] but the number of games, which isn't one.
 enum _Sort {
   totalRp(BestMetric.totalRp),
-  avgRp(BestMetric.rpPerGame),
+  avgRp(BestMetric.avgRp),
   games(null),
   winRate(BestMetric.winRate),
   avgKills(BestMetric.avgKills),
@@ -40,7 +40,8 @@ enum _Sort {
   String get label => metric?.label ?? 'Games';
 
   /// Games wear their own icon; the rest wear their measure's.
-  IconData get icon => metric == null ? StatIcons.games : bestMetricIcon(metric!);
+  IconData get icon =>
+      metric == null ? StatIcons.games : bestMetricIcon(metric!);
 }
 
 /// Opens the sheet that picks how a tab's rows are ordered.
@@ -551,7 +552,7 @@ List<T> _sorted<T extends RankedTally>(
   });
 }
 
-/// The tab's two controls: "Trends:" at the left, the window the trend lines on
+/// The tab's two controls: "Trend window:" at the left, the window the trend lines on
 /// a legend's or map's page compare over, and "Sort:" at the right, which opens
 /// the sheet of orders.
 class _SortBar extends StatelessWidget {
@@ -569,7 +570,7 @@ class _SortBar extends StatelessWidget {
         spacing: AppTheme.md,
         runSpacing: AppTheme.xs,
         children: [
-          const TrendWindowPill(),
+          const DefaultTrendWindowPill(),
           ControlPill(
             prefix: 'Sort:',
             icon: selected.icon,

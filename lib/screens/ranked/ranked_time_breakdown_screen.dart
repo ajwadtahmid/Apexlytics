@@ -284,7 +284,7 @@ class _SessionSparklines extends StatelessWidget {
           ),
           const SizedBox(height: AppTheme.md),
           _SparklineRow(
-            label: 'RP per game',
+            label: 'Avg RP',
             unit: 'RP',
             caveat: rpCaveat,
             steadyBand: kRpSteadyBand,

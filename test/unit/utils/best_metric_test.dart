@@ -52,7 +52,7 @@ void main() {
     );
 
     test('reads each measure', () {
-      expect(BestMetric.rpPerGame.valueOf(tally), 10);
+      expect(BestMetric.avgRp.valueOf(tally), 10);
       expect(BestMetric.totalRp.valueOf(tally), 100);
       expect(BestMetric.avgKills.valueOf(tally), 2.5);
       expect(BestMetric.totalKills.valueOf(tally), 25);
@@ -112,7 +112,7 @@ void main() {
       () {
         expect(BestMetric.values, [
           BestMetric.totalRp,
-          BestMetric.rpPerGame,
+          BestMetric.avgRp,
           BestMetric.winRate,
           BestMetric.avgKills,
           BestMetric.totalKills,
@@ -124,15 +124,15 @@ void main() {
     );
 
     test('the one per game is called Avg RP, as it is on the stat row', () {
-      expect(BestMetric.rpPerGame.label, 'Avg RP');
-      expect(BestMetric.rpPerGame.phrase, 'avg RP');
+      expect(BestMetric.avgRp.label, 'Avg RP');
+      expect(BestMetric.avgRp.phrase, 'avg RP');
     });
   });
 
   group('how a measure is shown', () {
     test('a pill and a line of text write each figure with its unit', () {
       final shown = {
-        BestMetric.rpPerGame: ('+80.1 /game', '+80.1 RP/game'),
+        BestMetric.avgRp: ('+80.1 /game', '+80.1 RP/game'),
         BestMetric.totalRp: ('+1,084 RP', '+1,084 RP'),
         BestMetric.avgKills: ('2.8 kills/game', '2.8 kills/game'),
         BestMetric.totalKills: ('1,204 kills', '1,204 kills'),
@@ -141,7 +141,7 @@ void main() {
         BestMetric.winRate: ('62% win rate', '62% win rate'),
       };
       final values = {
-        BestMetric.rpPerGame: 80.1,
+        BestMetric.avgRp: 80.1,
         BestMetric.totalRp: 1084.0,
         BestMetric.avgKills: 2.8,
         BestMetric.totalKills: 1204.0,
@@ -156,7 +156,7 @@ void main() {
     });
 
     test('a loss is written with its sign', () {
-      expect(BestMetric.rpPerGame.formatValue(-39.6), '-39.6 /game');
+      expect(BestMetric.avgRp.formatValue(-39.6), '-39.6 /game');
       expect(BestMetric.totalRp.formatValue(-198), '-198 RP');
     });
 
@@ -166,7 +166,7 @@ void main() {
           for (final m in BestMetric.values)
             if (m.isRp) m,
         },
-        {BestMetric.rpPerGame, BestMetric.totalRp},
+        {BestMetric.avgRp, BestMetric.totalRp},
       );
     });
 
@@ -214,7 +214,7 @@ void main() {
 
     test('orders by the chosen measure, best first', () {
       final expected = {
-        BestMetric.rpPerGame: ['B', 'A', 'C'],
+        BestMetric.avgRp: ['B', 'A', 'C'],
         BestMetric.totalRp: ['A', 'C', 'B'],
         BestMetric.avgKills: ['C', 'B', 'A'],
         BestMetric.totalKills: ['C', 'A', 'B'],
@@ -243,7 +243,7 @@ void main() {
       final w = legend('W', games: 8, rp: 80);
 
       // All 10 RP a game: the 8-game ones first, W before Y, then X.
-      expect(order([x, y, w], BestMetric.rpPerGame), ['W', 'Y', 'X']);
+      expect(order([x, y, w], BestMetric.avgRp), ['W', 'Y', 'X']);
     });
 
     group('with fewer than the minimum games', () {
@@ -251,18 +251,18 @@ void main() {
       final solid = legend('Solid', games: kMinGamesForInsight, rp: 30);
 
       test('they are left out', () {
-        expect(order([thin, solid], BestMetric.rpPerGame), ['Solid']);
-        expect(order([thin], BestMetric.rpPerGame), isEmpty);
+        expect(order([thin, solid], BestMetric.avgRp), ['Solid']);
+        expect(order([thin], BestMetric.avgRp), isEmpty);
       });
 
       test('a soft gate ranks them only when nothing else qualifies', () {
-        expect(order([thin, solid], BestMetric.rpPerGame, softGate: true), [
+        expect(order([thin, solid], BestMetric.avgRp, softGate: true), [
           'Solid',
         ]);
         expect(
           order(
             [thin, legend('Thinner', games: 1, rp: 90)],
-            BestMetric.rpPerGame,
+            BestMetric.avgRp,
             softGate: true,
           ),
           ['Thin', 'Thinner'], // 250 a game against 90
@@ -286,7 +286,7 @@ void main() {
         ['Loud'],
       );
       // Every other measure still has a figure for it.
-      expect(order([unreported, reported], BestMetric.rpPerGame), [
+      expect(order([unreported, reported], BestMetric.avgRp), [
         'Quiet',
         'Loud',
       ]);
@@ -315,7 +315,7 @@ void main() {
     test('puts the biggest first, whatever the games, nothing left out', () {
       // B has too few games to be ranked, but a list being sorted keeps it.
       expect(sorted([a, b, c], BestMetric.totalRp), ['A', 'C', 'B']);
-      expect(sorted([a, b, c], BestMetric.rpPerGame), ['B', 'A', 'C']);
+      expect(sorted([a, b, c], BestMetric.avgRp), ['B', 'A', 'C']);
       expect(sorted([a, b, c], BestMetric.totalKills), ['C', 'A', 'B']);
     });
 
@@ -333,8 +333,8 @@ void main() {
         final y = legend('Y', games: 8, rp: 80);
         final w = legend('W', games: 8, rp: 80);
 
-        expect(sorted([x, y, w], BestMetric.rpPerGame), ['W', 'Y', 'X']);
-        expect(sorted([w, x, y], BestMetric.rpPerGame), ['W', 'Y', 'X']);
+        expect(sorted([x, y, w], BestMetric.avgRp), ['W', 'Y', 'X']);
+        expect(sorted([w, x, y], BestMetric.avgRp), ['W', 'Y', 'X']);
       },
     );
   });
@@ -345,7 +345,7 @@ void main() {
     final low = legend('Low', games: 5, rp: 10);
 
     ({String? best, String? worst}) names(List<LegendBreakdown> ranked) {
-      final r = bestAndWorst(ranked, BestMetric.rpPerGame);
+      final r = bestAndWorst(ranked, BestMetric.avgRp);
       return (best: r.best?.legend, worst: r.worst?.legend);
     }
 
@@ -369,7 +369,7 @@ void main() {
 
       final ranked = rankByMetric(
         [high, weakFew, weakMany],
-        BestMetric.rpPerGame,
+        BestMetric.avgRp,
         nameOf: (l) => l.legend,
       );
 

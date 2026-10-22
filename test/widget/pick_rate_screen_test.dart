@@ -262,7 +262,7 @@ void main() {
         tester,
         alter,
         matchesFor: lookup,
-        saved: {'best_metric': 'rpPerGame'},
+        saved: {'best_metric': 'avgRp'},
       );
       await selectAlter(tester);
       await tester.pump();

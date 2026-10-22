@@ -122,7 +122,7 @@ void main() {
     // These are about RP per game, whatever measure is the default.
     ({LegendMapCell? best, LegendMapCell? worst}) perGame(
       List<LegendMapCell> cells,
-    ) => legendBestWorstMap(cells, metric: BestMetric.rpPerGame);
+    ) => legendBestWorstMap(cells, metric: BestMetric.avgRp);
 
     LegendMapCell cell(String map, int games, int totalRp) => LegendMapCell(
       legend: 'Alter',

@@ -105,7 +105,7 @@ void main() {
     for (final (saved, top, other) in [
       // Total RP, until another is chosen: Octane has earned the most.
       (<String, Object>{}, 'Octane', 'Wraith'),
-      (<String, Object>{'best_metric': 'rpPerGame'}, 'Wraith', 'Octane'),
+      (<String, Object>{'best_metric': 'avgRp'}, 'Wraith', 'Octane'),
     ]) {
       SharedPreferences.setMockInitialValues(saved);
       final prefs = await SharedPreferences.getInstance();

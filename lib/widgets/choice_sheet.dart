@@ -18,8 +18,8 @@ class ChoiceOption<T> {
 /// A bottom sheet that picks one of [options], laid out like the Legends tab's
 /// sort sheet: a handle, a [title], then a tile for each choice, the one in use
 /// ([selected]) lit in the accent colour with a tick.
-/// Choosing calls [onChosen] and closes it. A [footnote], when given, goes under
-/// the list.
+/// Choosing calls [onChosen] and closes it. A [footnote], when given, goes
+/// under the list.
 Future<void> showChoiceSheet<T>(
   BuildContext context, {
   required String title,

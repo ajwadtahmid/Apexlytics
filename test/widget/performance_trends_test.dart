@@ -86,7 +86,7 @@ void main() {
       sessions([for (var i = 0; i < 10; i++) i < 5 ? -20 : 20]),
     );
 
-    expect(find.text('RP per game'), findsOneWidget);
+    expect(find.text('Avg RP'), findsOneWidget);
     expect(find.text('Kills per game'), findsOneWidget);
     expect(find.text('Damage per game'), findsOneWidget);
     // RP went from -10/game to +10/game; kills and damage did not move.
@@ -637,7 +637,7 @@ void main() {
       await pump(tester, played([for (var i = 0; i < 10; i++) s(2, 2)]));
 
       for (final label in [
-        'RP per game',
+        'Avg RP',
         'Win rate',
         'Kills per game',
         'Damage per game',
@@ -647,7 +647,7 @@ void main() {
         expect(find.text(label), findsOneWidget, reason: label);
       }
       final win = tester.getTopLeft(find.text('Win rate')).dy;
-      expect(tester.getTopLeft(find.text('RP per game')).dy, lessThan(win));
+      expect(tester.getTopLeft(find.text('Avg RP')).dy, lessThan(win));
       expect(win, lessThan(tester.getTopLeft(find.text('Kills per game')).dy));
       expect(
         tester.getTopLeft(find.text('Game length')).dy,

@@ -49,7 +49,7 @@ void main() {
     testWidgets('shows the numbers, and the name only when given', (
       tester,
     ) async {
-      final recap = splitRecap(matches);
+      final recap = splitRecap(matches, metric: BestMetric.totalRp);
       await pump(
         tester,
         Scaffold(
@@ -144,7 +144,10 @@ void main() {
       await pump(
         tester,
         Scaffold(
-          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+          body: RecapShareCard(
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
+            scope: 'S30',
+          ),
         ),
       );
 
@@ -157,7 +160,7 @@ void main() {
         tester,
         Scaffold(
           body: RecapShareCard(
-            recap: splitRecap(matches),
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
             scope: 'S30 Split 2',
             periodPhrase: 'in Week 4',
           ),
@@ -171,7 +174,10 @@ void main() {
       await pump(
         tester,
         Scaffold(
-          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+          body: RecapShareCard(
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
+            scope: 'S30',
+          ),
         ),
       );
 
@@ -198,12 +204,15 @@ void main() {
       await pump(
         tester,
         Scaffold(
-          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+          body: RecapShareCard(
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
+            scope: 'S30',
+          ),
         ),
       );
 
       expect(find.text('WIN RATE'), findsNothing);
-      expect(find.text('RP PER GAME'), findsNothing);
+      expect(find.text('AVG RP'), findsNothing);
       expect(find.text('WIN STREAK'), findsNothing);
     });
 
@@ -211,7 +220,10 @@ void main() {
       await pump(
         tester,
         Scaffold(
-          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+          body: RecapShareCard(
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
+            scope: 'S30',
+          ),
         ),
       );
 
@@ -224,7 +236,10 @@ void main() {
       await pump(
         tester,
         Scaffold(
-          body: RecapShareCard(recap: splitRecap(matches), scope: 'S30'),
+          body: RecapShareCard(
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
+            scope: 'S30',
+          ),
         ),
       );
 
@@ -248,7 +263,10 @@ void main() {
       await pump(
         tester,
         Scaffold(
-          body: RecapShareCard(recap: splitRecap(bare), scope: 'S30'),
+          body: RecapShareCard(
+            recap: splitRecap(bare, metric: BestMetric.totalRp),
+            scope: 'S30',
+          ),
         ),
       );
 
@@ -271,7 +289,7 @@ void main() {
         tester,
         Scaffold(
           body: RecapShareCard(
-            recap: splitRecap(matches),
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
             scope: 'S30',
             tiles: const [RecapTile.winRate, RecapTile.rpPerGame],
           ),
@@ -284,7 +302,7 @@ void main() {
     });
 
     testWidgets('a split of only losses has a win rate of 0% and a negative '
-        'RP per game', (tester) async {
+        'Avg RP', (tester) async {
       final losses = [
         for (var i = 0; i < 3; i++)
           buildMatch(start: t0 + i * 1500, rp: -20, cumulativeRp: 980 - i * 20),
@@ -293,7 +311,7 @@ void main() {
         tester,
         Scaffold(
           body: RecapShareCard(
-            recap: splitRecap(losses),
+            recap: splitRecap(losses, metric: BestMetric.totalRp),
             scope: 'S30',
             tiles: const [RecapTile.winRate, RecapTile.rpPerGame],
           ),
@@ -312,7 +330,7 @@ void main() {
         tester,
         Scaffold(
           body: RecapShareCard(
-            recap: splitRecap(matches),
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
             scope: 'S30',
             tiles: const [RecapTile.peakRp, RecapTile.games],
           ),
@@ -332,7 +350,7 @@ void main() {
         tester,
         Scaffold(
           body: RecapShareCard(
-            recap: splitRecap(matches),
+            recap: splitRecap(matches, metric: BestMetric.totalRp),
             scope: 'S30 Split 2',
             playerName: 'A Rather Long Player Name',
             tiles: RecapTile.values,
@@ -355,7 +373,7 @@ void main() {
       final recap = splitRecap([
         for (var i = 0; i < 4; i++)
           buildMatch(start: t0 + i * 1500, cumulativeRp: 15000 + i * 20),
-      ]);
+      ], metric: BestMetric.totalRp);
       await pump(
         tester,
         Scaffold(
@@ -497,7 +515,7 @@ void main() {
       expect(rp.dy, greaterThan(legend.dy)); // the next row
       expect(map.dx, greaterThan(legend.dx + 100));
 
-      final recap = splitRecap(matches);
+      final recap = splitRecap(matches, metric: BestMetric.totalRp);
       await pump(
         tester,
         Scaffold(

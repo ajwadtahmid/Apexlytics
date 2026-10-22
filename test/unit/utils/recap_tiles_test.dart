@@ -1,3 +1,4 @@
+import 'package:apexlytics/utils/ranked/best_metric.dart';
 import 'package:apexlytics/utils/ranked/recap_tiles.dart';
 import 'package:apexlytics/utils/ranked/split_recap.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +12,7 @@ void main() {
   final enough = splitRecap([
     for (var i = 0; i < 4; i++)
       buildMatch(start: t0 + i * 1500, rp: 20, cumulativeRp: 1020 + i * 20),
-  ]);
+  ], metric: BestMetric.totalRp);
   // Three losses, each on another legend and map: no best of either.
   final scattered = splitRecap([
     buildMatch(start: t0, rp: -20, legend: 'Axle', map: 'olympus_rotation'),
@@ -27,7 +28,7 @@ void main() {
       legend: 'Octane',
       map: 'kings_canyon_rotation',
     ),
-  ]);
+  ], metric: BestMetric.totalRp);
 
   test('the tiles are in the card\'s order, two to a row', () {
     expect(RecapTile.values, [

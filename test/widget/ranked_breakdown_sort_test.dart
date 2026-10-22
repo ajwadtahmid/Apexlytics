@@ -3,8 +3,9 @@ import 'package:apexlytics/constants/stat_icons.dart';
 import 'package:apexlytics/providers/entity_trend_window_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
 import 'package:apexlytics/screens/ranked/widgets/ranked_breakdown_tables.dart';
+import 'package:apexlytics/widgets/control_pill.dart';
 import 'package:apexlytics/widgets/trend_window_picker.dart'
-    show TrendWindowPill;
+    show DefaultTrendWindowPill;
 import 'package:apexlytics/utils/ranked/ranked_aggregates.dart';
 import 'package:apexlytics/utils/theme.dart';
 import 'package:flutter/material.dart';
@@ -128,10 +129,10 @@ void main() {
         'Avg RP',
         'Games',
         'Win rate',
-        'Avg kills',
-        'Total kills',
-        'Avg damage',
-        'Total damage',
+        'Avg Kills',
+        'Total Kills',
+        'Avg Damage',
+        'Total Damage',
       ];
       expect(find.byType(ListTile), findsNWidgets(labels.length));
       double top(String l) => tester.getTopLeft(inSheet(l)).dy;
@@ -220,13 +221,13 @@ void main() {
       await choose(tester, 'Total RP', 'Win rate');
       expect(order(tester, names), ['Caustic', 'Axle', 'Bangalore']);
 
-      await choose(tester, 'Win rate', 'Total kills');
+      await choose(tester, 'Win rate', 'Total Kills');
       expect(order(tester, names).take(2), ['Axle', 'Bangalore']);
 
-      await choose(tester, 'Total kills', 'Avg kills');
+      await choose(tester, 'Total Kills', 'Avg Kills');
       expect(order(tester, names).take(2), ['Bangalore', 'Axle']);
 
-      await choose(tester, 'Avg kills', 'Total damage');
+      await choose(tester, 'Avg Kills', 'Total Damage');
       expect(order(tester, names).take(2), ['Axle', 'Bangalore']);
     });
 
@@ -235,7 +236,7 @@ void main() {
     ) async {
       await pump(tester, withKills());
 
-      await choose(tester, 'Total RP', 'Avg kills');
+      await choose(tester, 'Total RP', 'Avg Kills');
 
       expect(order(tester, ['Axle', 'Bangalore', 'Caustic']).last, 'Caustic');
     });
@@ -245,14 +246,14 @@ void main() {
     ) async {
       await pump(tester, withKills());
 
-      await choose(tester, 'Total RP', 'Avg kills');
+      await choose(tester, 'Total RP', 'Avg Kills');
 
-      expect(find.text('Avg kills'), findsOneWidget);
+      expect(find.widgetWithText(ControlPill, 'Avg Kills'), findsOneWidget);
       expect(find.byIcon(StatIcons.avgKills), findsOneWidget);
     });
   });
 
-  group('the Trends pill', () {
+  group('the Trend window pill on the tabs', () {
     late SharedPreferences prefs;
 
     Future<ProviderContainer> pumpScoped(
@@ -280,7 +281,7 @@ void main() {
 
     // The pill's own label: the sheet has its own "Auto" and counts too.
     Finder pillLabel(String label) => find.descendant(
-      of: find.byType(TrendWindowPill),
+      of: find.byType(DefaultTrendWindowPill),
       matching: find.text(label),
     );
 
@@ -290,11 +291,11 @@ void main() {
       ) async {
         await pumpScoped(tester, tab());
 
-        expect(find.text('Trends:'), findsOneWidget);
+        expect(find.text('Trend window:'), findsOneWidget);
         expect(pillLabel('Auto'), findsOneWidget);
         expect(find.byIcon(Icons.trending_up), findsOneWidget);
         // At the left, level with Sort at the right: no row of its own.
-        final trends = tester.getTopLeft(find.text('Trends:'));
+        final trends = tester.getTopLeft(find.text('Trend window:'));
         final sort = tester.getTopLeft(find.text('Sort:'));
         expect(trends.dx, lessThan(sort.dx));
         expect((trends.dy - sort.dy).abs(), lessThan(24));
