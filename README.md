@@ -48,13 +48,14 @@
 
 Track your ranked grind and visualize your RP gains with interactive graphs. Get instant map alerts, compare your stats with friends and rivals, and put all the data that matters at your fingertips with **Apexlytics**.
 
+> **Disclaimer:** Unofficial fan project. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment. Apex Legends is a trademark of Electronic Arts Inc.
+
 ## Table of Contents
 
 - [Key Features](#key-features)
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [Ranked Breakdown Guide](#ranked-breakdown-guide)
-- [Downloads](#downloads)
+- [Ranked Tracking Guide](#ranked-tracking-guide)
 - [Development](#development)
 - [Data & Privacy](#data--privacy)
 - [Support & Feedback](#support--feedback)
@@ -66,13 +67,13 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 ---
 
-### Key Features
+## Key Features
 
 - **Know the Map**: See which map is active now and preview upcoming rotations. Get instant notifications before the map changes so you're never caught off-guard mid-game.
 
 - **Track Your Grind**: Look up any player's rank and legend statistics. Visualize your weekly RP gains with interactive graphs and compare head-to-head performance with other players across ranked seasons and splits.
 
-- **Ranked Breakdown**: A full deep-dive into your ranked performance: match history with per-match correction, an RP chart, per-map/per-legend tables with a combined Legend × Map matrix, pick-rate analysis, session summaries, personal records and win streaks, performance trends, time-of-day breakdowns, and side-by-side comparison between any two splits. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking works.
+- **Stats**: Your ranked climb, broken down. An RP chart, your best and worst legends and maps by the measure you choose, legend and map tables, sessions, personal records, trends and split comparison, all built from the matches Apexlytics records for you. See the [Ranked Tracking Guide](#ranked-tracking-guide) for how tracking works.
 
 - **Favorite Players & Compare**: Add players to your favorites and track their RP progression in real-time. Compare your stats side-by-side with favorited players to monitor competition and benchmark your climb.
 
@@ -82,16 +83,22 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Fast & Simple**: Instant access to the competitive data you need. No waiting, no friction.
 
-
-> **Disclaimer:** Unofficial fan project. Not made by, affiliated with, or endorsed by Electronic Arts or Respawn Entertainment. Apex Legends is a trademark of Electronic Arts Inc.
-
 ---
 
 ## Screenshots
 
+| Home | Stats | Recap | Search |
+|------|-------|-------|--------|
+| ![Home](.github/assets/screenshots/ios/ios_home.png) | ![Stats](.github/assets/screenshots/ios/ios_stats3.png) | ![Recap](.github/assets/screenshots/ios/ios_recap.png) | ![Search](.github/assets/screenshots/ios/ios_search.png) |
+
+<details>
+<summary>Desktop</summary>
+
 | Home | Stats | Search | Settings |
 |------|-------|--------|----------|
 | ![Home](.github/assets/screenshots/desktop/desktop_home.png) | ![Stats](.github/assets/screenshots/desktop/desktop_stats.png) | ![Search](.github/assets/screenshots/desktop/desktop_search.png) | ![Settings](.github/assets/screenshots/desktop/desktop_settings.png) |
+
+</details>
 
 ---
 
@@ -99,7 +106,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 - **Player Stats**: Rank, RP, current legend, equipped trackers, and weekly RP gain tracking. Supports search by name or numeric UID.
 - **RP Progression Graph**: Interactive chart of RP gained per match, built from your match history, with session filtering and split/week navigation. A snapshot-based RP graph is also available.
-- **Ranked Breakdown** (the Stats tab): a full ranked deep-dive built from the matches Apexlytics records for you, with a split and week picker. Its four tabs:
+- **Stats** (the Stats tab): a full ranked deep-dive built from the matches Apexlytics records for you, with a split and week picker. Its four tabs:
   - **Overview**: your account, the chosen split or week (summary, RP chart and stats), highlights such as your best and worst legends and maps, ranked by a measure you choose (total or average RP, win rate, kills or damage), and a "Dig deeper" grid that opens the pages below. A first-run preview shows what it will look like while you wait for a first game.
   - **Legends** and **Maps**: per-legend and per-map breakdown tables, sortable by RP, games, win rate, kills or damage. Open a row for its trends, which compare your recent games with your average over a window you choose, for everything or for one legend or map.
   - **Games**: your match history, with per-match corrections. Filter it by legend, map, date and RP change; long-press a game to select several and exclude or include them from every calculation at once.
@@ -113,7 +120,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
   - **Recap**: a recap of the period with a journey chart, and a shareable image card with a tile picker and an optional footer note.
   - **Personal Records**: best RP, kills and damage games, win streaks and an all-time best; open any record to see the game.
   - Shareable cards never include your player ID.
-- **Ranked tracking**: Refreshes automatically while the app is open; the interval is a setting, and it shortens to 5 minutes while a match is being recorded. See the [Ranked Breakdown Guide](#ranked-breakdown-guide) for how tracking starts.
+- **Ranked tracking**: Refreshes automatically while the app is open; the interval is a setting, and it shortens to 5 minutes while a match is being recorded. See the [Ranked Tracking Guide](#ranked-tracking-guide) for how tracking starts.
 - **Legend Stats**: Kill counts and tracker values per legend, merged across sessions and sorted by most-played. The All Trackers page filters and sorts every legend's trackers.
 - **Gun Stats**: Detailed weapon performance including kills, damage, and damage per kill.
 - **Map Rotations**: Live countdown for Ranked, Pubs, Mixtape, and Wildcard. Shows current map, time remaining, and what loads next. Switches automatically when the rotation changes.
@@ -136,7 +143,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 ---
 
-## Ranked Breakdown Guide
+## Ranked Tracking Guide
 
 > **TL;DR:** Keep Apexlytics open while you play ranked, turn on **Keep
 > screen on** in Settings so it doesn't stop tracking when your screen locks.
@@ -148,7 +155,7 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 1. Open Apexlytics and start playing ranked.
 2. Turn on **Keep screen on** in Settings so tracking doesn't stop the moment
    your screen locks.
-3. Finish a match: it'll appear in your Ranked Breakdown once it ends.
+3. Finish a match: it'll appear in your Stats once it ends.
 
 Prefer not to keep the app open? Keeping a browser tab open on your
 [profile page](https://apexlegendsstatus.com/profile/search/) on
@@ -181,7 +188,7 @@ turn Low Power Mode off for a long session.
 | Flutter SDK | 3.x (stable channel) |
 | Dart SDK | bundled with Flutter |
 | Android: Java | 17 |
-| iOS/macOS: Xcode | 15+ |
+| iOS: Xcode | 15+ |
 | Linux: GTK | `libgtk-3-dev` |
 
 ### Quick Start
@@ -237,7 +244,7 @@ Your proxy server must implement these endpoints:
 - **`GET /predator`**: Returns current Apex Predator RP cutoff per platform
 - **`GET /servers`**: Returns server status (login, EA accounts, crossplay health)
 - **`GET /news`**: Returns the news feed. An empty list is fine: the app always shows a pinned link to the official news page
-- **`GET /games`**: Returns ranked match history for a UID (used by Ranked Breakdown). Budgeted upstream; returns `202` with a `status`/`retryAfterSeconds` body when the request is queued or the player isn't being tracked yet, instead of `200` with match data
+- **`GET /games`**: Returns ranked match history for a UID (used by Stats). Budgeted upstream; returns `202` with a `status`/`retryAfterSeconds` body when the request is queued or the player isn't being tracked yet, instead of `200` with match data
 - **`GET /games/eligibility`**: Returns whether match history is currently accruing for a UID, without spending a `/games` request
 - **`GET /games/capacity`**: Returns the hourly `/games` budget (`maxPerHour`, `used`, `free`, `windowResetsAt`, `waitlistDepth`, `locked`). Optional: the app falls back to generic wording without it
 - **`GET /healthz`**: Public liveness check, answered without a token. The Server Status page calls it on the primary and backup servers directly
@@ -278,7 +285,7 @@ Have a question or found a bug? Let us know:
 
 ## Changelog
 
-Full release history and notes are available on the [GitHub Releases](https://github.com/ajwadtahmid/Apexlytics/releases) page.
+Full release history and notes are on the [GitHub Releases](https://github.com/ajwadtahmid/Apexlytics/releases) page. The newest is always at [releases/latest](https://github.com/ajwadtahmid/Apexlytics/releases/latest).
 
 ---
 
@@ -299,13 +306,28 @@ This project would not be possible without these amazing resources and the devel
 No, this is an unofficial fan project. This app is not affiliated with Respawn or EA in any way. This just uses the API provided by apexlegendsapi.com to display player stats, map information, and other game data.
 
 **Q: How often is player data updated?**
-Player stats are fetched fresh from the API when you search. Cached data is available offline but may be stale.
+Player stats are fetched fresh when you search or refresh. Between lookups the app shows cached data, kept for 24 hours. A favorite's card also keeps the rank and RP last seen for that player, with how old they are once a day has passed, even after the cache has expired.
 
 **Q: Will my account be compromised?**
 The app doesn't store your account credentials. You only provide a player name or UID, which are public information visible on apexlegendsstatus.com.
 
 **Q: Can I track multiple players at once?**
 Yes, add players to favorites for quick access. You can also compare stats with any player.
+
+**Q: What does "Rank by" change?**
+It decides what makes a legend or map "best" or "worst": Total RP (the default), Avg RP, win rate, kills or damage. It applies to the Overview highlights, the Recap, Legend × Map, Pick Rate and each session's top legend. A legend or map needs at least 3 games to be ranked.
+
+**Q: How is win rate counted?**
+A win is a game that gained RP and a loss is one that lost RP. Games that didn't move your RP are left out.
+
+**Q: What is the trend window?**
+The trend lines on a legend's or map's page compare your newest games with your average over all its games. Auto uses about a quarter of the games, from 5 to 100. You can pick a count for everything or for one legend or map. A legend or map needs at least 10 games to show trends.
+
+**Q: Do my Rank by and trend window choices go into a backup?**
+No. Choices about how things look, such as Rank by, trend windows and sorts, stay on the device. A backup holds your profiles, favorites and tracked data.
+
+**Q: Why does a favorite show an old rank?**
+Its card shows the rank and RP last seen for that player, and says how old they are once a day has passed. Open or refresh the player to update it.
 
 **Q: How reliable is the API?**
 The app depends on [apexlegendsapi.com](https://apexlegendsapi.com/) and [apexlegendsstatus.com](https://apexlegendsstatus.com/). These services are community-run and may experience occasional downtime. The app gracefully falls back to cached data when APIs are unavailable.
@@ -322,11 +344,11 @@ No. Just search for any public player by name or UID.
 
 - **RP snapshots**: Only tracks if app is open and sync is completed. RP gains when app is closed are not captured.
 - **Low Power Mode (iOS)**: Keep screen on can't hold the screen awake while Low Power Mode is on, so tracking can pause when the screen locks. The app warns you while it's on.
-- **Ranked Breakdown tracking**: Only records matches while Apexlytics (or your profile page on apexlegendsstatus.com) is open, and only from the point tracking starts; earlier matches can't be recovered. A shared API budget across all users can briefly delay a new profile's tracking with a "Server busy" state. See the [Ranked Breakdown Guide](#ranked-breakdown-guide).
+- **Ranked tracking**: Only records matches while Apexlytics (or your profile page on apexlegendsstatus.com) is open, and only from the point tracking starts; earlier matches can't be recovered. A shared API budget across all users can briefly delay a new profile's tracking with a "Server busy" state. See the [Ranked Tracking Guide](#ranked-tracking-guide).
 - **Legend stats**: Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
 - **Predator cutoff**: Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.
 - **Offline player search**: If a player hasn't been searched before, their data won't be cached and you'll need internet to look them up.
-- **Desktop crash reporting**: Crash reports are only sent on Android and iOS. Desktop builds (Linux, Windows, macOS) don't report crashes automatically, since Sentry's crash handler can't reliably run there; desktop issues rely on user-submitted bug reports, which Settings → Report a bug fills in with diagnostics and a recent log.
+- **Desktop crash reporting**: Crash reports are only sent on Android and iOS. Desktop builds (Linux and Windows) don't report crashes automatically, since Sentry's crash handler can't reliably run there; desktop issues rely on user-submitted bug reports, which Settings → Report a bug fills in with diagnostics and a recent log.
 
 ---
 
