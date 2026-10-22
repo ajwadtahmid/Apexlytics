@@ -87,9 +87,9 @@ Track your ranked grind and visualize your RP gains with interactive graphs. Get
 
 ## Screenshots
 
-| Home | Stats | Recap | Search |
+| Home | Stats | Search | Recap |
 |------|-------|-------|--------|
-| ![Home](.github/assets/screenshots/ios/ios_home.png) | ![Stats](.github/assets/screenshots/ios/ios_stats3.png) | ![Recap](.github/assets/screenshots/ios/ios_recap.png) | ![Search](.github/assets/screenshots/ios/ios_search.png) |
+| ![Home](.github/assets/screenshots/ios/ios_home.png) | ![Stats](.github/assets/screenshots/ios/ios_stats1.png) | ![Search](.github/assets/screenshots/ios/ios_search.png) | ![Recap](.github/assets/screenshots/ios/ios_recap.png) |
 
 <details>
 <summary>Desktop</summary>
