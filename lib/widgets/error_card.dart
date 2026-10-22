@@ -9,7 +9,7 @@ import 'surface_card.dart';
 ///   space, e.g. a Home summary tile.
 /// - `fullScreen: true` → centered whole-screen state with optional title,
 ///   extra content, and up to three actions, e.g. Stats/Search fetch
-///   failures or Ranked Breakdown's "still waiting for data" states.
+///   failures or the Stats tab's "still waiting for data" states.
 /// - default → inline block in a [SurfaceCard], e.g. Home's map-rotation card.
 ///
 /// Replaces three widgets that used to drift out of sync (missing a Retry

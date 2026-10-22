@@ -9,11 +9,11 @@ Future<void> _openProfileSearch(BuildContext context) =>
 
 Future<void> _openFullGuide(BuildContext context) => openExternalLink(
   context,
-  Uri.parse('https://github.com/ajwadtahmid/Apexlytics#ranked-breakdown-guide'),
+  Uri.parse('https://github.com/ajwadtahmid/Apexlytics#ranked-tracking-guide'),
 );
 
 /// "How ranked tracking works" — explains the mechanics behind the empty
-/// states in RankedBreakdownBody so a confused user has somewhere to look
+/// states in RankedStatsBody so a confused user has somewhere to look
 /// beyond the inline copy.
 void showRankedInfoSheet(BuildContext context) {
   showModalBottomSheet(

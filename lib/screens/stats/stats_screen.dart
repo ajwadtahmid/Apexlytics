@@ -16,7 +16,7 @@ import '../../utils/storage/storage.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
 import '../../widgets/widgets.dart';
-import '../ranked/ranked_breakdown_body.dart';
+import '../ranked/ranked_stats_body.dart';
 import '../ranked/widgets/ranked_info_sheet.dart';
 import '../ranked/widgets/ranked_period_selector.dart'
     show RankedSplitDropdown, RankedWeekStrip;
@@ -24,7 +24,7 @@ import 'refresh_all_sheet.dart';
 import '../../utils/navigation_utils.dart';
 
 /// Stats — the app's default tab. Hosts the player's own snapshot info
-/// plus the full Ranked Breakdown (rank header, RP graph, and every Ranked
+/// plus the full ranked stats (rank header, RP graph, and every Ranked
 /// tab), merged into one screen so users don't have to jump between two tabs
 /// to see their own numbers.
 class StatsScreen extends ConsumerWidget {
@@ -247,7 +247,7 @@ class _StatsViewState extends ConsumerState<_StatsView> {
 
     // Built purely for the AppBar's split dropdown + week strip — the actual
     // Ranked content (including its own loading/error handling) lives in
-    // RankedBreakdownBody, which resolves the same split independently.
+    // RankedStatsBody, which resolves the same split independently.
     final splits = ref.watch(rankedSplitsProvider(uid)).asData?.value;
     final period = ref.watch(rankedPeriodProvider);
     RankedView? shell;
@@ -549,7 +549,7 @@ class _StatsBodyState extends ConsumerState<_StatsBody>
             child: StaleBanner(staleAt: widget.staleAt!),
           ),
         Expanded(
-          child: RankedBreakdownBody(
+          child: RankedStatsBody(
             uid: stats.uid,
             stats: stats,
             snapshots: snapshots,

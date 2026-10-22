@@ -146,7 +146,7 @@ class _AppShellState extends ConsumerState<_AppShell>
   Widget _screenFor(AppTab tab) {
     final screen = switch (tab) {
       AppTab.home => const HomeScreen(),
-      // Hosts the full Ranked Breakdown content too — see StatsScreen.
+      // Hosts the full ranked stats content too — see StatsScreen.
       AppTab.stats => const StatsScreen(),
       AppTab.search => const SearchScreen(),
       AppTab.settings => const SettingsScreen(),

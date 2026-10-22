@@ -33,7 +33,7 @@ const kStatsRefreshOptions = <int>[0, 5, 10, 15];
 /// Applied when the user has never opened the picker.
 const kDefaultStatsRefreshMinutes = 10;
 
-/// Forced by the ranked-breakdown opt-in.
+/// Forced by the ranked tracking opt-in.
 const kRecordingRefreshMinutes = 5;
 
 /// Snaps a persisted interval onto [kStatsRefreshOptions]. Manual is a

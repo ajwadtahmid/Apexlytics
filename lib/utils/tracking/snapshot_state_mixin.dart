@@ -43,7 +43,7 @@ mixin SnapshotStateMixin {
   ///
   /// Returns whether a new/changed season was learned, so a
   /// [ConsumerState] caller can invalidate anything caching the season
-  /// list elsewhere (e.g. the ranked breakdown's split picker).
+  /// list elsewhere (e.g. the Stats tab's split picker).
   ///
   /// [staleAt] marks [stats] as a cached copy, which is not recorded as a new
   /// reading (see [appendSnapshot]); the graph still loads.

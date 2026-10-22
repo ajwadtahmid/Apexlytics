@@ -28,7 +28,7 @@ enum AppTab {
   final int storedValue;
 }
 
-/// The ordered list of visible tabs. Ranked Breakdown is part of Stats
+/// The ordered list of visible tabs. The ranked pages are part of Stats
 /// (see `StatsScreen`), not a separate tab.
 final visibleTabsProvider = Provider<List<AppTab>>((ref) {
   return const [AppTab.home, AppTab.stats, AppTab.search, AppTab.settings];

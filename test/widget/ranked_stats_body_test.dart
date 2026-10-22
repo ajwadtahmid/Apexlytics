@@ -11,7 +11,7 @@ import 'package:apexlytics/models/season_meta.dart';
 import 'package:apexlytics/providers/navigation_provider.dart';
 import 'package:apexlytics/providers/ranked_provider.dart';
 import 'package:apexlytics/providers/settings_provider.dart';
-import 'package:apexlytics/screens/ranked/ranked_breakdown_body.dart';
+import 'package:apexlytics/screens/ranked/ranked_stats_body.dart';
 import 'package:apexlytics/services/games_service.dart'
     show GamesCapacity, GamesEligibility;
 import 'package:apexlytics/utils/formatting/snapshot_types.dart';
@@ -20,7 +20,7 @@ import 'package:apexlytics/utils/ranked/ranked_period.dart';
 import '../helpers.dart';
 
 /// Covers the empty-state outcome routing in `_emptyState()`
-/// (ranked_breakdown_body.dart:180-265) — pure branching over provider state
+/// (ranked_stats_body.dart) — pure branching over provider state
 /// that was entirely untested.
 void main() {
   Future<SharedPreferences> prefsWith(Map<String, Object> values) async {
@@ -84,7 +84,7 @@ void main() {
       child: MaterialApp(
         theme: ThemeData.dark(),
         home: Scaffold(
-          body: RankedBreakdownBody(
+          body: RankedStatsBody(
             uid: uid,
             stats: stats ?? buildStats(uid: uid),
             snapshots: snapshots,
@@ -575,7 +575,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final container = ProviderScope.containerOf(
-        tester.element(find.byType(RankedBreakdownBody)),
+        tester.element(find.byType(RankedStatsBody)),
       );
       container.read(currentTabProvider.notifier).setTab(AppTab.stats);
       return container;

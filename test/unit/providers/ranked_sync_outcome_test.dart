@@ -403,7 +403,7 @@ void main() {
 
         // A permanently-bad request must not be misdiagnosed as a transient
         // connectivity problem — that's a different, much longer backoff and
-        // a different message to the user (see ranked_breakdown_body.dart).
+        // a different message to the user (see ranked_stats_body.dart).
         expect(result, RankedSyncOutcome.requestError);
         expect(await store.count(uid), 1);
       },

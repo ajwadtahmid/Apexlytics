@@ -31,7 +31,7 @@ import 'widgets/ranked_legend_detail_sheet.dart' show openLegendHistory;
 
 /// Self-contained entry point for the Pick Rate chart: a single tappable row
 /// that pushes the full-screen scatter plot. The only thing a caller needs to
-/// wire in; nothing else in the ranked breakdown depends on this feature.
+/// wire in; nothing else in Stats depends on this feature.
 class RankedPickRateEntry extends StatelessWidget {
   final RankedSummary summary;
   final List<LegendBreakdown> legends;

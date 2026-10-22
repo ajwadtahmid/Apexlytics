@@ -18,7 +18,7 @@ import 'widgets/ranked_best_legend_per_map.dart';
 
 /// Self-contained entry point for the Legend × Map matrix: a single tappable
 /// row that pushes the full-screen breakdown. The only thing a caller needs to
-/// wire in; nothing else in the ranked breakdown depends on this feature.
+/// wire in; nothing else in Stats depends on this feature.
 class RankedLegendMapMatrixEntry extends StatelessWidget {
   final List<RankedMatch> matches;
 

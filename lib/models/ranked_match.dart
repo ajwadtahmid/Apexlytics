@@ -1,7 +1,7 @@
 /// A single match from the `/games` endpoint.
 ///
 /// The `/games` payload is a flat list of match objects. Only a subset of the
-/// fields matter for the ranked breakdown; this model extracts those and
+/// fields matter for the ranked stats; this model extracts those and
 /// normalizes the messy `gameData` array (see [MatchTracker]).
 library;
 

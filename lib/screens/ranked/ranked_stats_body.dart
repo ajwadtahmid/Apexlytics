@@ -39,7 +39,7 @@ import '../../widgets/player_info_card.dart';
 import '../../widgets/surface_card.dart';
 import '../../widgets/setting_row.dart' show SectionLabel;
 
-/// The ranked-breakdown content — tabs, highlights, and every drill-down —
+/// The Stats content — tabs, highlights, and every drill-down —
 /// embedded as the lower portion of the Stats tab, below the shared
 /// AppBar. Everything, including the player-info card and rank header, lives
 /// inside the Overview tab's own single scrollable list rather than a
@@ -48,7 +48,7 @@ import '../../widgets/setting_row.dart' show SectionLabel;
 /// player snapshot and merged legend/weapon trackers (passed in, since those
 /// come from the Stats side of the merge) and the combined refresh
 /// callback.
-class RankedBreakdownBody extends ConsumerStatefulWidget {
+class RankedStatsBody extends ConsumerStatefulWidget {
   final String uid;
   final PlayerStats stats;
   final List<StatSnapshot> snapshots;
@@ -57,7 +57,7 @@ class RankedBreakdownBody extends ConsumerStatefulWidget {
   final List<String> legendStack;
   final Future<void> Function() onRefresh;
 
-  const RankedBreakdownBody({
+  const RankedStatsBody({
     super.key,
     required this.uid,
     required this.stats,
@@ -69,11 +69,11 @@ class RankedBreakdownBody extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<RankedBreakdownBody> createState() =>
-      _RankedBreakdownBodyState();
+  ConsumerState<RankedStatsBody> createState() =>
+      _RankedStatsBodyState();
 }
 
-class _RankedBreakdownBodyState extends ConsumerState<RankedBreakdownBody> {
+class _RankedStatsBodyState extends ConsumerState<RankedStatsBody> {
   Timer? _refreshTimer;
   bool _showCoachMark = false;
 
