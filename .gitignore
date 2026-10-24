@@ -71,4 +71,8 @@ secrets/
 .gradle/local.properties
 
 # Local assistant notes, not for the repo
+CLAUDE.md
 CLAUDE.local.md
+
+# Launch videos made with /brag (local only)
+brag-output/
