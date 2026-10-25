@@ -104,6 +104,11 @@ install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 
+# The window icon, which my_application.cc loads from next to the executable.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../assets/logos/logo.png"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" RENAME "apexlytics.png"
+  COMPONENT Runtime)
+
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 

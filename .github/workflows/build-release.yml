@@ -316,13 +316,17 @@ jobs:
           printf '[Desktop Entry]\nType=Application\nName=Apexlytics\nComment=Offline-first stats tracker for Apex Legends players\nExec=apexlytics\nIcon=com.ajwadtahmid.apexlytics\nCategories=Utility;Game;\nTerminal=false\n' \
             > AppDir/usr/share/applications/com.ajwadtahmid.apexlytics.desktop
 
-          mkdir -p AppDir/usr/share/icons/hicolor/1024x1024/apps
-          cp assets/logos/logo.png \
-            AppDir/usr/share/icons/hicolor/1024x1024/apps/com.ajwadtahmid.apexlytics.png
+          # linuxdeploy only takes the standard hicolor sizes, so a 1024 px icon
+          # was ignored and the AppImage had no logo.
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+          convert assets/logos/logo.png -resize 512x512 \
+            AppDir/usr/share/icons/hicolor/512x512/apps/com.ajwadtahmid.apexlytics.png
 
           export VERSION="${GITHUB_REF#refs/tags/v}"
           ./linuxdeploy/linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
+            --desktop-file AppDir/usr/share/applications/com.ajwadtahmid.apexlytics.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/512x512/apps/com.ajwadtahmid.apexlytics.png \
             --output appimage
 
       - name: Rename Linux AppImage
