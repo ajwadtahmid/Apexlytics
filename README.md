@@ -174,8 +174,10 @@ recorded, so earlier matches can't be pulled in retroactively.
 
 On iPhone, **Low Power Mode** stops Keep screen on from working: the screen
 still locks after about 30 seconds and tracking pauses with it. Apexlytics
-shows a notice in Settings and a banner on Home and Stats while it's on, so
-turn Low Power Mode off for a long session.
+shows a short note in Settings and a banner on Home and Stats while it's on, so
+turn Low Power Mode off for a long session. If the banner gets in the way, turn
+it off with **Low Power Mode banner** in Settings → Preferences (iPhone only).
+The note in Settings stays.
 
 ---
 
@@ -345,7 +347,7 @@ No. Just search for any public player by name or UID.
 ## Known Limitations
 
 - **RP snapshots**: Only tracks if app is open and sync is completed. RP gains when app is closed are not captured.
-- **Low Power Mode (iOS)**: Keep screen on can't hold the screen awake while Low Power Mode is on, so tracking can pause when the screen locks. The app warns you while it's on.
+- **Low Power Mode (iOS)**: Keep screen on can't hold the screen awake while Low Power Mode is on, so tracking can pause when the screen locks. The app warns you while it's on; the Home and Stats banner can be turned off in Settings.
 - **Ranked tracking**: Only records matches while Apexlytics (or your profile page on apexlegendsstatus.com) is open, and only from the point tracking starts; earlier matches can't be recovered. A shared API budget across all users can briefly delay a new profile's tracking with a "Server busy" state. See the [Ranked Tracking Guide](#ranked-tracking-guide).
 - **Legend stats**: Tracker names and values are as reported by the Apex Legends Status API; custom or seasonal tracker names may not be fully supported.
 - **Predator cutoff**: Updates each hour. Doesn't refresh automatically; manual refresh required to see latest cutoff.

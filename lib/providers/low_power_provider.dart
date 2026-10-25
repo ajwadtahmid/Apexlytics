@@ -59,6 +59,16 @@ final lowPowerWarningProvider = Provider.autoDispose<bool>((ref) {
   return ref.watch(lowPowerModeProvider).value ?? false;
 });
 
+/// Whether to show the banner on Home and Stats: the warning above, unless the
+/// user has turned the banner off in Settings. Off stays off until they turn it
+/// back on.
+final lowPowerBannerProvider = Provider.autoDispose<bool>((ref) {
+  final enabled = ref.watch(
+    playerSettingsProvider.select((s) => s.lowPowerWarning),
+  );
+  return enabled && ref.watch(lowPowerWarningProvider);
+});
+
 /// Whether the banner was closed this session (in memory only).
 final lowPowerBannerDismissedProvider =
     NotifierProvider<LowPowerBannerDismissed, bool>(

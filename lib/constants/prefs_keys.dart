@@ -13,6 +13,7 @@ class PrefsKeys {
 
   static const statsRefreshMinutes = 'stats_refresh_minutes';
   static const keepScreenOn = 'keep_screen_on';
+  static const lowPowerWarning = 'low_power_warning';
 
   // Legacy global timing key — kept only for one-time migration to per-mode keys.
   static const mapNotifyMinutes = 'map_notify_minutes';

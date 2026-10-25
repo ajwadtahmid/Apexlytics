@@ -57,6 +57,7 @@ const _staticBackupKeys = {
   PrefsKeys.playerPlatform,
   PrefsKeys.statsRefreshMinutes,
   PrefsKeys.keepScreenOn,
+  PrefsKeys.lowPowerWarning,
   PrefsKeys.notifyPubsMapRotation,
   PrefsKeys.notifyRankedMapRotation,
   PrefsKeys.notifyMixtapeMapRotation,
@@ -142,6 +143,7 @@ const _intKeys = {
 
 const _boolKeys = {
   PrefsKeys.keepScreenOn,
+  PrefsKeys.lowPowerWarning,
   PrefsKeys.notifyPubsMapRotation,
   PrefsKeys.notifyRankedMapRotation,
   PrefsKeys.notifyMixtapeMapRotation,

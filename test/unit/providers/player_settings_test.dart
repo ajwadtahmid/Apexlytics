@@ -161,6 +161,18 @@ void main() {
       expect(container.read(playerSettingsProvider).keepScreenOn, isTrue);
     });
 
+    test('the Low Power Mode banner is on until it is turned off', () async {
+      final container = await makeContainer();
+      addTearDown(container.dispose);
+      expect(container.read(playerSettingsProvider).lowPowerWarning, isTrue);
+
+      await container
+          .read(playerSettingsProvider.notifier)
+          .setLowPowerWarning(false);
+
+      expect(container.read(playerSettingsProvider).lowPowerWarning, isFalse);
+    });
+
     test('state is loaded from pre-existing prefs', () async {
       // Simulate pre-existing SharedPreferences (e.g. after app restart).
       final container = await makeContainer({'default_tab': 3});
@@ -684,6 +696,7 @@ void main() {
       'activeProfileIndex': (s) => s.copyWith(activeProfileIndex: 1),
       'statsRefreshMinutes': (s) => s.copyWith(statsRefreshMinutes: 15),
       'keepScreenOn': (s) => s.copyWith(keepScreenOn: true),
+      'lowPowerWarning': (s) => s.copyWith(lowPowerWarning: false),
       'notifyPubsMapRotation': (s) => s.copyWith(notifyPubsMapRotation: true),
       'notifyRankedMapRotation': (s) =>
           s.copyWith(notifyRankedMapRotation: true),
@@ -715,7 +728,7 @@ void main() {
 
     test('every field on PlayerSettings has a mutator above', () {
       // Bump this alongside the map when a field is added to the class.
-      expect(mutators.length, 15);
+      expect(mutators.length, 16);
     });
   });
 

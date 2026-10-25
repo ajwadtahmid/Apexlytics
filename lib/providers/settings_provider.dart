@@ -110,6 +110,9 @@ abstract class PlayerSettings with _$PlayerSettings {
     @Default(kDefaultStatsRefreshMinutes)
     int statsRefreshMinutes, // 0 = manual only
     @Default(false) bool keepScreenOn,
+
+    /// iOS: show the Low Power Mode banner on Home and Stats.
+    @Default(true) bool lowPowerWarning,
     @Default(false) bool notifyPubsMapRotation,
     @Default(false) bool notifyRankedMapRotation,
     @Default(false) bool notifyMixtapeMapRotation,
@@ -212,8 +215,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       final name = _stringPref(PrefsKeys.playerName) ?? '';
       final uid = _stringPref(PrefsKeys.playerUid) ?? '';
       final platform =
-          _stringPref(PrefsKeys.playerPlatform) ??
-          ApiConstants.defaultPlatform;
+          _stringPref(PrefsKeys.playerPlatform) ?? ApiConstants.defaultPlatform;
       if (name.isNotEmpty || uid.isNotEmpty) {
         profiles = [PlayerProfile(name: name, uid: uid, platform: platform)];
         activeIdx = 0;
@@ -281,6 +283,7 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
       activeProfileIndex: activeIdx,
       statsRefreshMinutes: refreshMinutes,
       keepScreenOn: _boolPref(PrefsKeys.keepScreenOn) ?? false,
+      lowPowerWarning: _boolPref(PrefsKeys.lowPowerWarning) ?? true,
       notifyPubsMapRotation:
           _boolPref(PrefsKeys.notifyPubsMapRotation) ?? false,
       notifyRankedMapRotation:
@@ -466,6 +469,12 @@ class PlayerSettingsNotifier extends Notifier<PlayerSettings> {
 
   Future<void> setKeepScreenOn(bool v) =>
       _setBool(PrefsKeys.keepScreenOn, v, (s) => s.copyWith(keepScreenOn: v));
+
+  Future<void> setLowPowerWarning(bool v) => _setBool(
+    PrefsKeys.lowPowerWarning,
+    v,
+    (s) => s.copyWith(lowPowerWarning: v),
+  );
 
   Future<void> setRankedNotifyMinutesBefore(int v) => _setInt(
     PrefsKeys.rankedNotifyMinutes,

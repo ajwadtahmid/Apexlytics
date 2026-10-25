@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../providers/low_power_provider.dart';
 import '../../../providers/navigation_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../utils/theme.dart';
@@ -23,6 +24,10 @@ class StatsRefreshSection extends ConsumerWidget {
     );
     final keepScreenOn = ref.watch(
       playerSettingsProvider.select((s) => s.keepScreenOn),
+    );
+    final ios = ref.watch(lowPowerPlatformProvider);
+    final lowPowerWarning = ref.watch(
+      playerSettingsProvider.select((s) => s.lowPowerWarning),
     );
 
     return Column(
@@ -127,6 +132,37 @@ class StatsRefreshSection extends ConsumerWidget {
                 ],
               ),
               const LowPowerWarning(),
+              if (ios) ...[
+                const Divider(color: AppTheme.surface2, height: 24),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.battery_alert_outlined,
+                      color: AppTheme.textPrimary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: AppTheme.sm),
+                    const Expanded(
+                      child: Text(
+                        'Low Power Mode banner',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                    Switch(
+                      value: lowPowerWarning,
+                      onChanged: (v) => ref
+                          .read(playerSettingsProvider.notifier)
+                          .setLowPowerWarning(v),
+                      activeThumbColor: AppTheme.accent,
+                      activeTrackColor: AppTheme.accent.withAlpha(120),
+                    ),
+                  ],
+                ),
+                const Text(
+                  'Shows a banner on Home and Stats while Low Power Mode is on.',
+                  style: AppTheme.caption,
+                ),
+              ],
             ],
           ),
         ),
