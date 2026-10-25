@@ -319,7 +319,7 @@ jobs:
           # linuxdeploy only takes the standard hicolor sizes, so a 1024 px icon
           # was ignored and the AppImage had no logo.
           mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
-          convert assets/logos/logo.png -resize 512x512 \
+          cp assets/logos/google_play_icon_512.png \
             AppDir/usr/share/icons/hicolor/512x512/apps/com.ajwadtahmid.apexlytics.png
 
           export VERSION="${GITHUB_REF#refs/tags/v}"
