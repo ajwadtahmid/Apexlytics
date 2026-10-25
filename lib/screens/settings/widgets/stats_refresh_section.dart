@@ -25,6 +25,7 @@ class StatsRefreshSection extends ConsumerWidget {
     final keepScreenOn = ref.watch(
       playerSettingsProvider.select((s) => s.keepScreenOn),
     );
+    final keepAwake = ref.watch(keepScreenOnPlatformProvider);
     final ios = ref.watch(lowPowerPlatformProvider);
     final lowPowerWarning = ref.watch(
       playerSettingsProvider.select((s) => s.lowPowerWarning),
@@ -106,32 +107,34 @@ class StatsRefreshSection extends ConsumerWidget {
                   ],
                 ),
               ),
-              const Divider(color: AppTheme.surface2, height: 24),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.stay_current_portrait,
-                    color: AppTheme.textPrimary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: AppTheme.sm),
-                  const Expanded(
-                    child: Text(
-                      'Keep screen on',
-                      style: TextStyle(fontSize: 14),
+              if (keepAwake) ...[
+                const Divider(color: AppTheme.surface2, height: 24),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.stay_current_portrait,
+                      color: AppTheme.textPrimary,
+                      size: 20,
                     ),
-                  ),
-                  Switch(
-                    value: keepScreenOn,
-                    onChanged: (v) => ref
-                        .read(playerSettingsProvider.notifier)
-                        .setKeepScreenOn(v),
-                    activeThumbColor: AppTheme.accent,
-                    activeTrackColor: AppTheme.accent.withAlpha(120),
-                  ),
-                ],
-              ),
-              const LowPowerWarning(),
+                    const SizedBox(width: AppTheme.sm),
+                    const Expanded(
+                      child: Text(
+                        'Keep screen on',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                    Switch(
+                      value: keepScreenOn,
+                      onChanged: (v) => ref
+                          .read(playerSettingsProvider.notifier)
+                          .setKeepScreenOn(v),
+                      activeThumbColor: AppTheme.accent,
+                      activeTrackColor: AppTheme.accent.withAlpha(120),
+                    ),
+                  ],
+                ),
+                const LowPowerWarning(),
+              ],
               if (ios) ...[
                 const Divider(color: AppTheme.surface2, height: 24),
                 Row(

@@ -8,6 +8,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/app_logger.dart';
 import 'settings_provider.dart';
 
+/// Keep screen on means something on a phone or tablet only. Overridden in
+/// tests.
+final keepScreenOnPlatformProvider = Provider<bool>(
+  (_) => keepScreenOnSupported,
+);
+
+/// For code with no [Ref] to hand, such as a `dispose`.
+bool get keepScreenOnSupported => Platform.isAndroid || Platform.isIOS;
+
 /// iOS only: Low Power Mode caps Auto-Lock at 30 seconds there. Overridden in
 /// tests.
 final lowPowerPlatformProvider = Provider<bool>((_) => Platform.isIOS);

@@ -14,6 +14,7 @@ import 'providers/predator_provider.dart';
 import 'providers/ranked_provider.dart';
 import 'providers/search_provider.dart';
 import 'providers/server_provider.dart';
+import 'providers/low_power_provider.dart' show keepScreenOnSupported;
 import 'providers/settings_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/search/search_screen.dart';
@@ -105,6 +106,9 @@ class _AppShellState extends ConsumerState<_AppShell>
   /// window and iOS ignores `isIdleTimerDisabled` unless the app is active, so
   /// the screen sleeps normally as soon as the user switches away.
   void _applyWakelock(bool enabled) {
+    // No switch for it on a computer, so a value restored from a backup made
+    // on a phone must not keep the screen awake there.
+    if (!keepScreenOnSupported) return;
     unawaited(
       WakelockPlus.toggle(enable: enabled).catchError((Object e) {
         // Unsupported platform or missing D-Bus (Linux/CI) — the setting is a

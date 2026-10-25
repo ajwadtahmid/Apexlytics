@@ -7,6 +7,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+Future<ProviderContainer> pumpSectionFor(
+  WidgetTester tester, {
+  required bool keepAwake,
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final container = ProviderContainer(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      lowPowerPlatformProvider.overrideWithValue(false),
+      keepScreenOnPlatformProvider.overrideWithValue(keepAwake),
+      lowPowerReaderProvider.overrideWithValue(() async => false),
+    ],
+  );
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(child: StatsRefreshSection()),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  return container;
+}
+
 void main() {
   const warning = 'Low Power Mode is on.';
 
@@ -169,6 +197,7 @@ void main() {
     Future<ProviderContainer> pumpSection(
       WidgetTester tester, {
       required bool ios,
+      bool keepAwake = true,
     }) async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
@@ -176,6 +205,7 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           lowPowerPlatformProvider.overrideWithValue(ios),
+          keepScreenOnPlatformProvider.overrideWithValue(keepAwake),
           lowPowerReaderProvider.overrideWithValue(() async => false),
         ],
       );
@@ -221,6 +251,23 @@ void main() {
         ),
         completion(isFalse),
       );
+      await unmount(tester, container);
+    });
+  });
+
+  group('Keep screen on in Settings', () {
+    testWidgets('is there on a phone', (tester) async {
+      final container = await pumpSectionFor(tester, keepAwake: true);
+
+      expect(find.text('Keep screen on'), findsOneWidget);
+      await unmount(tester, container);
+    });
+
+    testWidgets('is not there on a computer', (tester) async {
+      final container = await pumpSectionFor(tester, keepAwake: false);
+
+      expect(find.text('Keep screen on'), findsNothing);
+      expect(find.text('Default tab'), findsOneWidget); // the rest is there
       await unmount(tester, container);
     });
   });
