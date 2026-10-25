@@ -177,6 +177,7 @@ class _RankedSlotChartState extends State<RankedSlotChart> {
           const SizedBox(height: AppTheme.md),
           if (paired) ...[
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
                   child: CompareKey(color: kCompareColorA, name: w.nameA!),

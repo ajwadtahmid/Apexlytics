@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/ranked_match.dart';
 import '../../models/season_meta.dart';
 import '../../providers/ranked_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../utils/formatting/format.dart'
     show
         formatAvgDamage,
@@ -120,20 +121,18 @@ class _RankedCompareTabState extends ConsumerState<RankedCompareTab> {
   String? _splitAId;
   String? _splitBId;
 
-  List<RankedSplitBucket> get _comparable => widget.splits
-      .where((b) => b.id != kLifetimeSplitId && b.id != kUnknownSplitId)
-      .toList();
+  /// Whose games the Comparing side shows; null is the profile on screen. The
+  /// Current side is always the profile on screen.
+  String? _uidA;
 
-  @override
-  void initState() {
-    super.initState();
-    // B is "how am I doing now" and defaults to the current split; A is the
-    // baseline being compared against and defaults to the one before it —
-    // buckets already sort newest-first, so that's index 0 and 1.
-    final real = _comparable;
-    if (real.isNotEmpty) _splitBId = real[0].id;
-    if (real.length > 1) _splitAId = real[1].id;
-  }
+  /// The real, named splits [uid] has games in, newest first. The profile on
+  /// screen's come from the page; another profile's are read from its history.
+  List<RankedSplitBucket> _splitsFor(String uid) =>
+      (uid == widget.uid
+              ? widget.splits
+              : ref.watch(rankedSplitsProvider(uid)).value ?? const [])
+          .where((b) => b.id != kLifetimeSplitId && b.id != kUnknownSplitId)
+          .toList();
 
   @override
   Widget build(BuildContext context) {
@@ -163,56 +162,132 @@ class _RankedCompareTabState extends ConsumerState<RankedCompareTab> {
     );
   }
 
-  Widget _buildSplits() {
-    final real = _comparable;
-    if (real.length < 2) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: AppTheme.lg),
-        child: Center(
-          child: Text(
-            'Need at least two splits with recorded history to compare.',
-            textAlign: TextAlign.center,
-            style: AppTheme.captionLarge,
-          ),
-        ),
-      );
-    }
+  /// The split in [real] with [id], else the one at [index] (clamped): A
+  /// defaults to the split before the current one, B to the current one, since
+  /// splits sort newest-first.
+  RankedSplitBucket? _pick(
+    List<RankedSplitBucket> real,
+    String? id,
+    int index,
+  ) {
+    if (real.isEmpty) return null;
+    return real.firstWhere(
+      (b) => b.id == id,
+      orElse: () => real[index < real.length ? index : 0],
+    );
+  }
 
-    final idB = _splitBId ?? real[0].id;
-    final idA = _splitAId ?? real[1].id;
-    final bucketA = real.firstWhere((b) => b.id == idA, orElse: () => real[0]);
-    final bucketB = real.firstWhere((b) => b.id == idB, orElse: () => real[1]);
+  Widget _buildSplits() {
+    final profiles = [
+      for (final p in ref.watch(
+        playerSettingsProvider.select((s) => s.profiles),
+      ))
+        if (p.isSet) p,
+    ];
+    final multi = profiles.length > 1;
+    final uidA = _uidA ?? widget.uid;
+    final uidB = widget.uid;
+    final sameProfile = uidA == uidB;
+    final realA = _splitsFor(uidA);
+    final realB = _splitsFor(uidB);
+    final bucketA = _pick(realA, _splitAId, 1);
+    final bucketB = _pick(realB, _splitBId, 0);
+
+    // Two splits of one profile need two splits; two profiles need one each.
+    final canCompare =
+        bucketA != null &&
+        bucketB != null &&
+        (!sameProfile || realA.length >= 2);
+    const needMore = Padding(
+      padding: EdgeInsets.symmetric(vertical: AppTheme.lg),
+      child: Center(
+        child: Text(
+          'Need at least two splits with recorded history to compare.',
+          textAlign: TextAlign.center,
+          style: AppTheme.captionLarge,
+        ),
+      ),
+    );
+    if (!multi && !canCompare) return needMore;
+
+    String nameOf(String uid) => profiles
+        .firstWhere((p) => p.uid == uid, orElse: () => profiles.first)
+        .name;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _SplitPicker(
-          splits: real,
-          selectedA: bucketA.id,
-          selectedB: bucketB.id,
+          splitsA: realA,
+          splitsB: realB,
+          selectedA: bucketA?.id,
+          selectedB: bucketB?.id,
           onChangedA: (id) => setState(() => _splitAId = id),
           onChangedB: (id) => setState(() => _splitBId = id),
+          profiles: multi ? {for (final p in profiles) p.uid: p.name} : null,
+          profileA: uidA,
+          nameB: multi ? nameOf(uidB) : null,
+          // Another profile starts on the split you are looking at, so the
+          // first thing you see is the two of you over the same split.
+          onProfileA: (uid) => setState(() {
+            _uidA = uid == widget.uid ? null : uid;
+            _splitAId = uid == widget.uid ? null : bucketB?.id;
+          }),
         ),
         const SizedBox(height: AppTheme.md),
-        _CompareBody(uid: widget.uid, bucketA: bucketA, bucketB: bucketB),
+        if (!canCompare)
+          needMore
+        else
+          _CompareBody(
+            uidA: uidA,
+            uidB: uidB,
+            bucketA: bucketA,
+            bucketB: bucketB,
+            nameA: sameProfile
+                ? bucketA.displayName
+                : '${nameOf(uidA)} · ${bucketA.displayName}',
+            nameB: sameProfile
+                ? bucketB.displayName
+                : '${nameOf(uidB)} · ${bucketB.displayName}',
+            note: sameProfile
+                ? null
+                : 'Splits can differ in length, map rotation, and legend '
+                      'balance, and each profile\'s games are the ones '
+                      'recorded on this device.',
+          ),
       ],
     );
   }
 }
 
 class _SplitPicker extends StatelessWidget {
-  final List<RankedSplitBucket> splits;
-  final String selectedA;
-  final String selectedB;
+  final List<RankedSplitBucket> splitsA;
+  final List<RankedSplitBucket> splitsB;
+  final String? selectedA;
+  final String? selectedB;
   final ValueChanged<String> onChangedA;
   final ValueChanged<String> onChangedB;
 
+  /// Saved profiles by UID, or null with just one, when there is nothing to
+  /// choose between and the labels stay plain.
+  final Map<String, String>? profiles;
+  final String profileA;
+
+  /// The profile on screen, named on the fixed Current side; null with one.
+  final String? nameB;
+  final ValueChanged<String> onProfileA;
+
   const _SplitPicker({
-    required this.splits,
+    required this.splitsA,
+    required this.splitsB,
     required this.selectedA,
     required this.selectedB,
     required this.onChangedA,
     required this.onChangedB,
+    required this.profiles,
+    required this.profileA,
+    required this.nameB,
+    required this.onProfileA,
   });
 
   @override
@@ -223,9 +298,12 @@ class _SplitPicker extends StatelessWidget {
         Expanded(
           child: _LabeledDropdown(
             label: 'Comparing',
-            splits: splits,
+            splits: splitsA,
             value: selectedA,
             onChanged: onChangedA,
+            profiles: profiles,
+            profile: profileA,
+            onProfile: onProfileA,
           ),
         ),
         const Padding(
@@ -237,8 +315,8 @@ class _SplitPicker extends StatelessWidget {
         ),
         Expanded(
           child: _LabeledDropdown(
-            label: 'Current',
-            splits: splits,
+            label: nameB == null ? 'Current' : 'Current · $nameB',
+            splits: splitsB,
             value: selectedB,
             onChanged: onChangedB,
           ),
@@ -248,35 +326,74 @@ class _SplitPicker extends StatelessWidget {
   }
 }
 
+const _kLabelStyle = TextStyle(
+  color: AppTheme.muted,
+  fontSize: 10,
+  fontWeight: FontWeight.w600,
+  letterSpacing: 0.5,
+);
+
 class _LabeledDropdown extends StatelessWidget {
   final String label;
   final List<RankedSplitBucket> splits;
-  final String value;
+  final String? value;
   final ValueChanged<String> onChanged;
+
+  /// Saved profiles by UID, to choose this side's from; null for a plain label.
+  final Map<String, String>? profiles;
+  final String profile;
+  final ValueChanged<String>? onProfile;
 
   const _LabeledDropdown({
     required this.label,
     required this.splits,
     required this.value,
     required this.onChanged,
+    this.profiles,
+    this.profile = '',
+    this.onProfile,
   });
 
   @override
   Widget build(BuildContext context) {
+    final names = profiles;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: AppTheme.xs, left: 2),
-          child: Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              color: AppTheme.muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
+          child: names == null
+              ? Text(label.toUpperCase(), style: _kLabelStyle)
+              : PopupMenuButton<String>(
+                  tooltip: 'Choose profile',
+                  color: AppTheme.surface,
+                  onSelected: onProfile,
+                  itemBuilder: (_) => [
+                    for (final e in names.entries)
+                      PopupMenuItem(
+                        value: e.key,
+                        child: Text(e.value, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          '${label.toUpperCase()} · '
+                          '${(names[profile] ?? '').toUpperCase()}',
+                          overflow: TextOverflow.ellipsis,
+                          style: _kLabelStyle.copyWith(color: AppTheme.accent),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_drop_down,
+                        size: 16,
+                        color: AppTheme.accent,
+                      ),
+                    ],
+                  ),
+                ),
         ),
         _SplitDropdown(splits: splits, value: value, onChanged: onChanged),
       ],
@@ -286,7 +403,7 @@ class _LabeledDropdown extends StatelessWidget {
 
 class _SplitDropdown extends StatelessWidget {
   final List<RankedSplitBucket> splits;
-  final String value;
+  final String? value;
   final ValueChanged<String> onChanged;
 
   const _SplitDropdown({
@@ -310,6 +427,10 @@ class _SplitDropdown extends StatelessWidget {
           isExpanded: true,
           dropdownColor: AppTheme.surface,
           style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+          hint: const Text(
+            'No recorded games',
+            style: TextStyle(color: AppTheme.muted, fontSize: 13),
+          ),
           items: [
             for (final b in splits)
               DropdownMenuItem(
@@ -327,23 +448,34 @@ class _SplitDropdown extends StatelessWidget {
 }
 
 class _CompareBody extends ConsumerWidget {
-  final String uid;
+  /// Whose games each side is. The same for a split against a split.
+  final String uidA;
+  final String uidB;
   final RankedSplitBucket bucketA;
   final RankedSplitBucket bucketB;
+  final String nameA;
+  final String nameB;
+
+  /// Replaces the line about splits differing, where that is not the point.
+  final String? note;
 
   const _CompareBody({
-    required this.uid,
+    required this.uidA,
+    required this.uidB,
     required this.bucketA,
     required this.bucketB,
+    required this.nameA,
+    required this.nameB,
+    this.note,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final aAsync = ref.watch(
-      rankedSplitDetailProvider((uid: uid, splitId: bucketA.id)),
+      rankedSplitDetailProvider((uid: uidA, splitId: bucketA.id)),
     );
     final bAsync = ref.watch(
-      rankedSplitDetailProvider((uid: uid, splitId: bucketB.id)),
+      rankedSplitDetailProvider((uid: uidB, splitId: bucketB.id)),
     );
 
     if (aAsync.isLoading || bAsync.isLoading) {
@@ -360,10 +492,10 @@ class _CompareBody extends ConsumerWidget {
           message: friendlyError(error),
           onRetry: () {
             ref.invalidate(
-              rankedSplitDetailProvider((uid: uid, splitId: bucketA.id)),
+              rankedSplitDetailProvider((uid: uidA, splitId: bucketA.id)),
             );
             ref.invalidate(
-              rankedSplitDetailProvider((uid: uid, splitId: bucketB.id)),
+              rankedSplitDetailProvider((uid: uidB, splitId: bucketB.id)),
             );
           },
         ),
@@ -375,27 +507,38 @@ class _CompareBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Disclaimer(),
+        _Disclaimer(note),
         const SizedBox(height: AppTheme.md),
-        _SummarySection(bucketA: bucketA, bucketB: bucketB, a: a, b: b),
-        const SizedBox(height: AppTheme.md),
-        SplitChangesCard(
-          legendsA: a.legends,
-          legendsB: b.legends,
-          mapsA: a.maps,
-          mapsB: b.maps,
+        _SummarySection(
+          bucketA: bucketA,
+          bucketB: bucketB,
+          nameA: nameA,
+          nameB: nameB,
+          a: a,
+          b: b,
         ),
         const SizedBox(height: AppTheme.md),
+        // What changed from one split to the next means nothing between two
+        // people.
+        if (uidA == uidB) ...[
+          SplitChangesCard(
+            legendsA: a.legends,
+            legendsB: b.legends,
+            mapsA: a.maps,
+            mapsB: b.maps,
+          ),
+          const SizedBox(height: AppTheme.md),
+        ],
         RankedSlotChart.hours(
-          nameA: bucketA.displayName,
-          nameB: bucketB.displayName,
+          nameA: nameA,
+          nameB: nameB,
           a: hourSlots(a.timeOfDay),
           b: hourSlots(b.timeOfDay),
         ),
         const SizedBox(height: AppTheme.md),
         RankedSlotChart.days(
-          nameA: bucketA.displayName,
-          nameB: bucketB.displayName,
+          nameA: nameA,
+          nameB: nameB,
           a: weekdaySlots(a.dayOfWeek),
           b: weekdaySlots(b.dayOfWeek),
         ),
@@ -405,16 +548,22 @@ class _CompareBody extends ConsumerWidget {
 }
 
 class _Disclaimer extends StatelessWidget {
-  const _Disclaimer();
+  final String? note;
+  const _Disclaimer(this.note);
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: AppTheme.sm),
+    return Padding(
+      padding: const EdgeInsets.only(top: AppTheme.sm),
       child: Text(
-        'Splits can differ in length, map rotation, and legend balance — treat '
-        'differences as a starting point, not a verdict.',
-        style: TextStyle(color: AppTheme.muted, fontSize: 11, height: 1.4),
+        note ??
+            'Splits can differ in length, map rotation, and legend balance — '
+                'treat differences as a starting point, not a verdict.',
+        style: const TextStyle(
+          color: AppTheme.muted,
+          fontSize: 11,
+          height: 1.4,
+        ),
       ),
     );
   }
@@ -448,12 +597,16 @@ int? _elapsedDays(SeasonMeta? season) {
 class _SummarySection extends StatelessWidget {
   final RankedSplitBucket bucketA;
   final RankedSplitBucket bucketB;
+  final String nameA;
+  final String nameB;
   final RankedSplitDetail a;
   final RankedSplitDetail b;
 
   const _SummarySection({
     required this.bucketA,
     required this.bucketB,
+    required this.nameA,
+    required this.nameB,
     required this.a,
     required this.b,
   });
@@ -474,8 +627,8 @@ class _SummarySection extends StatelessWidget {
         children: [
           const _SectionHeader('SUMMARY'),
           CompareTable(
-            nameA: bucketA.displayName,
-            nameB: bucketB.displayName,
+            nameA: nameA,
+            nameB: nameB,
             rows: [
               CompareRow(
                 'Games',

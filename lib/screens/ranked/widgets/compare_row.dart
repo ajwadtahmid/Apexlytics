@@ -18,26 +18,25 @@ class CompareKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A long name wraps rather than being cut off; the swatch stays beside the
+    // first line.
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
         ),
         const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTheme.caption,
-          ),
-        ),
+        Flexible(child: Text(name, style: AppTheme.caption)),
       ],
     );
   }
@@ -230,6 +229,7 @@ class CompareTable extends StatelessWidget {
       children: [
         if (showKey)
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Flexible(
                 child: CompareKey(color: colorA, name: nameA),

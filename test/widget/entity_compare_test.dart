@@ -34,6 +34,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [await prefsOverride()],
         child: MaterialApp(
           home: Scaffold(body: SingleChildScrollView(child: child)),
         ),
