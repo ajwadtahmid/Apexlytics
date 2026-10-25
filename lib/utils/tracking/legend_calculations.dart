@@ -6,11 +6,15 @@ import 'legend_tracker_logic.dart';
 /// A figure worked out from a legend's trackers, ready to show.
 typedef LegendCalculation = ({String label, String value});
 
+/// A figure worked out from a legend's trackers, with the number behind the
+/// text so two players' figures can be compared.
+typedef LegendRate = ({String label, double value, String text});
+
 /// What can be worked out from [trackers]: each figure appears only when the
 /// trackers it needs are there, and never divides by zero. Trackers are matched
 /// by exact display name, case aside, so "BR Kills" never catches a longer name
 /// that merely contains it.
-List<LegendCalculation> legendCalculations(List<LegendTracker> trackers) {
+List<LegendRate> legendRates(List<LegendTracker> trackers) {
   int? valueOf(String name) =>
       findTracker(trackers, (t) => t.displayName.toLowerCase() == name)?.value;
 
@@ -26,22 +30,45 @@ List<LegendCalculation> legendCalculations(List<LegendTracker> trackers) {
   final hasGames = games != null && games > 0;
   return [
     if (hasKills && damage != null)
-      (label: 'Damage per Kill', value: formatNumber((damage / kills).round())),
+      (
+        label: 'Damage per Kill',
+        value: damage / kills,
+        text: formatNumber((damage / kills).round()),
+      ),
     if (kills != null && hasGames)
-      (label: 'Avg Kills per Game', value: (kills / games).toStringAsFixed(1)),
+      (
+        label: 'Avg Kills per Game',
+        value: kills / games,
+        text: (kills / games).toStringAsFixed(1),
+      ),
     if (wins != null && hasGames)
-      (label: 'Win Rate', value: '${(wins / games * 100).toStringAsFixed(1)}%'),
+      (
+        label: 'Win Rate',
+        value: wins / games * 100,
+        text: '${(wins / games * 100).toStringAsFixed(1)}%',
+      ),
     if (revives != null && hasGames)
-      (label: 'Revive Rate', value: (revives / games).toStringAsFixed(2)),
+      (
+        label: 'Revive Rate',
+        value: revives / games,
+        text: (revives / games).toStringAsFixed(2),
+      ),
     if (top3 != null && hasGames)
       (
         label: 'Top 3 Placement %',
-        value: '${(top3 / games * 100).toStringAsFixed(1)}%',
+        value: top3 / games * 100,
+        text: '${(top3 / games * 100).toStringAsFixed(1)}%',
       ),
     if (killLeader != null && hasKills)
       (
         label: 'Kills as Kill Leader %',
-        value: '${(killLeader / kills * 100).toStringAsFixed(1)}%',
+        value: killLeader / kills * 100,
+        text: '${(killLeader / kills * 100).toStringAsFixed(1)}%',
       ),
   ];
 }
+
+/// The same figures as [legendRates], as label and text only.
+List<LegendCalculation> legendCalculations(List<LegendTracker> trackers) => [
+  for (final r in legendRates(trackers)) (label: r.label, value: r.text),
+];

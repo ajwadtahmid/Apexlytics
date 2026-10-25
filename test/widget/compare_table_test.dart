@@ -144,4 +144,139 @@ void main() {
       expect(find.text('Wraith'), findsOneWidget);
     });
   });
+
+  group('as a head-to-head, with the change measured from the first side', () {
+    test('the first side leads on a positive change', () {
+      const ahead = CompareRow(
+        'RP',
+        '7,000',
+        '5,600',
+        delta: 1400,
+        deltaFromFirst: true,
+      );
+      const behind = CompareRow(
+        'RP',
+        '5,600',
+        '7,000',
+        delta: -1400,
+        deltaFromFirst: true,
+      );
+
+      expect(ahead.winner, -1);
+      expect(behind.winner, 1);
+    });
+
+    test('fewer is better where the row is inverted', () {
+      const fewer = CompareRow(
+        'RP needed',
+        '450',
+        '650',
+        delta: -200,
+        invert: true,
+        deltaFromFirst: true,
+      );
+
+      expect(fewer.winner, -1);
+    });
+
+    test('is nobody when level, as it is the other way round', () {
+      const level = CompareRow(
+        'Level',
+        '100',
+        '100',
+        delta: 0,
+        integerDelta: true,
+        deltaFromFirst: true,
+      );
+
+      expect(level.winner, 0);
+    });
+
+    testWidgets('colours a lead green and a deficit red', (tester) async {
+      await pump(
+        tester,
+        const Column(
+          children: [
+            CompareRow('Up', '9', '5', delta: 4, deltaFromFirst: true),
+            CompareRow('Down', '5', '9', delta: -4, deltaFromFirst: true),
+          ],
+        ),
+      );
+
+      expect(colorOf(tester, '+4.0'), AppTheme.green);
+      expect(colorOf(tester, '-4.0'), AppTheme.red);
+    });
+
+    testWidgets('a change that is nothing as shown is muted, not green', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CompareRow(
+          'Level',
+          '100',
+          '100',
+          delta: 0,
+          integerDelta: true,
+          deltaFromFirst: true,
+        ),
+      );
+
+      expect(colorOf(tester, '+0'), AppTheme.muted);
+    });
+
+    testWidgets('shows more decimals when asked, so a small gap is not lost', (
+      tester,
+    ) async {
+      const row = CompareRow(
+        'Revive Rate',
+        '0.13',
+        '0.09',
+        delta: 0.04,
+        decimals: 2,
+        deltaFromFirst: true,
+      );
+      await pump(tester, row);
+
+      expect(find.text('+0.04'), findsOneWidget);
+      expect(row.winner, -1);
+      // At one decimal the same gap would have read as level.
+      expect(
+        const CompareRow(
+          'Revive Rate',
+          '0.13',
+          '0.09',
+          delta: 0.04,
+          deltaFromFirst: true,
+        ).winner,
+        0,
+      );
+    });
+
+    testWidgets('the table says "You lead" when the first side is you', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const CompareTable(
+          nameA: 'You',
+          nameB: 'Rival',
+          firstIsYou: true,
+          colorA: AppTheme.accent,
+          colorB: AppTheme.muted,
+          rows: [
+            CompareRow('RP', '9', '5', delta: 4, deltaFromFirst: true),
+            CompareRow('Lvl', '9', '5', delta: 4, deltaFromFirst: true),
+            CompareRow('Win', '5', '9', delta: -4, deltaFromFirst: true),
+          ],
+        ),
+      );
+
+      expect(find.text('You lead on 2 of 3 stats'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('You lead on 2 of 3 stats')).style!.color,
+        AppTheme.accent,
+      );
+    });
+  });
 }

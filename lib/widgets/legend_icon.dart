@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../constants/legend_constants.dart' show kCareerLegendName;
 import '../utils/theme.dart';
 
 /// Maps a legend display name to its small face-icon asset under
@@ -8,6 +9,10 @@ import '../utils/theme.dart';
 /// [LegendIcon]'s `errorBuilder` handles that gap by rendering nothing.
 String legendIconAsset(String name) =>
     'assets/legend_icons/${name.replaceAll(' ', '_')}_Icon.webp';
+
+/// The mark shown for the career-wide stats entry, which has no legend face.
+/// It is in full colour, so it is drawn as it is, not tinted like a legend.
+const kCareerIconAsset = 'assets/logos/logo_transparent.png';
 
 /// Small per-legend face icon, used where a full [LegendAssetImage] portrait
 /// would be too heavy (dense lists, dropdowns) but a bare name is hard to
@@ -22,6 +27,16 @@ class LegendIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (legendName.toLowerCase() == kCareerLegendName.toLowerCase()) {
+      return Image.asset(
+        kCareerIconAsset,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil(),
+        errorBuilder: (ctx, err, trace) => SizedBox(width: size, height: size),
+      );
+    }
     return Image.asset(
       legendIconAsset(legendName),
       width: size,

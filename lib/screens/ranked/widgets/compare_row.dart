@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../../utils/formatting/format.dart'
     show formatSigned, formatSignedInt, plural;
@@ -44,6 +46,10 @@ class CompareKey extends StatelessWidget {
 /// One row of a comparison table: a label, the two values and the change from
 /// the first to the second, coloured good or bad. The better value is bold in a
 /// chip tinted with its side's colour.
+///
+/// For a head-to-head where the first side is the reader (a player against
+/// another), set [deltaFromFirst]: the change is then the first minus the
+/// second, so a positive one means the first is ahead and reads green.
 class CompareRow extends StatelessWidget {
   final String label;
   final String valueA;
@@ -53,9 +59,22 @@ class CompareRow extends StatelessWidget {
   /// True when the delta is a whole count, shown without a decimal.
   final bool integerDelta;
 
+  /// How many decimals the delta shows when it is not a whole count. A rate
+  /// that moves in hundredths needs two to say anything.
+  final int decimals;
+
   /// True for metrics where a higher value is worse (e.g. needing more games
   /// for the same result), so the delta's color reads opposite of the sign.
   final bool invert;
+
+  /// True when [delta] is the first value minus the second, not the second
+  /// minus the first.
+  final bool deltaFromFirst;
+
+  /// The tint of each side's leading chip. The defaults are the colours of the
+  /// ranked Compare page.
+  final Color colorA;
+  final Color colorB;
 
   const CompareRow(
     this.label,
@@ -64,7 +83,11 @@ class CompareRow extends StatelessWidget {
     super.key,
     this.delta,
     this.integerDelta = false,
+    this.decimals = 1,
     this.invert = false,
+    this.deltaFromFirst = false,
+    this.colorA = kCompareColorA,
+    this.colorB = kCompareColorB,
   });
 
   /// Which side is ahead: -1 for the first, 1 for the second, 0 when they are
@@ -72,9 +95,22 @@ class CompareRow extends StatelessWidget {
   int get winner {
     final d = delta;
     if (d == null) return 0;
-    final shown = integerDelta ? d.round() : (d * 10).round() / 10;
+    final scale = math.pow(10, decimals);
+    final shown = integerDelta ? d.round() : (d * scale).round() / scale;
     if (shown == 0) return 0;
-    return (invert ? shown < 0 : shown > 0) ? 1 : -1;
+    // Whether the side the change is measured towards is the one ahead.
+    final towardsAhead = invert ? shown < 0 : shown > 0;
+    if (deltaFromFirst) return towardsAhead ? -1 : 1;
+    return towardsAhead ? 1 : -1;
+  }
+
+  String _deltaText(double d) {
+    if (integerDelta) return formatSignedInt(d.round());
+    if (decimals == 1) return formatSigned(d);
+    final text = d.toStringAsFixed(decimals);
+    // Nothing as shown reads as plain zero, never as a tiny negative.
+    if (double.parse(text) == 0) return '+${0.0.toStringAsFixed(decimals)}';
+    return d > 0 ? '+$text' : text;
   }
 
   // The label gets about a third of the row, the rest is shared by the values
@@ -98,21 +134,24 @@ class CompareRow extends StatelessWidget {
           ),
           Expanded(
             flex: _valueFlex,
-            child: _Value(valueA, color: kCompareColorA, leads: lead == -1),
+            child: _Value(valueA, color: colorA, leads: lead == -1),
           ),
           Expanded(
             flex: _valueFlex,
-            child: _Value(valueB, color: kCompareColorB, leads: lead == 1),
+            child: _Value(valueB, color: colorB, leads: lead == 1),
           ),
           Expanded(
             flex: _deltaFlex,
             child: d == null
                 ? const SizedBox()
                 : Text(
-                    integerDelta ? formatSignedInt(d.round()) : formatSigned(d),
+                    _deltaText(d),
                     textAlign: TextAlign.end,
                     style: TextStyle(
-                      color: isGood! ? AppTheme.green : AppTheme.red,
+                      // A change that is nothing as shown is neither good nor bad.
+                      color: lead == 0
+                          ? AppTheme.muted
+                          : (isGood! ? AppTheme.green : AppTheme.red),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -161,11 +200,24 @@ class CompareTable extends StatelessWidget {
   final String nameA;
   final String nameB;
   final List<CompareRow> rows;
+
+  /// True when the first side is the reader, so the line reads "You lead on".
+  final bool firstIsYou;
+  final Color colorA;
+  final Color colorB;
+
+  /// False for a second table under one that already shows which colour is
+  /// which.
+  final bool showKey;
   const CompareTable({
     super.key,
     required this.nameA,
     required this.nameB,
     required this.rows,
+    this.firstIsYou = false,
+    this.colorA = kCompareColorA,
+    this.colorB = kCompareColorB,
+    this.showKey = true,
   });
 
   @override
@@ -176,27 +228,34 @@ class CompareTable extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Flexible(
-              child: CompareKey(color: kCompareColorA, name: nameA),
-            ),
-            const SizedBox(width: AppTheme.md),
-            Flexible(
-              child: CompareKey(color: kCompareColorB, name: nameB),
-            ),
-          ],
-        ),
+        if (showKey)
+          Row(
+            children: [
+              Flexible(
+                child: CompareKey(color: colorA, name: nameA),
+              ),
+              const SizedBox(width: AppTheme.md),
+              Flexible(
+                child: CompareKey(color: colorB, name: nameB),
+              ),
+            ],
+          ),
         if (decided > 0) ...[
           const SizedBox(height: AppTheme.sm),
           Text(
             a == b
                 ? 'Level: ${plural(a, 'stat')} each'
-                : '${a > b ? nameA : nameB} leads on ${a > b ? a : b} of '
-                      '${plural(decided, 'stat')}',
+                : '${a > b ? nameA : nameB} '
+                      '${a > b && firstIsYou ? 'lead' : 'leads'} on '
+                      '${a > b ? a : b} of ${plural(decided, 'stat')}',
             style: TextStyle(
-              // The leading side's colour, so it ties back to the key above.
-              color: a > b || a == b ? AppTheme.textPrimary : kCompareColorB,
+              // The leading side's colour, so it ties back to the key above. The
+              // muted default would be hard to read as text, so it stays white.
+              color: a == b
+                  ? AppTheme.textPrimary
+                  : a > b
+                  ? (colorA == kCompareColorA ? AppTheme.textPrimary : colorA)
+                  : colorB,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),

@@ -16,9 +16,8 @@ import '../../utils/formatting/search_utils.dart';
 import '../../utils/tracking/snapshot_state_mixin.dart';
 import '../../utils/notifications.dart';
 import '../../utils/theme.dart';
-import '../../widgets/legend_icon.dart';
 import '../../widgets/widgets.dart';
-import 'player_compare_sheet.dart';
+import 'player_compare_screen.dart';
 import '../../utils/navigation_utils.dart';
 
 class PlayerResultPage extends ConsumerStatefulWidget {
@@ -166,7 +165,12 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
             IconButton(
               icon: const Icon(Icons.compare_arrows),
               tooltip: 'Compare Stats',
-              onPressed: () => _showComparePicker(context, myStats, stats),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => PlayerCompareScreen(me: myStats, them: stats),
+                ),
+              ),
             ),
           if (stats != null) ...[
             IconButton(
@@ -247,90 +251,6 @@ class _PlayerResultPageState extends ConsumerState<PlayerResultPage> {
           onAction: () => Navigator.pop(context),
         ),
       ),
-    );
-  }
-
-  void _showComparePicker(
-    BuildContext context,
-    PlayerStats me,
-    PlayerStats them,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      builder: (sheetCtx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppTheme.md,
-                  AppTheme.md,
-                  AppTheme.md,
-                  AppTheme.sm,
-                ),
-                child: Text(
-                  'Compare with ${them.name}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-              const Divider(color: AppTheme.surface2, height: 1),
-              ListTile(
-                leading: const Icon(
-                  Icons.emoji_events_outlined,
-                  color: AppTheme.accent,
-                ),
-                title: const Text('Ranked'),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  showDialog(
-                    context: context,
-                    builder: (_) => PlayerCompareSheet(
-                      me: me,
-                      them: them,
-                      selection: 'Ranked',
-                    ),
-                  );
-                },
-              ),
-              const Divider(color: AppTheme.surface2, height: 1),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(sheetCtx).size.height * 0.4,
-                ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: them.legendStats.length,
-                  separatorBuilder: (_, i) =>
-                      const Divider(color: AppTheme.surface2, height: 1),
-                  itemBuilder: (_, i) {
-                    final legend = them.legendStats[i];
-                    return ListTile(
-                      leading: LegendIcon(legendName: legend.name, size: 20),
-                      title: Text(legend.name),
-                      onTap: () {
-                        Navigator.pop(sheetCtx);
-                        showDialog(
-                          context: context,
-                          builder: (_) => PlayerCompareSheet(
-                            me: me,
-                            them: them,
-                            selection: legend.name,
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
