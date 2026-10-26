@@ -9,16 +9,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ajwadtahmid/Apexlytics/releases">
-    <img alt="Release" src="https://img.shields.io/github/v/release/ajwadtahmid/Apexlytics?color=orange&label=release" />
+  <a href="https://github.com/ajwadtahmid/apexlytics/releases">
+    <img alt="Release" src="https://img.shields.io/github/v/release/ajwadtahmid/apexlytics?color=orange&label=release" />
   </a>
-  <a href="https://github.com/ajwadtahmid/Apexlytics/releases">
-    <img alt="Downloads" src="https://img.shields.io/github/downloads/ajwadtahmid/Apexlytics/total?color=blue" />
+  <a href="https://github.com/ajwadtahmid/apexlytics/releases">
+    <img alt="Downloads" src="https://img.shields.io/github/downloads/ajwadtahmid/apexlytics/total?color=blue" />
   </a>
   <a href="https://flutter.dev">
     <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.x-blue?logo=flutter&logoColor=white" />
   </a>
-  <a href="https://github.com/ajwadtahmid/Apexlytics/blob/main/LICENSE">
+  <a href="https://github.com/ajwadtahmid/apexlytics/blob/main/LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-green" />
   </a>
   <img alt="Android" src="https://img.shields.io/badge/Android-supported-brightgreen?logo=android&logoColor=white" />
@@ -31,7 +31,7 @@
 
 <div align="center">
 
-<a href="https://github.com/ajwadtahmid/Apexlytics/releases">
+<a href="https://github.com/ajwadtahmid/apexlytics/releases">
 <img src=".github/assets/images/get-it-on-github.png" alt="Get it on GitHub" align="center" height="80" /></a> 
 
 <a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.apexlytics">
@@ -197,7 +197,7 @@ The note in Settings stays.
 
 ```bash
 # 1. Clone
-git clone https://github.com/ajwadtahmid/Apexlytics.git
+git clone https://github.com/ajwadtahmid/apexlytics.git
 cd Apexlytics
 
 # 2. Install dependencies
@@ -280,14 +280,14 @@ Data is sourced from [apexlegendsstatus.com](https://apexlegendsstatus.com) and 
 Have a question or found a bug? Let us know:
 
 - **Email**: [support@ajwadtahmid.com](mailto:support@ajwadtahmid.com)
-- **Bug reports & features**: In the app, Settings → Report a bug (GitHub or Email) opens a message with diagnostics and a recent log filled in. You can also open a [GitHub Issue](https://github.com/ajwadtahmid/Apexlytics/issues) directly.
-- **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/Apexlytics/discussions)
+- **Bug reports & features**: In the app, Settings → Report a bug (GitHub or Email) opens a message with diagnostics and a recent log filled in. You can also open a [GitHub Issue](https://github.com/ajwadtahmid/apexlytics/issues) directly.
+- **Ideas & discussions**: [GitHub Discussions](https://github.com/ajwadtahmid/apexlytics/discussions)
 
 ---
 
 ## Changelog
 
-Full release history and notes are on the [GitHub Releases](https://github.com/ajwadtahmid/Apexlytics/releases) page. The newest is always at [releases/latest](https://github.com/ajwadtahmid/Apexlytics/releases/latest).
+Full release history and notes are on the [GitHub Releases](https://github.com/ajwadtahmid/apexlytics/releases) page. The newest is always at [releases/latest](https://github.com/ajwadtahmid/apexlytics/releases/latest).
 
 ---
 

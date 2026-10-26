@@ -20,7 +20,7 @@ class ApiConstants {
   static const String privacyPolicyUrl =
       'https://ajwadtahmid.github.io/privacy-policies/Apexlytics.html';
   static const String releaseNotesUrl =
-      'https://github.com/ajwadtahmid/Apexlytics/releases';
+      'https://github.com/ajwadtahmid/apexlytics/releases';
   static const String playStoreUrl =
       'https://play.google.com/store/apps/details?id=com.ajwadtahmid.apexlytics';
   static const String appStoreUrl = 'https://apps.apple.com/app/id6778521764';

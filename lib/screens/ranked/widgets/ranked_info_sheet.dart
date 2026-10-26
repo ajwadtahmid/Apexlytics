@@ -9,7 +9,7 @@ Future<void> _openProfileSearch(BuildContext context) =>
 
 Future<void> _openFullGuide(BuildContext context) => openExternalLink(
   context,
-  Uri.parse('https://github.com/ajwadtahmid/Apexlytics#ranked-tracking-guide'),
+  Uri.parse('https://github.com/ajwadtahmid/apexlytics#ranked-tracking-guide'),
 );
 
 /// "How ranked tracking works" — explains the mechanics behind the empty

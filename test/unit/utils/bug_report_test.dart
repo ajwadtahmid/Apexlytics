@@ -229,7 +229,7 @@ void main() {
       expect(
         r.uri.toString(),
         startsWith(
-          'https://github.com/ajwadtahmid/Apexlytics/issues/new?body=',
+          'https://github.com/ajwadtahmid/apexlytics/issues/new?body=',
         ),
       );
       expect(text, contains('**Describe the bug**'));

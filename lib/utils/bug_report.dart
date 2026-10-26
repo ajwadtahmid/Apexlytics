@@ -18,7 +18,7 @@ const kEmailUrlBudget = 12000;
 const kWindowsEmailUrlBudget = 1900;
 
 const _githubBase =
-    'https://github.com/ajwadtahmid/Apexlytics/issues/new?body=';
+    'https://github.com/ajwadtahmid/apexlytics/issues/new?body=';
 const _emailBase =
     'mailto:support@ajwadtahmid.com?subject=Apexlytics+Bug+Report&body=';
 
