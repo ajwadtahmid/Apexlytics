@@ -16,6 +16,7 @@ import 'providers/settings_provider.dart';
 import 'services/api_service.dart';
 import 'services/background_service.dart';
 import 'services/notification_service.dart';
+import 'utils/app_license.dart';
 import 'utils/app_logger.dart';
 import 'utils/crash_report_scrubber.dart';
 import 'utils/provider_retry.dart';
@@ -25,6 +26,7 @@ import 'utils/theme.dart';
 void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  registerAppLicense();
 
   // Android 15+ applies edge-to-edge regardless of an opt-out past SDK 36, so
   // draw behind the system bars deliberately rather than let the OS force it

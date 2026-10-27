@@ -14,7 +14,8 @@ import '../../utils/navigation_utils.dart';
 import '../../utils/formatting/format.dart' show kNoReading;
 
 /// Dedicated "about" destination reached from Settings — version, release
-/// notes, store rating, data-source credits, privacy policy, and attribution.
+/// notes, store rating, data-source credits, privacy policy, open source
+/// licenses, and attribution.
 /// Reads as a plain, static info list (no per-row leading icons, unlike the
 /// rest of Settings) — links keep only the trailing open-in-new glyph that
 /// marks them as outgoing, same as `_SupportRow`.
@@ -128,10 +129,25 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
           const SizedBox(height: AppTheme.md),
 
           const _SectionHeader('Legal'),
-          const SettingsCard(
-            child: _LinkRow(
-              label: 'Privacy policy',
-              url: ApiConstants.privacyPolicyUrl,
+          SettingsCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _LinkRow(
+                  label: 'Privacy policy',
+                  url: ApiConstants.privacyPolicyUrl,
+                ),
+                const Divider(color: AppTheme.surface2, height: 24),
+                _PageRow(
+                  label: 'Open source licenses',
+                  onTap: () => showLicensePage(
+                    context: context,
+                    applicationName: 'Apexlytics',
+                    applicationVersion: version,
+                    applicationLegalese: 'Licensed under the GNU GPL v3.0',
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppTheme.xl),
@@ -336,6 +352,34 @@ class _LinkRow extends StatelessWidget {
   }
 }
 
+/// Single-line row that opens a page inside the app. Same text as [_LinkRow],
+/// with a chevron instead of the outgoing-link glyph.
+class _PageRow extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _PageRow({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: AppTheme.muted, size: 18),
+        ],
+      ),
+    );
+  }
+}
+
 class _CreditRow extends StatelessWidget {
   final String label;
   final String subtitle;
@@ -367,10 +411,7 @@ class _CreditRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTheme.caption,
-                ),
+                Text(subtitle, style: AppTheme.caption),
               ],
             ),
           ),
